@@ -144,37 +144,118 @@ function isInPayPeriod(dateStr, year, month) {
   return dateStr >= startDate && dateStr <= endDate;
 }
 
-// -------- LocalStorage --------
-function loadData(key, defaultVal) {
-  try {
-    const s = localStorage.getItem('otd_' + key);
-    return s ? JSON.parse(s) : defaultVal;
-  } catch { return defaultVal; }
-}
-function saveLS(key, val) {
-  try { localStorage.setItem('otd_' + key, JSON.stringify(val)); } catch {}
-}
+// -------- Firebase 初期化 --------
+const firebaseConfig = {
+  apiKey: "AIzaSyA3YVQwyAudMEZJs_rfEW8IHfxh4Grvlbw",
+  authDomain: "wcsa-shift.firebaseapp.com",
+  databaseURL: "https://wcsa-shift-default-rtdb.firebaseio.com",
+  projectId: "wcsa-shift",
+  storageBucket: "wcsa-shift.firebasestorage.app",
+  messagingSenderId: "521554404721",
+  appId: "1:521554404721:web:f59a570dd7e10f3aed82d0"
+};
+
+// Firebase が未初期化の場合のみ初期化
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// -------- Firebase パス --------
+const FB = {
+  employees:  () => db.ref('payroll/employees'),
+  attendance: () => db.ref('payroll/attendance'),
+  paidLeave:  () => db.ref('payroll/paidLeave'),
+  article36:  () => db.ref('payroll/article36'),
+};
 
 // -------- State --------
-let employees = loadData('employees', DEFAULT_EMPLOYEES);
-// attendance: { "YYYY-MM": { empId: { date: { actual, midnight, holiday, note } } } }
-let attendance = loadData('attendance', {});
-// paidLeave: { empId: { grants:[{date, days}], used:[{date, days, reason}], balance } }
-let paidLeave  = loadData('paidLeave', {});
-// article36: { year: { limit36, specialLimit, monthlyUsage: {empId: {month: hours}} } }
-let article36  = loadData('article36', {});
+let employees  = [];
+let attendance = {};
+let paidLeave  = {};
+let article36  = {};
+let _fbLoaded  = false; // 初回ロード完了フラグ
 
-// 在籍中スタッフのみ（給与計算・勤怠入力対象）
+// 在籍中スタッフのみ
 function activeEmployees() {
   return employees.filter(e => e.status !== 'inactive' && e.status !== 'leave');
 }
 
+// -------- Firebase 読み込み・リアルタイム購読 --------
+function initFirebaseData() {
+  showLoadingOverlay(true);
+
+  // 4つのノードを並行購読
+  let loaded = 0;
+  const onLoad = () => { if (++loaded >= 4) { showLoadingOverlay(false); _fbLoaded = true; renderPage(currentPage); } };
+
+  FB.employees().on('value', snap => {
+    const val = snap.val();
+    if (val) {
+      // Firebase はオブジェクト形式で返るので配列に変換
+      employees = Array.isArray(val) ? val.filter(Boolean) : Object.values(val);
+    } else {
+      // 初回：デフォルトデータをFirebaseに書き込む
+      const empObj = {};
+      DEFAULT_EMPLOYEES.forEach(e => { empObj[e.id] = e; });
+      FB.employees().set(empObj);
+      employees = [...DEFAULT_EMPLOYEES];
+    }
+    if (!_fbLoaded) onLoad(); else renderPage(currentPage);
+  });
+
+  FB.attendance().on('value', snap => {
+    attendance = snap.val() || {};
+    if (!_fbLoaded) onLoad(); else if (currentPage === 'attendance' || currentPage === 'weekly' || currentPage === 'monthly') renderPage(currentPage);
+  });
+
+  FB.paidLeave().on('value', snap => {
+    paidLeave = snap.val() || {};
+    if (!_fbLoaded) onLoad(); else if (currentPage === 'paid_leave') renderPage(currentPage);
+  });
+
+  FB.article36().on('value', snap => {
+    article36 = snap.val() || {};
+    if (!_fbLoaded) onLoad(); else if (currentPage === 'article36') renderPage(currentPage);
+  });
+}
+
+// -------- 保存関数（Firebase書き込み） --------
 function saveData() {
-  saveLS('employees', employees);
-  saveLS('attendance', attendance);
-  saveLS('paidLeave', paidLeave);
-  saveLS('article36', article36);
+  const empObj = {};
+  employees.forEach(e => { empObj[e.id] = e; });
+  FB.employees().set(empObj);
+  FB.attendance().set(attendance);
+  FB.paidLeave().set(paidLeave);
+  FB.article36().set(article36);
   showToast('保存しました ✓');
+}
+
+// 個別保存ヘルパー
+function saveLS(key, val) {
+  // Firebase に保存（後方互換のため関数名は保持）
+  if (key === 'employees') {
+    const empObj = {};
+    val.forEach(e => { empObj[e.id] = e; });
+    FB.employees().set(empObj);
+  } else if (key === 'attendance') {
+    FB.attendance().set(val);
+  } else if (key === 'paidLeave') {
+    FB.paidLeave().set(val);
+  } else if (key === 'article36') {
+    FB.article36().set(val);
+  }
+}
+
+// ローディングオーバーレイ
+function showLoadingOverlay(show) {
+  let el = document.getElementById('fbLoadingOverlay');
+  if (!el && show) {
+    el = document.createElement('div');
+    el.id = 'fbLoadingOverlay';
+    el.style.cssText = 'position:fixed;inset:0;background:rgba(15,25,35,0.85);z-index:9998;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:inherit';
+    el.innerHTML = '<div style="font-size:28px;margin-bottom:12px">⏳</div><div style="font-size:15px;font-weight:600">データを読み込み中...</div><div style="font-size:12px;color:#888;margin-top:6px">Firebase に接続しています</div>';
+    document.body.appendChild(el);
+  }
+  if (el) el.style.display = show ? 'flex' : 'none';
 }
 
 // -------- Util --------

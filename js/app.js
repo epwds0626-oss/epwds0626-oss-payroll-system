@@ -10,7 +10,8 @@ let currentMonth = new Date().getMonth() + 1;
 document.addEventListener('DOMContentLoaded', () => {
   initYearMonth();
   setupNav();
-  renderPage('dashboard');
+  // Firebase からデータ読み込み後にページを描画
+  initFirebaseData();
 });
 
 function initYearMonth() {

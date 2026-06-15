@@ -160,20 +160,28 @@ function setAtt(empId, dateStr, field, value, year, month) {
   setAttFull(empId, dateStr, field, value, year, month);
 }
 
-// ★ 実際の日付の年月に保存（締め日またぎ対応）
+// ★ 実際の日付の年月に保存（締め日またぎ対応）＋Firebase直接書き込み
 function setAttFull(empId, dateStr, field, value, actualYear, actualMonth) {
   const ym = getYM(actualYear, actualMonth);
   if (!attendance[ym]) attendance[ym] = {};
   if (!attendance[ym][empId]) attendance[ym][empId] = {};
   if (!attendance[ym][empId][dateStr]) attendance[ym][empId][dateStr] = {};
+
+  const path = db.ref(`payroll/attendance/${ym}/${empId}/${dateStr}`);
+
   if (value === '' || value === false || value === 0 || value === '0') {
     delete attendance[ym][empId][dateStr][field];
     if (Object.keys(attendance[ym][empId][dateStr]).length === 0) {
       delete attendance[ym][empId][dateStr];
+      path.remove();
+    } else {
+      path.update({ [field]: null });
     }
   } else {
     const numVal = parseFloat(value);
-    attendance[ym][empId][dateStr][field] = isNaN(numVal) ? value : numVal;
+    const v = isNaN(numVal) ? value : numVal;
+    attendance[ym][empId][dateStr][field] = v;
+    path.update({ [field]: v });
   }
 }
 
