@@ -11,27 +11,33 @@ const OTD = {
 
 // -------- 従業員マスタ (LocalStorage から復元) --------
 const DEFAULT_EMPLOYEES = [
-  { id:1,  name:'青木 優介',                 kana:'アオキ ユウスケ',         type:'正社員',  dept:'ホール',   payType:'月給',  baseSalary:250000, hourlyWage:0,    commute:15000, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:8000, store:'本店', hireDate:'', birthDate:'' },
-  { id:2,  name:'原 孝志',                   kana:'ハラ タカシ',             type:'正社員',  dept:'キッチン', payType:'月給',  baseSalary:250000, hourlyWage:0,    commute:15000, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:8000, store:'本店', hireDate:'', birthDate:'' },
-  { id:3,  name:'小沼 太一',                 kana:'オヌマ タイチ',           type:'正社員',  dept:'キッチン', payType:'月給',  baseSalary:250000, hourlyWage:0,    commute:15000, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:8000, store:'本店', hireDate:'', birthDate:'' },
-  { id:4,  name:'石井 眞弓',                 kana:'イシイ マユミ',           type:'パート',  dept:'ホール',   payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000,  dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'本店', hireDate:'', birthDate:'' },
-  { id:5,  name:'半谷 和津江',               kana:'ハンヤ カツエ',           type:'パート',  dept:'ホール',   payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000,  dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'本店', hireDate:'', birthDate:'' },
-  { id:6,  name:'武田 あさ子',               kana:'タケダ アサコ',           type:'パート',  dept:'キッチン', payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000,  dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'本店', hireDate:'', birthDate:'' },
-  { id:7,  name:'仲田 友子',                 kana:'ナカタ トモコ',           type:'パート',  dept:'ホール',   payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000,  dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'マルコ', hireDate:'', birthDate:'' },
-  { id:8,  name:'石田 良子',                 kana:'イシダ ヨシコ',           type:'パート',  dept:'ホール',   payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000,  dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'本店', hireDate:'', birthDate:'' },
-  { id:9,  name:'梅原 みゆき',               kana:'ウメハラ ミユキ',         type:'パート',  dept:'ホール',   payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000,  dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'本店', hireDate:'', birthDate:'' },
-  { id:10, name:'勘田 尚人',                 kana:'カンダ ナオト',           type:'パート',  dept:'キッチン', payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000,  dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'本店', hireDate:'', birthDate:'' },
-  { id:11, name:'TRAN THI THAO',            kana:'',                       type:'アルバイト',dept:'ホール',  payType:'時給',  baseSalary:0,      hourlyWage:1100, commute:2000,  dependents:0, shakai:'未加入',koyo:'未加入',tax:'甲',juminzei:0,   store:'本店', hireDate:'', birthDate:'' },
-  { id:12, name:'箕輪 栞',                   kana:'ミノワ シオリ',           type:'アルバイト',dept:'ホール',  payType:'時給',  baseSalary:0,      hourlyWage:1100, commute:2000,  dependents:0, shakai:'未加入',koyo:'未加入',tax:'甲',juminzei:0,   store:'本店', hireDate:'', birthDate:'' },
-  { id:13, name:'寺山 由紀子',               kana:'テラヤマ ユキコ',         type:'パート',  dept:'キッチン', payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000,  dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'マルコ', hireDate:'', birthDate:'' },
-  { id:14, name:'ダラガン ジャスミン エデュラン', kana:'',                  type:'アルバイト',dept:'ホール',  payType:'時給',  baseSalary:0,      hourlyWage:1100, commute:2000,  dependents:0, shakai:'未加入',koyo:'未加入',tax:'甲',juminzei:0,   store:'マルコ', hireDate:'', birthDate:'' },
-  { id:15, name:'エデュラン アイコ',          kana:'',                       type:'アルバイト',dept:'ホール',  payType:'時給',  baseSalary:0,      hourlyWage:1100, commute:2000,  dependents:0, shakai:'未加入',koyo:'未加入',tax:'甲',juminzei:0,   store:'マルコ', hireDate:'', birthDate:'' },
-  { id:16, name:'SAPKOTA SUSHMA',           kana:'',                       type:'アルバイト',dept:'ホール',  payType:'時給',  baseSalary:0,      hourlyWage:1100, commute:2000,  dependents:0, shakai:'未加入',koyo:'未加入',tax:'甲',juminzei:0,   store:'マルコ', hireDate:'', birthDate:'' },
-  { id:17, name:'小島 まゆこ',               kana:'コジマ マユコ',           type:'パート',  dept:'ホール',   payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000,  dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'マルコ', hireDate:'', birthDate:'' },
-  { id:18, name:'大原 瑠奈',                 kana:'オオハラ ルナ',           type:'パート',  dept:'ホール',   payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000,  dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'マルコ', hireDate:'', birthDate:'' },
-  { id:19, name:'檜山 明子',                 kana:'ヒヤマ アキコ',           type:'正社員',  dept:'ホール',   payType:'月給',  baseSalary:220000, hourlyWage:0,    commute:15000, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:8000, store:'マルコ', hireDate:'', birthDate:'' },
-  { id:20, name:'直井',                     kana:'ナオイ',                  type:'正社員',  dept:'キッチン', payType:'月給',  baseSalary:220000, hourlyWage:0,    commute:15000, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:8000, store:'マルコ', hireDate:'', birthDate:'' },
-  { id:21, name:'黒羽',                     kana:'クロハ',                  type:'パート',  dept:'キッチン', payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000,  dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'本店', hireDate:'', birthDate:'' },
+  // 正社員（職能給あり）
+  { id:1,  name:'青木 優介',      kana:'アオキ ユウスケ',   type:'正社員',  dept:'ホール',   payType:'月給',  baseSalary:250000, hourlyWage:0, commute:15000, positionAllowance:0, targetGross:375250, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:8000, store:'本店',  hireDate:'', birthDate:'' },
+  { id:2,  name:'原 孝志',        kana:'ハラ タカシ',       type:'正社員',  dept:'キッチン', payType:'月給',  baseSalary:250000, hourlyWage:0, commute:15000, positionAllowance:0, targetGross:404800, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:8000, store:'本店',  hireDate:'', birthDate:'' },
+  { id:3,  name:'小沼 太一',      kana:'オヌマ タイチ',     type:'正社員',  dept:'キッチン', payType:'月給',  baseSalary:250000, hourlyWage:0, commute:15000, positionAllowance:0, targetGross:280000, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:8000, store:'本店',  hireDate:'', birthDate:'' },
+  { id:4,  name:'石井 眞弓',      kana:'イシイ マユミ',     type:'パート',  dept:'ホール',   payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000, positionAllowance:0, targetGross:0, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'本店',  hireDate:'', birthDate:'' },
+  { id:5,  name:'半谷 和津江',    kana:'ハンヤ カツエ',     type:'パート',  dept:'ホール',   payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000, positionAllowance:0, targetGross:0, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'本店',  hireDate:'', birthDate:'' },
+  { id:6,  name:'武田 あさ子',    kana:'タケダ アサコ',     type:'パート',  dept:'キッチン', payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000, positionAllowance:0, targetGross:0, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'本店',  hireDate:'', birthDate:'' },
+  { id:7,  name:'仲田 友子',      kana:'ナカタ トモコ',     type:'パート',  dept:'ホール',   payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000, positionAllowance:0, targetGross:0, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'マルコ', hireDate:'', birthDate:'' },
+  { id:8,  name:'石田 良子',      kana:'イシダ ヨシコ',     type:'パート',  dept:'ホール',   payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000, positionAllowance:0, targetGross:0, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'本店',  hireDate:'', birthDate:'' },
+  { id:9,  name:'梅原 みゆき',    kana:'ウメハラ ミユキ',   type:'パート',  dept:'ホール',   payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000, positionAllowance:0, targetGross:0, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'本店',  hireDate:'', birthDate:'' },
+  { id:10, name:'勘田 尚人',      kana:'カンダ ナオト',     type:'パート',  dept:'キッチン', payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000, positionAllowance:0, targetGross:0, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'本店',  hireDate:'', birthDate:'' },
+  { id:11, name:'TRAN THI THAO', kana:'',                 type:'アルバイト',dept:'ホール', payType:'時給',  baseSalary:0,      hourlyWage:1100, commute:2000, positionAllowance:0, targetGross:0, dependents:0, shakai:'未加入',koyo:'未加入',tax:'甲',juminzei:0,  store:'本店',  hireDate:'', birthDate:'' },
+  { id:12, name:'箕輪 栞',        kana:'ミノワ シオリ',     type:'アルバイト',dept:'ホール', payType:'時給',  baseSalary:0,      hourlyWage:1100, commute:2000, positionAllowance:0, targetGross:0, dependents:0, shakai:'未加入',koyo:'未加入',tax:'甲',juminzei:0,  store:'本店',  hireDate:'', birthDate:'' },
+  { id:13, name:'寺山 由紀子',    kana:'テラヤマ ユキコ',   type:'パート',  dept:'キッチン', payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000, positionAllowance:0, targetGross:0, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'マルコ', hireDate:'', birthDate:'' },
+  { id:14, name:'ダラガン ジャスミン エデュラン', kana:'', type:'アルバイト',dept:'ホール', payType:'時給',  baseSalary:0,      hourlyWage:1100, commute:2000, positionAllowance:0, targetGross:0, dependents:0, shakai:'未加入',koyo:'未加入',tax:'甲',juminzei:0,  store:'マルコ', hireDate:'', birthDate:'' },
+  { id:15, name:'エデュラン アイコ', kana:'',              type:'アルバイト',dept:'ホール', payType:'時給',  baseSalary:0,      hourlyWage:1100, commute:2000, positionAllowance:0, targetGross:0, dependents:0, shakai:'未加入',koyo:'未加入',tax:'甲',juminzei:0,  store:'マルコ', hireDate:'', birthDate:'' },
+  { id:16, name:'SAPKOTA SUSHMA',kana:'',                 type:'アルバイト',dept:'ホール', payType:'時給',  baseSalary:0,      hourlyWage:1100, commute:2000, positionAllowance:0, targetGross:0, dependents:0, shakai:'未加入',koyo:'未加入',tax:'甲',juminzei:0,  store:'マルコ', hireDate:'', birthDate:'' },
+  { id:17, name:'小島 まゆこ',    kana:'コジマ マユコ',     type:'パート',  dept:'ホール',   payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000, positionAllowance:0, targetGross:0, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'マルコ', hireDate:'', birthDate:'' },
+  { id:18, name:'大原 瑠奈',      kana:'オオハラ ルナ',     type:'パート',  dept:'ホール',   payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000, positionAllowance:0, targetGross:0, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'マルコ', hireDate:'', birthDate:'' },
+  { id:19, name:'檜山 明子',      kana:'ヒヤマ アキコ',     type:'正社員',  dept:'ホール',   payType:'月給',  baseSalary:220000, hourlyWage:0, commute:15000, positionAllowance:0, targetGross:280000, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:8000, store:'マルコ', hireDate:'', birthDate:'' },
+  { id:20, name:'直井',           kana:'ナオイ',            type:'正社員',  dept:'キッチン', payType:'月給',  baseSalary:220000, hourlyWage:0, commute:15000, positionAllowance:0, targetGross:280000, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:8000, store:'マルコ', hireDate:'', birthDate:'' },
+  { id:21, name:'黒羽',           kana:'クロハ',            type:'パート',  dept:'キッチン', payType:'時給',  baseSalary:0,      hourlyWage:1200, commute:5000, positionAllowance:0, targetGross:0, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:0,    store:'本店',  hireDate:'', birthDate:'' },
+  // 追加
+  { id:22, name:'圷 竜司',        kana:'アクツ リュウジ',   type:'正社員',  dept:'ホール',   payType:'月給',  baseSalary:220000, hourlyWage:0, commute:15000, positionAllowance:0, targetGross:280000, dependents:0, shakai:'加入', koyo:'加入', tax:'甲', juminzei:8000, store:'マルコ', hireDate:'', birthDate:'' },
+  // 役員（給与計算対象外・総支給固定）
+  { id:23, name:'清水 佳澄',      kana:'シミズ カスミ',     type:'役員',    dept:'管理',     payType:'役員報酬', baseSalary:0,   hourlyWage:0, commute:0,     positionAllowance:0, targetGross:360000, dependents:0, shakai:'加入', koyo:'未加入', tax:'甲', juminzei:0,   store:'本店',  hireDate:'', birthDate:'' },
+  { id:24, name:'清水 裕久',      kana:'シミズ ヒロヒサ',   type:'役員',    dept:'管理',     payType:'役員報酬', baseSalary:0,   hourlyWage:0, commute:0,     positionAllowance:0, targetGross:100000, dependents:0, shakai:'加入', koyo:'未加入', tax:'甲', juminzei:0,   store:'本店',  hireDate:'', birthDate:'' },
 ];
 
 // -------- 源泉徴収税額表（甲欄 2024年度） --------
@@ -318,6 +324,34 @@ function getMonthSummary(empId, year, month) {
 
 // 給与計算本体
 function calcSalary(emp, year, month) {
+
+  // ── 役員：固定総支給のみ ──────────────────────────
+  if (emp.payType === '役員報酬') {
+    const grossTotal = emp.targetGross || 0;
+    let kenpo = 0, kosei = 0;
+    if (emp.shakai === '加入') {
+      const s = calcShakai(grossTotal);
+      kenpo = s.kenpo; kosei = s.kosei;
+    }
+    const incomeTax      = calcIncomeTax(grossTotal - kenpo - kosei, emp.dependents, emp.tax);
+    const juminzei       = emp.juminzei || 0;
+    const totalDeduction = kenpo + kosei + incomeTax + juminzei;
+    const netPay         = Math.round(grossTotal - totalDeduction);
+    return {
+      basePay: grossTotal, skillPay: 0, skillPayNote: '役員報酬（固定）',
+      positionAllowancePay: 0, otPay: 0, midnightPay: 0,
+      midnightOnlyPay: 0, midnightOTPay: 0,
+      holidayLegalPay: 0, holidayNonLegalPay: 0, holidayPay: 0,
+      commute: 0, grossTotal, kenpo, kosei, koyoHoken: 0,
+      incomeTax, juminzei, totalDeduction, netPay,
+      monthOT:0, monthDailyOT:0, monthWeekOT:0,
+      monthMidnight:0, monthMidnightOT:0,
+      monthHolidayLegal:0, monthHolidayNonLegal:0, monthHoliday:0,
+      totalActual:0, workDays:0, paidDays:0, absentDays:0,
+      hourlyBase:0, ot60under:0, ot60over:0,
+    };
+  }
+
   const summary = getMonthSummary(emp.id, year, month);
   const {
     monthOT, monthDailyOT, monthWeekOT,
@@ -340,75 +374,83 @@ function calcSalary(emp, year, month) {
 
   const h = hourlyBase;
 
-  // ── 残業手当（日8h超 + 週40h超）─────────────────
-  // 月60h以内：+25%、60h超：+50%
+  // 役職手当
+  const positionAllowancePay = emp.positionAllowance || 0;
+
+  // ── 通勤手当（日額×出勤日数 or 月額固定）──────────
+  const actualCommute = emp.commuteType === 'daily'
+    ? (emp.commutePerDay || 0) * workDays
+    : (emp.commute || 0);
+
+  // 残業手当（月60h以内25%、60h超50%）
   const ot60under = Math.min(monthOT, 60);
   const ot60over  = Math.max(0, monthOT - 60);
-  const otPay = ot60under * h * 0.25 + ot60over * h * 0.50;
+  const otPay     = ot60under * h * 0.25 + ot60over * h * 0.50;
 
-  // ── 深夜手当（22時〜5時）──────────────────────
-  // 通常深夜（残業でない）：+25%
-  const midnightOnly = monthMidnight - monthMidnightOT;
+  // 深夜手当
+  const midnightOnly    = monthMidnight - monthMidnightOT;
   const midnightOnlyPay = midnightOnly * h * 0.25;
+  const midnightOT60u   = Math.min(monthMidnightOT, 60);
+  const midnightOT60o   = Math.max(0, monthMidnightOT - 60);
+  const midnightOTPay   = midnightOT60u * h * 0.25 + midnightOT60o * h * 0.25;
+  const midnightPay     = midnightOnlyPay + midnightOTPay;
 
-  // 深夜 かつ 残業（月60h以内）：残業25% + 深夜25% = +50%
-  // ただし残業割増はotPayに含まれているので、深夜分の追加25%だけ
-  const midnightOT60under = Math.min(monthMidnightOT, 60);
-  const midnightOT60over  = Math.max(0, monthMidnightOT - 60);
-  // 深夜残業の追加割増（残業割増は上で計上済み）
-  const midnightOTPay = midnightOT60under * h * 0.25 + midnightOT60over * h * 0.25;
-
-  const midnightPay = midnightOnlyPay + midnightOTPay;
-
-  // ── 法定休日手当（木曜）──────────────────────
-  // +35%（基本賃金×1.35 の差額分 = ×0.35）
+  // 法定休日手当
   const holidayLegalPay = monthHolidayLegal * h * 0.35;
 
-  // ── 法定外休日手当（水曜）────────────────────
-  // 通常賃金はbasePay/totalActualに含まれる。週OT超分はotPayに含まれる
-  const holidayNonLegalPay = 0;
+  // ── 職能給の計算 ──────────────────────────────────
+  // 職能給 = 目標総支給 - 基本給 - 通勤手当 - 役職手当 - 残業代合計
+  let skillPay = 0, skillPayNote = '';
+  if (emp.payType === '月給' && emp.targetGross > 0) {
+    const otTotal = Math.round(otPay + midnightPay + holidayLegalPay);
+    skillPay = emp.targetGross - emp.baseSalary - actualCommute - positionAllowancePay - otTotal;
+    skillPay = Math.max(0, Math.round(skillPay));
+    skillPayNote = `目標¥${emp.targetGross.toLocaleString()} - 基本給 - 通勤 - 役職 - 残業`;
+  }
 
-  const grossTotal = Math.round(basePay + otPay + midnightPay + holidayLegalPay + emp.commute);
+  const grossTotal = Math.round(basePay + skillPay + positionAllowancePay + otPay + midnightPay + holidayLegalPay + actualCommute);
 
-  // ── 社会保険 ─────────────────────────────
+  // 社会保険
   let kenpo = 0, kosei = 0;
   if (emp.shakai === '加入') {
-    const s = calcShakai(grossTotal - emp.commute);
+    const s = calcShakai(grossTotal - actualCommute);
     kenpo = s.kenpo; kosei = s.kosei;
   }
 
-  // ── 雇用保険 ─────────────────────────────
+  // 雇用保険
   let koyoHoken = 0;
   if (emp.koyo === '加入') koyoHoken = Math.round(grossTotal * KOYO_RATE);
 
-  // ── 所得税 ───────────────────────────────
-  const taxable  = grossTotal - emp.commute - kenpo - kosei - koyoHoken;
+  // 所得税
+  const taxable   = grossTotal - actualCommute - kenpo - kosei - koyoHoken;
   const incomeTax = calcIncomeTax(taxable, emp.dependents, emp.tax);
 
-  const juminzei        = emp.juminzei || 0;
-  const totalDeduction  = kenpo + kosei + koyoHoken + incomeTax + juminzei;
-  const netPay          = Math.round(grossTotal - totalDeduction);
+  const juminzei       = emp.juminzei || 0;
+  const totalDeduction = kenpo + kosei + koyoHoken + incomeTax + juminzei;
+  const netPay         = Math.round(grossTotal - totalDeduction);
 
   return {
-    basePay:            Math.round(basePay),
-    otPay:              Math.round(otPay),
-    midnightPay:        Math.round(midnightPay),
-    midnightOnlyPay:    Math.round(midnightOnlyPay),
-    midnightOTPay:      Math.round(midnightOTPay),
-    holidayLegalPay:    Math.round(holidayLegalPay),
-    holidayNonLegalPay: 0,
-    holidayPay:         Math.round(holidayLegalPay),
-    commute:    emp.commute,
+    basePay:             Math.round(basePay),
+    skillPay, skillPayNote,
+    positionAllowancePay,
+    otPay:               Math.round(otPay),
+    midnightPay:         Math.round(midnightPay),
+    midnightOnlyPay:     Math.round(midnightOnlyPay),
+    midnightOTPay:       Math.round(midnightOTPay),
+    holidayLegalPay:     Math.round(holidayLegalPay),
+    holidayNonLegalPay:  0,
+    holidayPay:          Math.round(holidayLegalPay),
+    commute:    actualCommute,
+    commuteNote: emp.commuteType === 'daily' ? `${(emp.commutePerDay||0).toLocaleString()}円×${workDays}日` : '月額固定',
     grossTotal, kenpo, kosei, koyoHoken, incomeTax, juminzei,
-    totalDeduction: Math.round(totalDeduction),
+    totalDeduction:      Math.round(totalDeduction),
     netPay,
-    // 集計値
     monthOT, monthDailyOT, monthWeekOT,
     monthMidnight, monthMidnightOT,
     monthHolidayLegal, monthHolidayNonLegal,
     monthHoliday: monthHolidayLegal + monthHolidayNonLegal,
     totalActual, workDays, paidDays, absentDays,
-    hourlyBase: Math.round(h),
+    hourlyBase:  Math.round(h),
     ot60under, ot60over,
   };
 }

@@ -421,7 +421,35 @@ function employeeForm(emp, isNew) {
     <div class="form-group" id="ef_hourlyGroup"><label>時給（円/h）</label><input type="number" id="ef_hourlyWage" value="${emp.hourlyWage}"></div>
   </div>
   <div class="form-row">
-    <div class="form-group"><label>交通費（月額）</label><input type="number" id="ef_commute" value="${emp.commute}"></div>
+    <div class="form-group"><label>役職手当（月額）</label><input type="number" id="ef_positionAllowance" value="${emp.positionAllowance||0}"></div>
+    <div class="form-group"><label>目標総支給額 <span style="font-size:11px;color:#e8a020">※月給制のみ　職能給を自動計算</span></label><input type="number" id="ef_targetGross" value="${emp.targetGross||0}"></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group">
+    <label>交通費の計算方式</label>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+      <label style="display:flex;align-items:center;gap:4px;font-weight:400;color:var(--text)">
+        <input type="radio" name="commuteType" id="ef_commuteFixed" value="fixed"
+          ${(emp.commuteType||'fixed')==='fixed'?'checked':''}
+          onchange="toggleCommuteType()"> 月額固定
+      </label>
+      <label style="display:flex;align-items:center;gap:4px;font-weight:400;color:var(--text)">
+        <input type="radio" name="commuteType" id="ef_commuteDaily" value="daily"
+          ${emp.commuteType==='daily'?'checked':''}
+          onchange="toggleCommuteType()"> 日額×出勤日数
+      </label>
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="form-group" id="ef_commuteFixedGroup">
+      <label>交通費（月額固定・円）</label>
+      <input type="number" id="ef_commute" value="${emp.commute||0}">
+    </div>
+    <div class="form-group" id="ef_commuteDailyGroup" style="display:none">
+      <label>交通費（1日あたり・円）</label>
+      <input type="number" id="ef_commutePerDay" value="${emp.commutePerDay||0}">
+    </div>
+  </div>
     <div class="form-group"><label>扶養人数</label><input type="number" id="ef_dep" value="${emp.dependents||0}" min="0"></div>
   </div>
   <div class="form-row">
@@ -464,6 +492,10 @@ function saveEmployee(id, isNew) {
     baseSalary: parseInt(get('ef_baseSalary').value)||0,
     hourlyWage: parseInt(get('ef_hourlyWage').value)||0,
     commute: parseInt(get('ef_commute').value)||0,
+    commuteType: document.querySelector('input[name="commuteType"]:checked')?.value || 'fixed',
+    commutePerDay: parseInt(get('ef_commutePerDay').value)||0,
+    positionAllowance: parseInt(get('ef_positionAllowance').value)||0,
+    targetGross: parseInt(get('ef_targetGross').value)||0,
     dependents: parseInt(get('ef_dep').value)||0,
     shakai: get('ef_shakai').value, koyo: get('ef_koyo').value,
     tax: get('ef_tax').value, juminzei: parseInt(get('ef_juminzei').value)||0,

@@ -28,7 +28,31 @@ function attachPageEvents(page) {
   }
 }
 
-// -------- 従業員フォームのトグル --------
+// -------- 通勤手当方式トグル --------
+function toggleCommuteType() {
+  const type = document.querySelector('input[name="commuteType"]:checked')?.value;
+  const fixedGroup = document.getElementById('ef_commuteFixedGroup');
+  const dailyGroup = document.getElementById('ef_commuteDailyGroup');
+  if (!fixedGroup || !dailyGroup) return;
+  if (type === 'daily') {
+    fixedGroup.style.display = 'none';
+    dailyGroup.style.display = 'block';
+  } else {
+    fixedGroup.style.display = 'block';
+    dailyGroup.style.display = 'none';
+  }
+}
+
+// フォームを開いた直後に初期表示を合わせる
+function initCommuteTypeDisplay() {
+  const type = document.querySelector('input[name="commuteType"]:checked')?.value;
+  if (type === 'daily') {
+    const fixedGroup = document.getElementById('ef_commuteFixedGroup');
+    const dailyGroup = document.getElementById('ef_commuteDailyGroup');
+    if (fixedGroup) fixedGroup.style.display = 'none';
+    if (dailyGroup) dailyGroup.style.display = 'block';
+  }
+}
 function togglePayFields() {
   const type = document.getElementById('ef_payType')?.value;
   const baseG  = document.getElementById('ef_baseSalaryGroup');

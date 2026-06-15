@@ -154,13 +154,16 @@ function payslipHTML(emp, sal, year, month) {
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">支給項目</div>
         ${payRow('基本給/時給計算額', sal.basePay)}
+        ${payRow('基本給', sal.basePay)}
+        ${sal.skillPay>0?payRow('職能給', sal.skillPay):''}
+        ${sal.positionAllowancePay>0?payRow('役職手当', sal.positionAllowancePay):''}
         ${payRow('残業手当（日8h超・週40h超 〜60h 25%）', sal.monthOT>0?Math.round(Math.min(sal.monthOT,60)*sal.hourlyBase*0.25):0)}
         ${payRow('残業手当（60h超 追加25%）', sal.ot60over>0?Math.round(sal.ot60over*sal.hourlyBase*0.25):0)}
         ${payRow('深夜手当（22時〜 25%）', sal.midnightOnlyPay)}
         ${sal.midnightOTPay>0?payRow('深夜残業 追加割増（+25%）', sal.midnightOTPay):''}
         ${payRow('法定休日手当（木曜 35%）', sal.holidayLegalPay)}
         ${sal.monthHolidayNonLegal>0?`<div style="display:flex;justify-content:space-between;padding:3px 0;color:#999"><span>法定外休日（水曜）出勤 ${sal.monthHolidayNonLegal}h</span><span>週OT分に含む</span></div>`:''}
-        ${payRow('交通費', sal.commute)}
+        ${payRow(`交通費${sal.commuteNote?' ('+sal.commuteNote+')':''}`, sal.commute)}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>支給合計</span><span>¥${sal.grossTotal.toLocaleString()}</span>
         </div>
