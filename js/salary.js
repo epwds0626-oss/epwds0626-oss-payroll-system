@@ -153,11 +153,10 @@ function payslipHTML(emp, sal, year, month) {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">支給項目</div>
-        ${payRow('基本給/時給計算額', sal.basePay)}
         ${payRow('基本給', sal.basePay)}
         ${sal.skillPay>0?payRow('職能給', sal.skillPay):''}
         ${sal.positionAllowancePay>0?payRow('役職手当', sal.positionAllowancePay):''}
-        ${payRow('残業手当（日8h超・週40h超 〜60h 25%）', sal.monthOT>0?Math.round(Math.min(sal.monthOT,60)*sal.hourlyBase*0.25):0)}
+        ${payRow('残業手当（〜60h 25%）', sal.monthOT>0?Math.round(Math.min(sal.monthOT,60)*sal.hourlyBase*0.25):0)}
         ${payRow('残業手当（60h超 追加25%）', sal.ot60over>0?Math.round(sal.ot60over*sal.hourlyBase*0.25):0)}
         ${payRow('深夜手当（22時〜 25%）', sal.midnightOnlyPay)}
         ${sal.midnightOTPay>0?payRow('深夜残業 追加割増（+25%）', sal.midnightOTPay):''}
@@ -170,12 +169,11 @@ function payslipHTML(emp, sal, year, month) {
       </div>
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">控除項目</div>
-        ${payRow('健康保険料', sal.kenpo)}
-        ${payRow('厚生年金保険料', sal.kosei)}
-        ${payRow('雇用保険料', sal.koyoHoken)}
+        ${payRow(`健康保険料（${sal.kaigo?'介護込11.86%':'10.06%'}・茨城支部）`, sal.kenpo)}
+        ${payRow('厚生年金保険料（18.30%）', sal.kosei)}
+        ${payRow('雇用保険料（6‰）', sal.koyoHoken)}
         ${payRow('所得税', sal.incomeTax)}
         ${payRow('住民税', sal.juminzei)}
-        ${payRow('欠勤控除', 0)}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>控除合計</span><span>¥${sal.totalDeduction.toLocaleString()}</span>
         </div>

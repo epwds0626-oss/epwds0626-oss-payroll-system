@@ -64,19 +64,32 @@ const TAX_TABLE = [
 // 乙欄（扶養対象外・副業等）
 const TAX_TABLE_OTU_RATE = 0.05; // 簡易（実際は別表）
 
-// -------- 健康保険・厚生年金 標準報酬月額表（茨城県 2024年度） --------
-const SHAKAI_TABLE = [
-  // [標準報酬下限, 健康保険率(本人), 厚生年金率(本人)]  ※全額の折半
-  // 健保: 9.98% → 本人4.99%, 厚年: 18.3% → 本人9.15%
-  { lower:0,      kenpo:4.99, kosei:9.15 },
-];
-// 簡易計算: 標準報酬月額 × 料率
-function calcShakai(grossForShakai) {
-  // 標準報酬月額への丸め（1000円単位）
+// -------- 健康保険・厚生年金（全国健康保険協会 茨城支部 2025年度） --------
+// 健康保険（介護保険第2号被保険者以外）: 10.06% → 本人5.03%
+// 健康保険（介護保険第2号被保険者・40歳〜64歳）: 11.86% → 本人5.93%
+// 厚生年金: 18.30% → 本人9.15%
+const KENPO_RATE       = 0.0503; // 健保（介護なし）
+const KENPO_KAIGO_RATE = 0.0593; // 健保（介護あり・40〜64歳）
+const KOSEI_RATE       = 0.0915; // 厚生年金
+
+// 年齢から介護保険対象かどうかを判定（40歳以上65歳未満）
+function isKaigoTarget(birthDateStr) {
+  if (!birthDateStr) return false;
+  const birth = new Date(birthDateStr);
+  const today = new Date();
+  const age   = today.getFullYear() - birth.getFullYear()
+    - (today < new Date(today.getFullYear(), birth.getMonth(), birth.getDate()) ? 1 : 0);
+  return age >= 40 && age < 65;
+}
+
+// 社会保険料計算（標準報酬月額ベース）
+function calcShakai(grossForShakai, birthDateStr = '') {
+  // 標準報酬月額（1000円単位に丸め）
   const hyojun = Math.round(grossForShakai / 1000) * 1000;
-  const kenpo = Math.round(hyojun * 0.0499);
-  const kosei = Math.round(hyojun * 0.0915);
-  return { kenpo, kosei };
+  const kaigo  = isKaigoTarget(birthDateStr);
+  const kenpo  = Math.round(hyojun * (kaigo ? KENPO_KAIGO_RATE : KENPO_RATE));
+  const kosei  = Math.round(hyojun * KOSEI_RATE);
+  return { kenpo, kosei, kaigo };
 }
 
 // 雇用保険料率（2024年度）: 一般事業 本人負担 6/1000
@@ -330,7 +343,7 @@ function calcSalary(emp, year, month) {
     const grossTotal = emp.targetGross || 0;
     let kenpo = 0, kosei = 0;
     if (emp.shakai === '加入') {
-      const s = calcShakai(grossTotal);
+      const s = calcShakai(grossTotal, emp.birthDate);
       kenpo = s.kenpo; kosei = s.kosei;
     }
     const incomeTax      = calcIncomeTax(grossTotal - kenpo - kosei, emp.dependents, emp.tax);
@@ -342,8 +355,9 @@ function calcSalary(emp, year, month) {
       positionAllowancePay: 0, otPay: 0, midnightPay: 0,
       midnightOnlyPay: 0, midnightOTPay: 0,
       holidayLegalPay: 0, holidayNonLegalPay: 0, holidayPay: 0,
-      commute: 0, grossTotal, kenpo, kosei, koyoHoken: 0,
+      commute: 0, commuteNote: '', grossTotal, kenpo, kosei, koyoHoken: 0,
       incomeTax, juminzei, totalDeduction, netPay,
+      kaigo: isKaigoTarget(emp.birthDate),
       monthOT:0, monthDailyOT:0, monthWeekOT:0,
       monthMidnight:0, monthMidnightOT:0,
       monthHolidayLegal:0, monthHolidayNonLegal:0, monthHoliday:0,
@@ -413,7 +427,7 @@ function calcSalary(emp, year, month) {
   // 社会保険
   let kenpo = 0, kosei = 0;
   if (emp.shakai === '加入') {
-    const s = calcShakai(grossTotal - actualCommute);
+    const s = calcShakai(grossTotal - actualCommute, emp.birthDate);
     kenpo = s.kenpo; kosei = s.kosei;
   }
 
@@ -442,6 +456,7 @@ function calcSalary(emp, year, month) {
     holidayPay:          Math.round(holidayLegalPay),
     commute:    actualCommute,
     commuteNote: emp.commuteType === 'daily' ? `${(emp.commutePerDay||0).toLocaleString()}円×${workDays}日` : '月額固定',
+    kaigo: isKaigoTarget(emp.birthDate),
     grossTotal, kenpo, kosei, koyoHoken, incomeTax, juminzei,
     totalDeduction:      Math.round(totalDeduction),
     netPay,
