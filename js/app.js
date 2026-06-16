@@ -243,9 +243,22 @@ function renderEmployees() {
   return `
   <div class="section-header">
     <div class="section-title">👥 従業員マスタ</div>
-    <div style="display:flex;gap:8px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn-accent" onclick="openAddEmployee()">＋ 新規登録</button>
-      <button class="btn-outline" onclick="exportEmployeeCSV()">CSV出力</button>
+      <button class="btn-outline" onclick="exportEmployeeCSV()">📤 CSV出力</button>
+      <button class="btn-primary" onclick="showEmpCSVImport()">📥 CSV取込</button>
+    </div>
+  </div>
+
+  <div class="card" id="empCsvCard" style="display:none">
+    <div class="card-title">📥 従業員マスタ CSV取込</div>
+    <div class="alert alert-info"><span>📌</span>
+    <div>CSV出力したファイルをExcelで編集後、そのまま貼り付けてください。<br>
+    <strong>1行目はヘッダ行</strong>として自動スキップします。No（ID）で既存データを上書きします。</div></div>
+    <textarea id="empCsvArea" style="width:100%;height:140px;font-family:monospace;font-size:12px;border:1px solid #dce3ec;border-radius:8px;padding:10px" placeholder="CSVデータをここに貼り付け..."></textarea>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn-primary" onclick="importEmployeeCSV()">取込実行</button>
+      <button class="btn-outline" onclick="hideEmpCSVImport()">キャンセル</button>
     </div>
   </div>
 
@@ -529,11 +542,104 @@ function deleteEmployee(id) {
   showToast('完全削除しました');
 }
 
+function showEmpCSVImport() {
+  document.getElementById('empCsvCard').style.display = 'block';
+  document.getElementById('empCsvArea').focus();
+}
+function hideEmpCSVImport() {
+  document.getElementById('empCsvCard').style.display = 'none';
+}
+
 function exportEmployeeCSV() {
-  const header = ['No','氏名','雇用区分','店舗','部門','給与形態','基本給','時給','交通費','社保','雇保','税区分','住民税','入社日'];
-  const rows = employees.map(e=>[e.id,e.name,e.type,e.store||'',e.dept||'',e.payType,e.baseSalary,e.hourlyWage,e.commute,e.shakai,e.koyo,e.tax,e.juminzei,e.hireDate||'']);
-  const csv = [header, ...rows].map(r=>r.join(',')).join('\n');
+  const header = [
+    'No','氏名','フリガナ','雇用区分','店舗','部門',
+    '給与形態','基本給','時給','交通費種別','交通費月額','交通費日額',
+    '役職手当','目標総支給額',
+    '社保','雇保','税区分','扶養人数','住民税',
+    '入社日','生年月日','状態'
+  ];
+  const rows = employees.map(e => [
+    e.id, e.name, e.kana||'', e.type, e.store||'', e.dept||'',
+    e.payType, e.baseSalary, e.hourlyWage,
+    e.commuteType||'fixed', e.commute||0, e.commutePerDay||0,
+    e.positionAllowance||0, e.targetGross||0,
+    e.shakai, e.koyo, e.tax, e.dependents||0, e.juminzei||0,
+    e.hireDate||'', e.birthDate||'', e.status||'active'
+  ]);
+  const csv = [header, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
   dlFile('従業員マスタ.csv', csv, 'text/csv');
+  showToast('CSV出力しました');
+}
+
+function importEmployeeCSV() {
+  const raw = document.getElementById('empCsvArea').value.trim();
+  if (!raw) { showToast('CSVを貼り付けてください','error'); return; }
+
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  let imported = 0, added = 0, skipped = 0;
+
+  for (const line of lines) {
+    // ヘッダスキップ
+    if (line.startsWith('No') || line.startsWith('"No"')) continue;
+
+    // カンマ区切り（ダブルクォート対応）
+    const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+    if (cols.length < 6) { skipped++; continue; }
+
+    const [
+      idRaw, name, kana, type, store, dept,
+      payType, baseSalaryRaw, hourlyWageRaw,
+      commuteType, commuteRaw, commutePerDayRaw,
+      positionAllowanceRaw, targetGrossRaw,
+      shakai, koyo, tax, dependentsRaw, juminzeiRaw,
+      hireDate, birthDate, status
+    ] = cols;
+
+    const id = parseInt(idRaw);
+    if (!id || !name) { skipped++; continue; }
+
+    const empData = {
+      id, name, kana: kana||'', type: type||'パート',
+      store: store||'本店', dept: dept||'ホール',
+      payType: payType||'時給',
+      baseSalary: parseInt(baseSalaryRaw)||0,
+      hourlyWage: parseInt(hourlyWageRaw)||0,
+      commuteType: commuteType||'fixed',
+      commute: parseInt(commuteRaw)||0,
+      commutePerDay: parseInt(commutePerDayRaw)||0,
+      positionAllowance: parseInt(positionAllowanceRaw)||0,
+      targetGross: parseInt(targetGrossRaw)||0,
+      shakai: shakai||'未加入', koyo: koyo||'未加入',
+      tax: tax||'甲', dependents: parseInt(dependentsRaw)||0,
+      juminzei: parseInt(juminzeiRaw)||0,
+      hireDate: hireDate||'', birthDate: birthDate||'',
+      status: status||'active',
+    };
+
+    const idx = employees.findIndex(e => e.id === id);
+    if (idx >= 0) {
+      // 既存データを上書き（ステータス・退職情報は引き継ぐ）
+      empData.leaveDate = employees[idx].leaveDate || '';
+      empData.leaveNote = employees[idx].leaveNote || '';
+      employees[idx] = empData;
+      imported++;
+    } else {
+      // 新規追加
+      empData.leaveDate = ''; empData.leaveNote = '';
+      employees.push(empData);
+      added++;
+    }
+  }
+
+  if (imported + added === 0) {
+    showToast('取込できるデータがありませんでした','error');
+    return;
+  }
+
+  saveLS('employees', employees);
+  hideEmpCSVImport();
+  renderPage('employees');
+  showToast(`更新${imported}件・追加${added}件・スキップ${skipped}件`);
 }
 
 function dlFile(name, content, type='text/plain') {
