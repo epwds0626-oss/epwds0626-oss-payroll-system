@@ -174,6 +174,7 @@ function payslipHTML(emp, sal, year, month) {
         ${payRow('雇用保険料（6‰）', sal.koyoHoken)}
         ${payRow('所得税', sal.incomeTax)}
         ${payRow('住民税', sal.juminzei)}
+        ${sal.chutaikyoAmount>0?payRow('中退共掛金', sal.chutaikyoAmount):''}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>控除合計</span><span>¥${sal.totalDeduction.toLocaleString()}</span>
         </div>

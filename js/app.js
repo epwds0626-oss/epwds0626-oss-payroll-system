@@ -276,20 +276,27 @@ function renderEmployees() {
 
   <div class="card">
     <div class="table-wrap">
-      <table>
+      <table id="empTable">
         <thead>
           <tr>
+            <th style="width:32px"></th>
             <th>No</th><th class="tl">氏名</th><th>雇用区分</th><th>店舗</th><th>部門</th>
             <th>給与形態</th><th>基本給/時給</th><th>交通費</th>
-            <th>社保</th><th>税区分</th><th>入社日</th>
+            <th>社保</th><th>雇保</th><th>中退共</th><th>税区分</th><th>入社日</th>
             ${activeTab==='inactive'?'<th>退職日</th>':''}
             <th>操作</th>
           </tr>
         </thead>
-        <tbody>
-          ${showList.length===0 ? `<tr><td colspan="13" style="text-align:center;color:#999;padding:20px">データなし</td></tr>` : ''}
-          ${showList.map(emp=>`
-          <tr style="${emp.status==='inactive'?'opacity:0.7':''}">
+        <tbody id="empTbody">
+          ${showList.length===0 ? `<tr><td colspan="14" style="text-align:center;color:#999;padding:20px">データなし</td></tr>` : ''}
+          ${showList.map((emp, idx)=>`
+          <tr draggable="true" data-id="${emp.id}" data-idx="${idx}"
+            style="${emp.status==='inactive'?'opacity:0.7':''};cursor:grab"
+            ondragstart="empDragStart(event,${emp.id})"
+            ondragover="empDragOver(event)"
+            ondrop="empDrop(event,${emp.id})"
+            ondragend="empDragEnd(event)">
+            <td style="cursor:grab;color:#888;font-size:16px;padding:4px 8px">⠿</td>
             <td>${emp.id}</td>
             <td class="tl">
               ${emp.name}
@@ -303,10 +310,14 @@ function renderEmployees() {
             <td>¥${(emp.payType==='月給'?emp.baseSalary:emp.hourlyWage).toLocaleString()}</td>
             <td>¥${emp.commute.toLocaleString()}</td>
             <td><span class="badge ${emp.shakai==='加入'?'badge-blue':'badge-gray'}">${emp.shakai}</span></td>
+            <td><span class="badge ${emp.koyo==='加入'?'badge-blue':'badge-gray'}">${emp.koyo}</span></td>
+            <td><span class="badge ${(emp.chutaikyo||'未加入')==='加入'?'badge-green':'badge-gray'}">${emp.chutaikyo||'未加入'}</span></td>
             <td>${emp.tax}欄</td>
             <td>${emp.hireDate||'—'}</td>
             ${activeTab==='inactive'?`<td>${emp.leaveDate||'—'}</td>`:''}
             <td style="white-space:nowrap">
+              <button class="btn-outline btn-sm" onclick="moveEmp(${emp.id},-1)" ${idx===0?'disabled':''}>↑</button>
+              <button class="btn-outline btn-sm" onclick="moveEmp(${emp.id},1)" ${idx===showList.length-1?'disabled':''}>↓</button>
               <button class="btn-primary btn-sm" onclick="editEmployee(${emp.id})">編集</button>
               ${emp.status==='inactive'
                 ? `<button class="btn-success btn-sm" onclick="reactivateEmployee(${emp.id})">復職</button>`
@@ -384,7 +395,7 @@ function reactivateEmployee(id) {
 
 function openAddEmployee() {
   const nextId = Math.max(...employees.map(e=>e.id),0) + 1;
-  openModal(employeeForm({ id:nextId, name:'', kana:'', type:'パート', dept:'ホール', payType:'時給', baseSalary:0, hourlyWage:1200, commute:5000, dependents:0, shakai:'未加入', koyo:'未加入', tax:'甲', juminzei:0, store:'本店', hireDate:'', birthDate:'', status:'active' }, true));
+  openModal(employeeForm({ id:nextId, name:'', kana:'', type:'パート', dept:'ホール', payType:'時給', baseSalary:0, hourlyWage:0, commute:0, commuteType:'fixed', commutePerDay:0, positionAllowance:0, targetGross:0, dependents:0, shakai:'未加入', koyo:'未加入', chutaikyo:'未加入', tax:'甲', juminzei:0, store:'本店', hireDate:'', birthDate:'', status:'active' }, true));
 }
 
 function editEmployee(id) {
@@ -473,6 +484,16 @@ function employeeForm(emp, isNew) {
     </div>
   </div>
   <div class="form-row">
+    <div class="form-group"><label>中小企業退職金共済（中退共）</label>
+      <select id="ef_chutaikyo">
+        ${['加入','未加入'].map(s=>`<option ${(emp.chutaikyo||'未加入')===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group"><label>中退共 掛金（月額・円）</label>
+      <input type="number" id="ef_chutaikyoAmount" value="${emp.chutaikyoAmount||0}" placeholder="例：5000">
+    </div>
+  </div>
+  <div class="form-row">
     <div class="form-group"><label>所得税区分</label>
       <select id="ef_tax">
         ${['甲','乙'].map(t=>`<option ${emp.tax===t?'selected':''}>${t}</option>`).join('')}
@@ -506,6 +527,8 @@ function saveEmployee(id, isNew) {
     targetGross: parseInt(get('ef_targetGross').value)||0,
     dependents: parseInt(get('ef_dep').value)||0,
     shakai: get('ef_shakai').value, koyo: get('ef_koyo').value,
+    chutaikyo: get('ef_chutaikyo').value,
+    chutaikyoAmount: parseInt(get('ef_chutaikyoAmount').value)||0,
     tax: get('ef_tax').value, juminzei: parseInt(get('ef_juminzei').value)||0,
     hireDate: get('ef_hireDate').value, birthDate: get('ef_birthDate').value,
     // ステータス・退職情報を引き継ぐ

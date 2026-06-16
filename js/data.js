@@ -527,7 +527,8 @@ function calcSalary(emp, year, month) {
   const incomeTax = calcIncomeTax(taxable, emp.dependents, emp.tax);
 
   const juminzei       = emp.juminzei || 0;
-  const totalDeduction = kenpo + kosei + koyoHoken + incomeTax + juminzei;
+  const chutaikyoAmount = (emp.chutaikyo === '加入') ? (emp.chutaikyoAmount || 0) : 0;
+  const totalDeduction = kenpo + kosei + koyoHoken + incomeTax + juminzei + chutaikyoAmount;
   const netPay         = Math.round(grossTotal - totalDeduction);
 
   return {
@@ -544,7 +545,7 @@ function calcSalary(emp, year, month) {
     commute:    actualCommute,
     commuteNote: emp.commuteType === 'daily' ? `${(emp.commutePerDay||0).toLocaleString()}円×${workDays}日` : '月額固定',
     kaigo: isKaigoTarget(emp.birthDate),
-    grossTotal, kenpo, kosei, koyoHoken, incomeTax, juminzei,
+    grossTotal, kenpo, kosei, koyoHoken, incomeTax, juminzei, chutaikyoAmount,
     totalDeduction:      Math.round(totalDeduction),
     netPay,
     monthOT, monthDailyOT, monthWeekOT,
