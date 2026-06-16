@@ -282,14 +282,39 @@ function renderEmployees() {
             <th style="width:32px"></th>
             <th>No</th><th class="tl">氏名</th><th>雇用区分</th><th>店舗</th><th>部門</th>
             <th>給与形態</th><th>基本給/時給</th><th>交通費</th>
-            <th>支払</th><th>社保</th><th>雇保</th><th>中退共</th><th>税区分</th><th>入社日</th>
+            <th>支払</th>
+            <th>保険・税金<br><span style="font-size:10px;font-weight:400">（月額概算）</span></th>
+            <th>入社日</th>
             ${activeTab==='inactive'?'<th>退職日</th>':''}
             <th>操作</th>
           </tr>
         </thead>
         <tbody id="empTbody">
-          ${showList.length===0 ? `<tr><td colspan="14" style="text-align:center;color:#999;padding:20px">データなし</td></tr>` : ''}
-          ${showList.map((emp, idx)=>`
+          ${showList.length===0 ? `<tr><td colspan="13" style="text-align:center;color:#999;padding:20px">データなし</td></tr>` : ''}
+          ${showList.map((emp, idx)=>{
+            // 月額の概算控除を計算（基本給ベース）
+            const baseForCalc = emp.payType==='月給' ? emp.baseSalary : (emp.hourlyWage * 173);
+            const sh = calcShakai(baseForCalc - (emp.commute||0), emp.birthDate||'');
+            const kenpo  = emp.shakai==='加入' ? sh.kenpo : 0;
+            const kosei  = emp.shakai==='加入' ? sh.kosei : 0;
+            const koyo   = emp.koyo==='加入'   ? Math.round(baseForCalc * KOYO_RATE) : 0;
+            const chutai = (emp.chutaikyo==='加入') ? (emp.chutaikyoAmount||0) : 0;
+            const jumin  = emp.juminzei||0;
+            const income = calcIncomeTax(baseForCalc - (emp.commute||0) - kenpo - kosei - koyo, emp.dependents||0, emp.tax||'甲');
+            const total  = kenpo + kosei + koyo + chutai + jumin + income;
+
+            const insuranceHtml = `
+              <div style="font-size:11px;line-height:1.8">
+                ${emp.shakai==='加入'?`<span style="color:#1e40af">健保 ¥${kenpo.toLocaleString()}</span> / <span style="color:#1e40af">厚年 ¥${kosei.toLocaleString()}</span><br>`:'<span style="color:#999">社保 未加入</span><br>'}
+                ${emp.koyo==='加入'?`<span style="color:#166534">雇保 ¥${koyo.toLocaleString()}</span>`:'<span style="color:#999">雇保 未加入</span>'}
+                ${chutai?` / <span style="color:#166534">中退共 ¥${chutai.toLocaleString()}</span>`:''}
+                <br><span style="color:#7c3aed">所得税 ¥${income.toLocaleString()}</span>
+                ${jumin?` / <span style="color:#7c3aed">住民税 ¥${jumin.toLocaleString()}</span>`:''}
+                <br><strong>控除計 ¥${total.toLocaleString()}</strong>
+                ${sh.kaigo?'<span class="badge badge-yellow" style="margin-left:4px;font-size:10px">介護保険</span>':''}
+              </div>`;
+
+            return `
           <tr draggable="true" data-id="${emp.id}" data-idx="${idx}"
             style="${emp.status==='inactive'?'opacity:0.7':''};cursor:grab"
             ondragstart="empDragStart(event,${emp.id})"
@@ -309,25 +334,9 @@ function renderEmployees() {
             <td>${emp.dept||'—'}</td>
             <td>${emp.payType}</td>
             <td>¥${(emp.payType==='月給'?emp.baseSalary:emp.hourlyWage).toLocaleString()}</td>
-            <td>¥${emp.commute.toLocaleString()}</td>
+            <td>¥${(emp.commute||0).toLocaleString()}</td>
             <td><span class="badge ${(emp.paymentMethod||'振込')==='振込'?'badge-blue':'badge-yellow'}">${emp.paymentMethod||'振込'}</span></td>
-            <td><span class="badge ${emp.shakai==='加入'?'badge-blue':'badge-gray'}">${emp.shakai}</span></td>
-            <td><span class="badge ${emp.koyo==='加入'?'badge-blue':'badge-gray'}">${emp.koyo}</span></td>
-            <td><span class="badge ${(emp.chutaikyo||'未加入')==='加入'?'badge-green':'badge-gray'}">${emp.chutaikyo||'未加入'}${(()=>{
-              if ((emp.chutaikyo||'未加入')==='未加入' && emp.hireDate) {
-                const join = new Date(emp.hireDate);
-                join.setMonth(join.getMonth()+7);
-                const today = new Date();
-                if (join > today) {
-                  return `<br><span style="font-size:10px;color:#e67e22">${join.getMonth()+1}/${join.getDate()}予定</span>`;
-                }
-              }
-              if ((emp.chutaikyo||'未加入')==='加入' && emp.chutaikyoAmount) {
-                return `<br><span style="font-size:10px;color:#888">¥${emp.chutaikyoAmount.toLocaleString()}/月</span>`;
-              }
-              return '';
-            })()}</span></td>
-            <td>${emp.tax}欄</td>
+            <td style="min-width:200px">${insuranceHtml}</td>
             <td>${emp.hireDate||'—'}</td>
             ${activeTab==='inactive'?`<td>${emp.leaveDate||'—'}</td>`:''}
             <td style="white-space:nowrap">
@@ -340,7 +349,8 @@ function renderEmployees() {
               }
               <button class="btn-danger btn-sm" onclick="deleteEmployee(${emp.id})">完全削除</button>
             </td>
-          </tr>`).join('')}
+          </tr>`;
+          }).join('')}
         </tbody>
       </table>
     </div>

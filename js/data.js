@@ -191,18 +191,18 @@ function initFirebaseData() {
     const val = snap.val();
     if (val) {
       employees = Array.isArray(val) ? val.filter(Boolean) : Object.values(val);
-      // IDで昇順ソート
-      employees.sort((a, b) => (a.id||0) - (b.id||0));
+      // order フィールドがなければ id で補完してから order でソート
+      employees.forEach((e, i) => { if (e.order === undefined) e.order = e.id * 10; });
+      employees.sort((a, b) => (a.order ?? a.id) - (b.order ?? b.id));
     } else {
       const empObj = {};
-      DEFAULT_EMPLOYEES.forEach(e => { empObj[e.id] = e; });
+      DEFAULT_EMPLOYEES.forEach((e, i) => { empObj[e.id] = { ...e, order: i * 10 }; });
       FB.employees().set(empObj);
-      employees = [...DEFAULT_EMPLOYEES];
+      employees = DEFAULT_EMPLOYEES.map((e, i) => ({ ...e, order: i * 10 }));
     }
     if (!_fbLoaded) {
       onLoad();
     } else {
-      // 他のPCからの変更を即時反映
       renderPage(currentPage);
       showToast('データが更新されました ✓');
     }

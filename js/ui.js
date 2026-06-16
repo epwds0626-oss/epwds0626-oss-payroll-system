@@ -34,21 +34,27 @@ let _dragOver = null;
 
 function moveEmp(id, dir) {
   const isActive = (window._empTab || 'active') === 'active';
-  const list = isActive
+  const list = (isActive
     ? employees.filter(e => e.status !== 'inactive' && e.status !== 'leave')
-    : employees.filter(e => e.status === 'inactive' || e.status === 'leave');
+    : employees.filter(e => e.status === 'inactive' || e.status === 'leave')
+  ).slice(); // コピー
 
   const idx = list.findIndex(e => e.id === id);
   const swapIdx = idx + dir;
   if (swapIdx < 0 || swapIdx >= list.length) return;
 
-  const ai = employees.findIndex(e => e.id === list[idx].id);
-  const bi = employees.findIndex(e => e.id === list[swapIdx].id);
-  [employees[ai], employees[bi]] = [employees[bi], employees[ai]];
+  // order フィールドを付与して並び順を管理
+  // まず現在の order を整理
+  list.forEach((e, i) => { e.order = i; });
 
-  const empObj = {};
-  employees.forEach(e => { empObj[e.id] = e; });
-  FB.employees().set(empObj);
+  // 入れ替え
+  const tmp = list[idx].order;
+  list[idx].order = list[swapIdx].order;
+  list[swapIdx].order = tmp;
+
+  // Firebaseに order フィールドだけ更新
+  db.ref(`payroll/employees/${list[idx].id}/order`).set(list[idx].order);
+  db.ref(`payroll/employees/${list[swapIdx].id}/order`).set(list[swapIdx].order);
 }
 
 function empDragStart(e, id) {
@@ -82,16 +88,15 @@ function empDrop(e, targetId) {
   if (_dragOver) { _dragOver.style.borderTop = ''; _dragOver = null; }
   if (!_dragId || _dragId === targetId) { _dragId = null; return; }
 
-  const fromIdx = employees.findIndex(emp => emp.id === _dragId);
-  const toIdx   = employees.findIndex(emp => emp.id === targetId);
-  if (fromIdx < 0 || toIdx < 0) { _dragId = null; return; }
+  const fromEmp  = employees.find(emp => emp.id === _dragId);
+  const toEmp    = employees.find(emp => emp.id === targetId);
+  if (!fromEmp || !toEmp) { _dragId = null; return; }
 
-  const moved = employees.splice(fromIdx, 1)[0];
-  employees.splice(toIdx, 0, moved);
-
-  const empObj = {};
-  employees.forEach(emp => { empObj[emp.id] = emp; });
-  FB.employees().set(empObj);
+  // order を入れ替え
+  const tmpOrder = fromEmp.order ?? fromEmp.id * 10;
+  const toOrder  = toEmp.order ?? toEmp.id * 10;
+  db.ref(`payroll/employees/${fromEmp.id}/order`).set(toOrder);
+  db.ref(`payroll/employees/${toEmp.id}/order`).set(tmpOrder);
   _dragId = null;
 }
 function toggleCommuteType() {
