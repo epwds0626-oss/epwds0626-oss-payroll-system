@@ -63,7 +63,69 @@ function renderLaborReport(year, month) {
       </div>
     </div>
 
+    <div class="card">
+      <div class="card-title">👥 スタッフ名簿</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">住所・連絡先・保険加入状況一覧</div>
+      <p style="font-size:12.5px;margin-bottom:12px">全スタッフの連絡先・住所・社保・雇保・中退共の加入状況を一覧印刷できます。</p>
+      <button class="btn-primary" onclick="printStaffRoster()">🖨 スタッフ名簿印刷</button>
+    </div>
+
   </div>`;
+}
+
+// -------- スタッフ名簿 --------
+function printStaffRoster() {
+  const today = new Date().toLocaleDateString('ja-JP');
+  const html = `<html><head><meta charset="UTF-8"><title>スタッフ名簿</title>
+  <style>
+    body{font-family:'Noto Sans JP',sans-serif;font-size:11px;margin:20px}
+    h2{font-size:15px;text-align:center;margin-bottom:4px}
+    .sub{text-align:center;font-size:11px;color:#666;margin-bottom:14px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid #333;padding:4px 6px;text-align:left;font-size:10.5px}
+    th{background:#1a3a5c;color:#fff;text-align:center}
+    tr:nth-child(even){background:#f8f8f8}
+    .badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px}
+    .in{background:#dbeafe;color:#1e40af}
+    .out{background:#f3f4f6;color:#374151}
+    @media print{body{margin:10px}}
+  </style></head><body>
+  <h2>スタッフ名簿</h2>
+  <div class="sub">${OTD.company}　${OTD.address}　作成日：${today}</div>
+  <table>
+    <thead><tr>
+      <th>No</th><th>氏名</th><th>雇用区分</th><th>店舗</th>
+      <th>電話番号</th><th>緊急連絡先</th><th>住所</th>
+      <th>入社日</th><th>生年月日</th>
+      <th>支払</th><th>社保</th><th>雇保</th><th>中退共</th>
+    </tr></thead>
+    <tbody>
+    ${employees.filter(e=>e.status!=='inactive').map((e,i)=>`
+      <tr>
+        <td style="text-align:center">${i+1}</td>
+        <td><strong>${e.name}</strong>${e.kana?`<br><span style="color:#888;font-size:9px">${e.kana}</span>`:''}</td>
+        <td style="text-align:center">${e.type}</td>
+        <td style="text-align:center">${e.store||'—'}</td>
+        <td>${e.phone||'—'}</td>
+        <td style="font-size:9.5px">${e.emergencyPhone||'—'}</td>
+        <td style="font-size:9.5px">${e.address||'—'}</td>
+        <td style="text-align:center">${e.hireDate||'—'}</td>
+        <td style="text-align:center">${e.birthDate||'—'}</td>
+        <td style="text-align:center">${e.paymentMethod||'振込'}</td>
+        <td style="text-align:center"><span class="badge ${e.shakai==='加入'?'in':'out'}">${e.shakai||'未'}</span></td>
+        <td style="text-align:center"><span class="badge ${e.koyo==='加入'?'in':'out'}">${e.koyo||'未'}</span></td>
+        <td style="text-align:center"><span class="badge ${(e.chutaikyo||'未加入')==='加入'?'in':'out'}">${e.chutaikyo||'未'}</span>${e.chutaikyoAmount?`<br><span style="font-size:9px">¥${e.chutaikyoAmount.toLocaleString()}</span>`:''}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+  <div style="margin-top:16px;text-align:right;font-size:10px">
+    管理者確認：＿＿＿＿＿＿＿＿＿　印
+  </div>
+  </body></html>`;
+  const w = window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+  w.print();
 }
 
 // -------- 出勤簿 --------

@@ -29,10 +29,10 @@ function attachPageEvents(page) {
 }
 
 // -------- 従業員並び替え --------
-let _dragId = null;
+let _dragId   = null;
+let _dragOver = null;
 
 function moveEmp(id, dir) {
-  // 現在表示中リスト（在籍中 or 退職）
   const isActive = (window._empTab || 'active') === 'active';
   const list = isActive
     ? employees.filter(e => e.status !== 'inactive' && e.status !== 'leave')
@@ -42,38 +42,49 @@ function moveEmp(id, dir) {
   const swapIdx = idx + dir;
   if (swapIdx < 0 || swapIdx >= list.length) return;
 
-  // employees 配列内での実際のインデックスを取得して入れ替え
   const ai = employees.findIndex(e => e.id === list[idx].id);
   const bi = employees.findIndex(e => e.id === list[swapIdx].id);
   [employees[ai], employees[bi]] = [employees[bi], employees[ai]];
 
-  // Firebaseに保存
   const empObj = {};
   employees.forEach(e => { empObj[e.id] = e; });
   FB.employees().set(empObj);
 }
 
-// ドラッグ＆ドロップ
 function empDragStart(e, id) {
   _dragId = id;
-  e.currentTarget.style.opacity = '0.4';
+  setTimeout(() => { e.currentTarget.style.opacity = '0.4'; }, 0);
+  e.dataTransfer.effectAllowed = 'move';
 }
+
 function empDragOver(e) {
   e.preventDefault();
-  e.currentTarget.style.background = '#e8f0ff';
+  e.dataTransfer.dropEffect = 'move';
+  const tr = e.currentTarget;
+  if (_dragOver && _dragOver !== tr) {
+    _dragOver.style.borderTop = '';
+  }
+  _dragOver = tr;
+  tr.style.borderTop = '3px solid var(--accent)';
 }
+
+function empDragLeave(e) {
+  e.currentTarget.style.borderTop = '';
+}
+
 function empDragEnd(e) {
   e.currentTarget.style.opacity = '';
-  document.querySelectorAll('#empTbody tr').forEach(r => r.style.background = '');
+  if (_dragOver) { _dragOver.style.borderTop = ''; _dragOver = null; }
 }
+
 function empDrop(e, targetId) {
   e.preventDefault();
-  e.currentTarget.style.background = '';
-  if (_dragId === targetId) return;
+  if (_dragOver) { _dragOver.style.borderTop = ''; _dragOver = null; }
+  if (!_dragId || _dragId === targetId) { _dragId = null; return; }
 
   const fromIdx = employees.findIndex(emp => emp.id === _dragId);
   const toIdx   = employees.findIndex(emp => emp.id === targetId);
-  if (fromIdx < 0 || toIdx < 0) return;
+  if (fromIdx < 0 || toIdx < 0) { _dragId = null; return; }
 
   const moved = employees.splice(fromIdx, 1)[0];
   employees.splice(toIdx, 0, moved);

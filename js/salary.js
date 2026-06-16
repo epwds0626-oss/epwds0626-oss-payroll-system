@@ -183,6 +183,10 @@ function payslipHTML(emp, sal, year, month) {
     <div style="background:var(--primary);color:#fff;padding:10px 16px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:15px;font-weight:700">
       <span>差引振込額</span><span>¥${sal.netPay.toLocaleString()}</span>
     </div>
+    <div style="margin-top:8px;padding:8px 12px;background:#f8faff;border-radius:8px;font-size:12px;display:flex;gap:16px">
+      <span>支払方法：<strong>${emp.paymentMethod||'振込'}</strong></span>
+      ${emp.bankInfo?`<span>振込先：${emp.bankInfo}</span>`:''}
+    </div>
     <div style="margin-top:14px;background:#f8faff;padding:10px 14px;border-radius:8px;font-size:12px">
       <strong>勤怠情報</strong>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px">

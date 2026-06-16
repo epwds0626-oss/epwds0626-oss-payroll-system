@@ -282,7 +282,7 @@ function renderEmployees() {
             <th style="width:32px"></th>
             <th>No</th><th class="tl">氏名</th><th>雇用区分</th><th>店舗</th><th>部門</th>
             <th>給与形態</th><th>基本給/時給</th><th>交通費</th>
-            <th>社保</th><th>雇保</th><th>中退共</th><th>税区分</th><th>入社日</th>
+            <th>支払</th><th>社保</th><th>雇保</th><th>中退共</th><th>税区分</th><th>入社日</th>
             ${activeTab==='inactive'?'<th>退職日</th>':''}
             <th>操作</th>
           </tr>
@@ -294,6 +294,7 @@ function renderEmployees() {
             style="${emp.status==='inactive'?'opacity:0.7':''};cursor:grab"
             ondragstart="empDragStart(event,${emp.id})"
             ondragover="empDragOver(event)"
+            ondragleave="empDragLeave(event)"
             ondrop="empDrop(event,${emp.id})"
             ondragend="empDragEnd(event)">
             <td style="cursor:grab;color:#888;font-size:16px;padding:4px 8px">⠿</td>
@@ -309,9 +310,23 @@ function renderEmployees() {
             <td>${emp.payType}</td>
             <td>¥${(emp.payType==='月給'?emp.baseSalary:emp.hourlyWage).toLocaleString()}</td>
             <td>¥${emp.commute.toLocaleString()}</td>
+            <td><span class="badge ${(emp.paymentMethod||'振込')==='振込'?'badge-blue':'badge-yellow'}">${emp.paymentMethod||'振込'}</span></td>
             <td><span class="badge ${emp.shakai==='加入'?'badge-blue':'badge-gray'}">${emp.shakai}</span></td>
             <td><span class="badge ${emp.koyo==='加入'?'badge-blue':'badge-gray'}">${emp.koyo}</span></td>
-            <td><span class="badge ${(emp.chutaikyo||'未加入')==='加入'?'badge-green':'badge-gray'}">${emp.chutaikyo||'未加入'}</span></td>
+            <td><span class="badge ${(emp.chutaikyo||'未加入')==='加入'?'badge-green':'badge-gray'}">${emp.chutaikyo||'未加入'}${(()=>{
+              if ((emp.chutaikyo||'未加入')==='未加入' && emp.hireDate) {
+                const join = new Date(emp.hireDate);
+                join.setMonth(join.getMonth()+7);
+                const today = new Date();
+                if (join > today) {
+                  return `<br><span style="font-size:10px;color:#e67e22">${join.getMonth()+1}/${join.getDate()}予定</span>`;
+                }
+              }
+              if ((emp.chutaikyo||'未加入')==='加入' && emp.chutaikyoAmount) {
+                return `<br><span style="font-size:10px;color:#888">¥${emp.chutaikyoAmount.toLocaleString()}/月</span>`;
+              }
+              return '';
+            })()}</span></td>
             <td>${emp.tax}欄</td>
             <td>${emp.hireDate||'—'}</td>
             ${activeTab==='inactive'?`<td>${emp.leaveDate||'—'}</td>`:''}
@@ -505,6 +520,21 @@ function employeeForm(emp, isNew) {
     <div class="form-group"><label>入社日</label><input type="date" id="ef_hireDate" value="${emp.hireDate||''}"></div>
     <div class="form-group"><label>生年月日</label><input type="date" id="ef_birthDate" value="${emp.birthDate||''}"></div>
   </div>
+  <div class="form-row">
+    <div class="form-group"><label>支払方法</label>
+      <select id="ef_paymentMethod">
+        ${['振込','現金'].map(s=>`<option ${(emp.paymentMethod||'振込')===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group" id="ef_bankGroup">
+      <label>振込先銀行・口座（メモ）</label>
+      <input type="text" id="ef_bankInfo" value="${emp.bankInfo||''}" placeholder="〇〇銀行 普通 1234567">
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>電話番号</label><input type="text" id="ef_phone" value="${emp.phone||''}" placeholder="090-0000-0000"></div>
+    <div class="form-group"><label>緊急連絡先</label><input type="text" id="ef_emergencyPhone" value="${emp.emergencyPhone||''}" placeholder="続柄・氏名・電話番号"></div>
+  </div>
   <div class="modal-footer">
     <button class="btn-outline" onclick="closeModal()">キャンセル</button>
     <button class="btn-primary" onclick="saveEmployee(${emp.id},${isNew})">保存</button>
@@ -531,6 +561,11 @@ function saveEmployee(id, isNew) {
     chutaikyoAmount: parseInt(get('ef_chutaikyoAmount').value)||0,
     tax: get('ef_tax').value, juminzei: parseInt(get('ef_juminzei').value)||0,
     hireDate: get('ef_hireDate').value, birthDate: get('ef_birthDate').value,
+    address: get('ef_address').value||'',
+    phone: get('ef_phone').value||'',
+    emergencyPhone: get('ef_emergencyPhone').value||'',
+    paymentMethod: get('ef_paymentMethod').value||'振込',
+    bankInfo: get('ef_bankInfo').value||'',
     // ステータス・退職情報を引き継ぐ
     status:    existing.status    || 'active',
     leaveDate: existing.leaveDate || '',
