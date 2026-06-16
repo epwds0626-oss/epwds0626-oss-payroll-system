@@ -570,54 +570,63 @@ function importEmployeeCSV() {
   const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
   let imported = 0, added = 0, skipped = 0;
 
-  for (const line of lines) {
-    // ヘッダスキップ
-    if (line.startsWith('No') || line.startsWith('"No"')) continue;
+  // ヘッダ行を取得して列の並びを判定
+  const headerLine = lines[0];
+  const delim = headerLine.includes('\t') ? '\t' : ',';
+  const headers = headerLine.split(delim).map(h => h.trim().replace(/^"|"$/g,''));
 
-    // カンマ区切り（ダブルクォート対応）
-    const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-    if (cols.length < 6) { skipped++; continue; }
+  // 列インデックスをヘッダ名で動的に取得
+  const col = name => headers.indexOf(name);
 
-    const [
-      idRaw, name, kana, type, store, dept,
-      payType, baseSalaryRaw, hourlyWageRaw,
-      commuteType, commuteRaw, commutePerDayRaw,
-      positionAllowanceRaw, targetGrossRaw,
-      shakai, koyo, tax, dependentsRaw, juminzeiRaw,
-      hireDate, birthDate, status
-    ] = cols;
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    const cols = line.split(delim).map(c => c.trim().replace(/^"|"$/g,''));
+    if (cols.length < 3) { skipped++; continue; }
 
-    const id = parseInt(idRaw);
+    const id = parseInt(cols[col('No')] || cols[0]);
+    const name = cols[col('氏名')] || cols[1] || '';
     if (!id || !name) { skipped++; continue; }
 
+    // 各列を取得（存在しない列はデフォルト値）
+    const get = (colName, def='') => {
+      const idx = col(colName);
+      return idx >= 0 && cols[idx] !== undefined ? cols[idx] : def;
+    };
+
+    const existing = employees.find(e => e.id === id) || {};
+
     const empData = {
-      id, name, kana: kana||'', type: type||'パート',
-      store: store||'本店', dept: dept||'ホール',
-      payType: payType||'時給',
-      baseSalary: parseInt(baseSalaryRaw)||0,
-      hourlyWage: parseInt(hourlyWageRaw)||0,
-      commuteType: commuteType||'fixed',
-      commute: parseInt(commuteRaw)||0,
-      commutePerDay: parseInt(commutePerDayRaw)||0,
-      positionAllowance: parseInt(positionAllowanceRaw)||0,
-      targetGross: parseInt(targetGrossRaw)||0,
-      shakai: shakai||'未加入', koyo: koyo||'未加入',
-      tax: tax||'甲', dependents: parseInt(dependentsRaw)||0,
-      juminzei: parseInt(juminzeiRaw)||0,
-      hireDate: hireDate||'', birthDate: birthDate||'',
-      status: status||'active',
+      id,
+      name,
+      kana:              get('フリガナ', existing.kana||''),
+      type:              get('雇用区分', existing.type||'パート'),
+      store:             get('店舗', existing.store||'本店'),
+      dept:              get('部門', existing.dept||'ホール'),
+      payType:           get('給与形態', existing.payType||'時給'),
+      baseSalary:        parseInt(get('基本給', existing.baseSalary||0))||0,
+      hourlyWage:        parseInt(get('時給', existing.hourlyWage||0))||0,
+      commuteType:       get('交通費種別', existing.commuteType||'fixed'),
+      commute:           parseInt(get('交通費', existing.commute||0))||0,
+      commutePerDay:     parseInt(get('交通費日額', existing.commutePerDay||0))||0,
+      positionAllowance: parseInt(get('役職手当', existing.positionAllowance||0))||0,
+      targetGross:       parseInt(get('目標総支給額', existing.targetGross||0))||0,
+      shakai:            get('社保', existing.shakai||'未加入'),
+      koyo:              get('雇保', existing.koyo||'未加入'),
+      tax:               get('税区分', existing.tax||'甲'),
+      dependents:        parseInt(get('扶養人数', existing.dependents||0))||0,
+      juminzei:          parseInt(get('住民税', existing.juminzei||0))||0,
+      hireDate:          get('入社日', existing.hireDate||''),
+      birthDate:         get('生年月日', existing.birthDate||''),
+      status:            get('状態', existing.status||'active'),
+      leaveDate:         existing.leaveDate || '',
+      leaveNote:         existing.leaveNote || '',
     };
 
     const idx = employees.findIndex(e => e.id === id);
     if (idx >= 0) {
-      // 既存データを上書き（ステータス・退職情報は引き継ぐ）
-      empData.leaveDate = employees[idx].leaveDate || '';
-      empData.leaveNote = employees[idx].leaveNote || '';
       employees[idx] = empData;
       imported++;
     } else {
-      // 新規追加
-      empData.leaveDate = ''; empData.leaveNote = '';
       employees.push(empData);
       added++;
     }
@@ -628,10 +637,14 @@ function importEmployeeCSV() {
     return;
   }
 
-  saveLS('employees', employees);
-  hideEmpCSVImport();
-  renderPage('employees');
-  showToast(`更新${imported}件・追加${added}件・スキップ${skipped}件`);
+  // Firebaseに一括書き込み
+  const empObj = {};
+  employees.forEach(e => { empObj[e.id] = e; });
+  FB.employees().set(empObj, err => {
+    if (err) { showToast('保存エラー','error'); return; }
+    hideEmpCSVImport();
+    showToast(`更新${imported}件・追加${added}件・スキップ${skipped}件`);
+  });
 }
 
 function dlFile(name, content, type='text/plain') {
