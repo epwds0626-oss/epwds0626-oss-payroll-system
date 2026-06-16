@@ -143,20 +143,23 @@ function addUsed(empId) {
   const reason = document.getElementById('pl_reason').value;
   if (!date||!days) { showToast('日付と日数を入力してください','error'); return; }
   if (!paidLeave[empId]) paidLeave[empId] = { grants:[], used:[] };
-  paidLeave[empId].used.push({ date, days, reason });
-  saveLS('paidLeave', paidLeave);
-  showToast('取得記録を追加しました');
-  closeModal();
-  renderPage('paid_leave');
+  const used = [...(paidLeave[empId].used||[]), { date, days, reason }];
+  db.ref(`payroll/paidLeave/${empId}/used`).set(used, err => {
+    if (err) { showToast('保存エラー','error'); return; }
+    showToast('取得記録を追加しました');
+    closeModal();
+  });
 }
 
 function deleteUsed(empId, idx) {
   if (!confirm('この記録を削除しますか？')) return;
-  paidLeave[empId].used.splice(idx, 1);
-  saveLS('paidLeave', paidLeave);
-  showToast('削除しました');
-  closeModal();
-  renderPage('paid_leave');
+  const used = [...(paidLeave[empId]?.used||[])];
+  used.splice(idx, 1);
+  db.ref(`payroll/paidLeave/${empId}/used`).set(used, err => {
+    if (err) { showToast('保存エラー','error'); return; }
+    showToast('削除しました');
+    closeModal();
+  });
 }
 
 function openGrantModal(empId) {
@@ -193,14 +196,15 @@ function grantManual(empId) {
 }
 function doGrant(empId, date, days) {
   if (!paidLeave[empId]) paidLeave[empId] = { grants:[], used:[] };
-  if (paidLeave[empId].grants.find(g=>g.date===date)) {
+  if ((paidLeave[empId].grants||[]).find(g=>g.date===date)) {
     showToast('この付与日は既に登録されています','error'); return;
   }
-  paidLeave[empId].grants.push({ date, days });
-  saveLS('paidLeave', paidLeave);
-  showToast(`${days}日付与しました`);
-  closeModal();
-  renderPage('paid_leave');
+  const grants = [...(paidLeave[empId].grants||[]), { date, days }];
+  db.ref(`payroll/paidLeave/${empId}/grants`).set(grants, err => {
+    if (err) { showToast('保存エラー','error'); return; }
+    showToast(`${days}日付与しました`);
+    closeModal();
+  });
 }
 
 function grantPaidLeaveAll() {

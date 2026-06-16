@@ -145,11 +145,11 @@ function save36Settings(year) {
   if (limit36>45||specialLimit>=100||yearLimit>720) {
     showToast('法定上限を超えています','error'); return;
   }
-  article36[year] = { limit36, specialLimit, yearLimit };
-  saveLS('article36', article36);
-  closeModal();
-  renderPage('article36');
-  showToast('設定を保存しました');
+  db.ref(`payroll/article36/${year}`).set({ limit36, specialLimit, yearLimit }, err => {
+    if (err) { showToast('保存エラー','error'); return; }
+    closeModal();
+    showToast('設定を保存しました');
+  });
 }
 
 function export36CSV(year) {

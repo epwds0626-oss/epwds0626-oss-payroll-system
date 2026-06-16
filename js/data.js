@@ -190,16 +190,22 @@ function initFirebaseData() {
   FB.employees().on('value', snap => {
     const val = snap.val();
     if (val) {
-      // Firebase はオブジェクト形式で返るので配列に変換
       employees = Array.isArray(val) ? val.filter(Boolean) : Object.values(val);
+      // IDで昇順ソート
+      employees.sort((a, b) => (a.id||0) - (b.id||0));
     } else {
-      // 初回：デフォルトデータをFirebaseに書き込む
       const empObj = {};
       DEFAULT_EMPLOYEES.forEach(e => { empObj[e.id] = e; });
       FB.employees().set(empObj);
       employees = [...DEFAULT_EMPLOYEES];
     }
-    if (!_fbLoaded) onLoad(); else renderPage(currentPage);
+    if (!_fbLoaded) {
+      onLoad();
+    } else {
+      // 他のPCからの変更を即時反映
+      renderPage(currentPage);
+      showToast('データが更新されました ✓');
+    }
   });
 
   FB.attendance().on('value', snap => {

@@ -363,29 +363,23 @@ function setLeave(id) {
   const status    = document.getElementById('leave_status').value;
   const leaveDate = document.getElementById('leave_date').value;
   const leaveNote = document.getElementById('leave_note').value;
-  const idx = employees.findIndex(e=>e.id===id);
-  if (idx<0) return;
-  employees[idx].status    = status;
-  employees[idx].leaveDate = leaveDate;
-  employees[idx].leaveNote = leaveNote;
-  saveLS('employees', employees);
-  closeModal();
-  window._empTab = 'inactive';
-  renderPage('employees');
-  showToast(status==='inactive' ? '退職処理しました' : '休業処理しました');
+  const emp = employees.find(e=>e.id===id);
+  if (!emp) return;
+  db.ref(`payroll/employees/${id}`).update({ status, leaveDate, leaveNote }, err => {
+    if (err) { showToast('保存エラー','error'); return; }
+    closeModal();
+    window._empTab = 'inactive';
+    showToast(status==='inactive' ? '退職処理しました' : '休業処理しました');
+  });
 }
 
 function reactivateEmployee(id) {
   if (!confirm('在籍中に戻しますか？')) return;
-  const idx = employees.findIndex(e=>e.id===id);
-  if (idx<0) return;
-  employees[idx].status    = 'active';
-  employees[idx].leaveDate = '';
-  employees[idx].leaveNote = '';
-  saveLS('employees', employees);
-  window._empTab = 'active';
-  renderPage('employees');
-  showToast('在籍中に戻しました');
+  db.ref(`payroll/employees/${id}`).update({ status: 'active', leaveDate: '', leaveNote: '' }, err => {
+    if (err) { showToast('保存エラー','error'); return; }
+    window._empTab = 'active';
+    showToast('在籍中に戻しました');
+  });
 }
 
 function openAddEmployee() {
@@ -520,26 +514,24 @@ function saveEmployee(id, isNew) {
     leaveNote: existing.leaveNote || '',
   };
   if (!emp.name) { showToast('氏名を入力してください','error'); return; }
-  if (isNew) {
-    employees.push(emp);
-    if (emp.hireDate) paidLeave[id] = { grants: [], used: [] };
-  } else {
-    const idx = employees.findIndex(e=>e.id===id);
-    if (idx>=0) employees[idx] = emp;
-  }
-  saveLS('employees', employees);
-  closeModal();
-  renderPage('employees');
-  showToast(isNew?'追加しました':'更新しました');
+
+  // Firebaseに直接書き込む（on('value')コールバックで画面自動更新）
+  db.ref(`payroll/employees/${id}`).set(emp, err => {
+    if (err) { showToast('保存エラー','error'); return; }
+    if (isNew && emp.hireDate) {
+      db.ref(`payroll/paidLeave/${id}`).set({ grants: [], used: [] });
+    }
+    closeModal();
+    showToast(isNew ? '追加しました ✓' : '更新しました ✓');
+  });
 }
 
 function deleteEmployee(id) {
   const emp = employees.find(e=>e.id===id);
   if (!confirm(`【完全削除】${emp?.name} のデータをすべて削除します。\n勤怠・給与・有給データも失われます。\nよろしいですか？`)) return;
-  employees = employees.filter(e=>e.id!==id);
-  saveLS('employees', employees);
-  renderPage('employees');
-  showToast('完全削除しました');
+  db.ref(`payroll/employees/${id}`).remove(() => {
+    showToast('完全削除しました');
+  });
 }
 
 function showEmpCSVImport() {
