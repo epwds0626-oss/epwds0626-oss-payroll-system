@@ -229,33 +229,8 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ── スタッフ一覧 ───────────────────────────────────────────
-const STAFF = [
-  {id:1,  name:'青木 優介',          store:'本店'},
-  {id:2,  name:'原 孝志',            store:'本店'},
-  {id:3,  name:'小沼 太一',          store:'本店'},
-  {id:4,  name:'石井 眞弓',          store:'本店'},
-  {id:5,  name:'半谷 和津江',        store:'本店'},
-  {id:6,  name:'武田 あさ子',        store:'本店'},
-  {id:7,  name:'仲田 友子',          store:'マルコ'},
-  {id:8,  name:'石田 良子',          store:'本店'},
-  {id:9,  name:'梅原 みゆき',        store:'本店'},
-  {id:10, name:'勘田 尚人',          store:'本店'},
-  {id:11, name:'TRAN THI THAO',      store:'本店'},
-  {id:12, name:'箕輪 栞',            store:'本店'},
-  {id:13, name:'寺山 由紀子',        store:'マルコ'},
-  {id:14, name:'ダラガン ジャスミン', store:'マルコ'},
-  {id:15, name:'エデュラン アイコ',   store:'マルコ'},
-  {id:16, name:'SAPKOTA SUSHMA',      store:'マルコ'},
-  {id:17, name:'小島 まゆこ',        store:'マルコ'},
-  {id:18, name:'大原 瑠奈',          store:'マルコ'},
-  {id:19, name:'檜山 明子',          store:'マルコ'},
-  {id:20, name:'直井',               store:'マルコ'},
-  {id:21, name:'黒羽',               store:'本店'},
-  {id:22, name:'圷 竜司',            store:'マルコ'},
-  {id:23, name:'清水 佳澄',          store:'本店'},
-  {id:24, name:'清水 裕久',          store:'本店'},
-];
+// ── スタッフ一覧（Firebaseから動的取得） ─────────────────
+let STAFF = [];
 
 // 休憩パターン
 const BREAK_LABELS = {
@@ -509,8 +484,19 @@ function showToast(msg, isErr=false) {
 }
 
 // ── 初期化 ───────────────────────────────────────────────
-renderNameGrid();
-subscribeToday();
+// スタッフマスタを payroll/employees から読み込み
+db.ref('payroll/employees').on('value', snap => {
+  const val = snap.val();
+  if (val) {
+    const raw = Array.isArray(val) ? val.filter(Boolean) : Object.values(val);
+    STAFF = raw
+      .filter(e => e && e.id && e.name && e.status !== 'inactive' && e.status !== 'leave')
+      .sort((a, b) => (a.order ?? a.id * 10) - (b.order ?? b.id * 10))
+      .map(e => ({ id: e.id, name: e.name, store: e.store || '' }));
+  }
+  renderNameGrid();
+  subscribeToday();
+});
 </script>
 </body>
 </html>
