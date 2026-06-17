@@ -1,3 +1,13 @@
+// hm: 時間数(小数)を "Xh Ym" 形式に変換
+function hm(h) {
+  if (h === null || h === undefined || h === '' || isNaN(h)) return '—';
+  const total = Math.round(Number(h) * 60);
+  if (total === 0) return '0h';
+  const hh = Math.floor(total / 60);
+  const mm = total % 60;
+  return mm ? `${hh}h${mm}m` : `${hh}h`;
+}
+
 // ============================================================
 // attendance.js  ―  勤怠入力（日次打刻・CSV取込）
 // ============================================================
@@ -143,13 +153,13 @@ function renderAttendanceTable(year, month) {
   html += `</tbody><tfoot>
     <tr class="total-row">
       <td colspan="2">期間計</td>
-      <td>${result.totalActual}h</td>
-      <td><strong>${result.monthDailyOT}h</strong></td>
-      <td>${result.monthMidnight}h</td>
-      <td>${result.monthMidnightOT}h</td>
-      <td>${result.monthHolidayLegal}h</td>
-      <td>${result.monthHolidayNonLegal}h</td>
-      <td colspan="3">週40h超残業：${result.monthWeekOT}h　残業計：<strong>${result.monthOT}h</strong></td>
+      <td>${hm(result.totalActual)}</td>
+      <td><strong>${hm(result.monthDailyOT)}</strong></td>
+      <td>${hm(result.monthMidnight)}</td>
+      <td>${hm(result.monthMidnightOT)}</td>
+      <td>${hm(result.monthHolidayLegal)}</td>
+      <td>${hm(result.monthHolidayNonLegal)}</td>
+      <td colspan="3">週40h超残業：${hm(result.monthWeekOT)}　残業計：<strong>${hm(result.monthOT)}</strong></td>
     </tr>
   </tfoot></table></div>`;
 

@@ -1,3 +1,13 @@
+// hm: 時間数(小数)を "Xh Ym" 形式に変換
+function hm(h) {
+  if (h === null || h === undefined || h === '' || isNaN(h)) return '—';
+  const total = Math.round(Number(h) * 60);
+  if (total === 0) return '0h';
+  const hh = Math.floor(total / 60);
+  const mm = total % 60;
+  return mm ? `${hh}h${mm}m` : `${hh}h`;
+}
+
 // ============================================================
 // weekly.js  ―  週次集計・週マタギ残業詳細
 // ============================================================
@@ -44,10 +54,10 @@ function renderWeekly(year, month) {
           <td class="tl">${emp.name}</td>
           <td>${emp.type}</td>
           <td>${emp.store||'—'}</td>
-          <td>${result.totalActual}h</td>
-          <td><strong>${result.monthOT}h</strong></td>
-          <td>${result.monthMidnight}h</td>
-          <td>${result.monthHoliday}h</td>
+          <td>${hm(result.totalActual)}</td>
+          <td><strong>${hm(result.monthOT)}</strong></td>
+          <td>${hm(result.monthMidnight)}</td>
+          <td>${hm(result.monthHoliday)}</td>
           <td>${getMonthSummary(emp.id,year,month).workDays}日</td>
           <td>${badge}</td>
         </tr>`;
@@ -216,10 +226,10 @@ function renderMonthly(year, month) {
         <td>${s.workDays}</td>
         <td>${s.paidDays}</td>
         <td>${s.absentDays}</td>
-        <td>${s.totalActual}</td>
-        <td><strong>${s.monthOT}</strong></td>
-        <td>${s.monthMidnight}</td>
-        <td>${s.monthHoliday}</td>
+        <td>${hm(s.totalActual)}</td>
+        <td><strong>${hm(s.monthOT)}</strong></td>
+        <td>${hm(s.monthMidnight)}</td>
+        <td>${hm(s.monthHoliday)}</td>
         <td>${s.lateDays}</td>
       </tr>`).join('')}
       </tbody>
@@ -228,10 +238,10 @@ function renderMonthly(year, month) {
         <td>${totals.workDays}</td>
         <td>${totals.paidDays}</td>
         <td>${totals.absentDays}</td>
-        <td>${Math.round(totals.totalActual*10)/10}</td>
-        <td><strong>${Math.round(totals.monthOT*10)/10}</strong></td>
-        <td>${Math.round(totals.monthMidnight*10)/10}</td>
-        <td>${Math.round(totals.monthHoliday*10)/10}</td>
+        <td>${hm(totals.totalActual)}</td>
+        <td><strong>${hm(totals.monthOT)}</strong></td>
+        <td>${hm(totals.monthMidnight)}</td>
+        <td>${hm(totals.monthHoliday)}</td>
         <td>—</td>
       </tr></tfoot>
     </table></div>
