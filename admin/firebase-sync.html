@@ -230,32 +230,7 @@ function doLogin() {
 }
 
 // -------- 定数 --------
-const STAFF_LIST = [
-  { id:1,  name:'青木 優介',   store:'本店' },
-  { id:2,  name:'原 孝志',     store:'本店' },
-  { id:3,  name:'小沼 太一',   store:'本店' },
-  { id:4,  name:'石井 眞弓',   store:'本店' },
-  { id:5,  name:'半谷 和津江', store:'本店' },
-  { id:6,  name:'武田 あさ子', store:'本店' },
-  { id:7,  name:'仲田 友子',   store:'マルコ' },
-  { id:8,  name:'石田 良子',   store:'本店' },
-  { id:9,  name:'梅原 みゆき', store:'本店' },
-  { id:10, name:'勘田 尚人',   store:'本店' },
-  { id:11, name:'TRAN THI THAO', store:'本店' },
-  { id:12, name:'箕輪 栞',     store:'本店' },
-  { id:13, name:'寺山 由紀子', store:'マルコ' },
-  { id:14, name:'ダラガン ジャスミン', store:'マルコ' },
-  { id:15, name:'エデュラン アイコ',   store:'マルコ' },
-  { id:16, name:'SAPKOTA SUSHMA',      store:'マルコ' },
-  { id:17, name:'小島 まゆこ', store:'マルコ' },
-  { id:18, name:'大原 瑠奈',   store:'マルコ' },
-  { id:19, name:'檜山 明子',   store:'マルコ' },
-  { id:20, name:'直井',        store:'マルコ' },
-  { id:21, name:'黒羽',        store:'本店' },
-  { id:22, name:'圷 竜司',    store:'マルコ' },
-  { id:23, name:'清水 佳澄',  store:'本店' },
-  { id:24, name:'清水 裕久',  store:'本店' },
-];
+let STAFF_LIST = [];
 
 let monthlyRawData = {};
 const importLogs = [];
@@ -264,7 +239,18 @@ const importLogs = [];
 function initApp() {
   initSelectors();
   subscribeConnection();
-  subscribeTodayRealtime();
+  // スタッフマスタを payroll/employees から読み込み
+  db.ref('payroll/employees').on('value', snap => {
+    const val = snap.val();
+    if (val) {
+      const raw = Array.isArray(val) ? val.filter(Boolean) : Object.values(val);
+      STAFF_LIST = raw
+        .filter(e => e && e.id && e.name && e.status !== 'inactive' && e.status !== 'leave')
+        .sort((a, b) => (a.order ?? a.id * 10) - (b.order ?? b.id * 10))
+        .map(e => ({ id: e.id, name: e.name, store: e.store || '' }));
+    }
+    subscribeTodayRealtime();
+  });
 }
 
 function initSelectors() {
@@ -402,70 +388,68 @@ function importToPayroll() {
   const y = parseInt(document.getElementById('selYear').value);
   const m = parseInt(document.getElementById('selMonth').value);
 
-  // localStorage の attendance に書き込む
-  // 打刻から実働時間を計算して格納
+  // Firebase payroll/attendance に書き込む
   let imported = 0, skipped = 0;
+  const updates = {};
 
-  try {
-    const storageKey = `otd_attendance`;
-    const existing   = JSON.parse(localStorage.getItem(storageKey) || '{}');
+  for (const s of STAFF_LIST) {
+    const empRec = monthlyRawData[s.id] || {};
+    for (const [dateStr, rec] of Object.entries(empRec)) {
+      if (!rec.in) { skipped++; continue; }
 
-    for (const s of STAFF_LIST) {
-      const empRec = monthlyRawData[s.id] || {};
-      for (const [dateStr, rec] of Object.entries(empRec)) {
-        if (!rec.in) { skipped++; continue; }
+      const dur = rec.out ? calcDurationNum(rec.in, rec.out) : null;
+      if (!dur) { skipped++; continue; }
 
-        const dur = rec.out ? calcDurationNum(rec.in, rec.out) : null;
-        if (!dur) { skipped++; continue; }
+      // 休憩時間を引く
+      const breaks    = rec.breaks || [];
+      const breakMins = breaks.filter(b=>b.end&&b.minutes).reduce((s,b)=>s+b.minutes,0);
+      const netDur    = Math.max(0, dur - breakMins/60);
 
-        // 休憩時間を引く
-        const breaks    = rec.breaks || [];
-        const breakMins = breaks.filter(b=>b.end&&b.minutes).reduce((s,b)=>s+b.minutes,0);
-        const netDur    = Math.max(0, dur - breakMins/60);
+      const [dy, dm] = dateStr.split('-').map(Number);
+      const ym = `${dy}-${String(dm).padStart(2,'0')}`;
 
-        const [dy, dm] = dateStr.split('-').map(Number);
-        const ym = `${dy}-${String(dm).padStart(2,'0')}`;
-
-        if (!existing[ym]) existing[ym] = {};
-        if (!existing[ym][s.id]) existing[ym][s.id] = {};
-
-        // 深夜時間の概算（退勤が22時以降）
-        let midnight = 0;
-        if (rec.out) {
-          const outH = timeToHour(rec.out);
-          if (outH >= 22) midnight = Math.round((outH - 22) * 10) / 10;
-          else if (outH < 5) midnight = Math.round((outH + 2) * 10) / 10;
-        }
-
-        // 日8h超残業の概算
-        const dailyOT = Math.max(0, Math.round((netDur - 8) * 10) / 10);
-
-        existing[ym][s.id][dateStr] = {
-          actual:     Math.round(netDur * 10) / 10,
-          dailyOT:    dailyOT,
-          midnight:   Math.round(midnight * 10) / 10,
-          midnightOT: Math.min(midnight, dailyOT),
-          punchIn:    rec.in,
-          punchOut:   rec.out || '',
-          breakMins:  breakMins,
-          breakCount: breaks.filter(b=>b.end).length,
-          breaks:     breaks, // 休憩詳細も保存
-          source:     'timecard',
-        };
-        imported++;
+      // 深夜時間の概算（退勤が22時以降）
+      let midnight = 0;
+      if (rec.out) {
+        const outH = timeToHour(rec.out);
+        if (outH >= 22) midnight = Math.round((outH - 22) * 10) / 10;
+        else if (outH < 5) midnight = Math.round((outH + 2) * 10) / 10;
       }
+
+      // 日8h超残業の概算
+      const dailyOT = Math.max(0, Math.round((netDur - 8) * 10) / 10);
+
+      updates[`${ym}/${s.id}/${dateStr}`] = {
+        actual:     Math.round(netDur * 10) / 10,
+        dailyOT:    dailyOT,
+        midnight:   Math.round(midnight * 10) / 10,
+        midnightOT: Math.min(midnight, dailyOT),
+        punchIn:    rec.in,
+        punchOut:   rec.out || '',
+        breakMins:  breakMins,
+        breakCount: breaks.filter(b=>b.end).length,
+        breaks:     breaks,
+        source:     'timecard',
+      };
+      imported++;
     }
-
-    localStorage.setItem(storageKey, JSON.stringify(existing));
-
-    const log = { time: new Date().toLocaleString('ja-JP'), year: y, month: m, imported, skipped };
-    importLogs.unshift(log);
-    renderImportLog();
-
-    alert(`✅ 取込完了\n\n${y}年${m}月分\n取込：${imported}件\nスキップ（退勤未打刻等）：${skipped}件\n\n給与管理システムの「勤怠入力」で確認・修正できます。`);
-  } catch(e) {
-    alert('取込エラー：' + e.message);
   }
+
+  if (!imported) {
+    alert('取込できるデータがありませんでした。\n退勤未打刻のデータはスキップされます。');
+    return;
+  }
+
+  db.ref('payroll/attendance').update(updates)
+    .then(() => {
+      const log = { time: new Date().toLocaleString('ja-JP'), year: y, month: m, imported, skipped };
+      importLogs.unshift(log);
+      renderImportLog();
+      alert(`✅ 取込完了\n\n${y}年${m}月分\n取込：${imported}件\nスキップ（退勤未打刻等）：${skipped}件\n\n給与管理システムの「勤怠入力」で確認・修正できます。`);
+    })
+    .catch(e => {
+      alert('取込エラー：' + e.message);
+    });
 }
 
 function renderImportLog() {
