@@ -68,9 +68,11 @@ const TAX_TABLE_OTU_RATE = 0.05; // 簡易（実際は別表）
 // 健康保険（介護保険第2号被保険者以外）: 10.06% → 本人5.03%
 // 健康保険（介護保険第2号被保険者・40歳〜64歳）: 11.86% → 本人5.93%
 // 厚生年金: 18.30% → 本人9.15%
-const KENPO_RATE       = 0.0503; // 健保（介護なし）
-const KENPO_KAIGO_RATE = 0.0593; // 健保（介護あり・40〜64歳）
+// 2026年度 協会けんぽ茨城支部
+const KENPO_RATE       = 0.0503; // 健保（介護なし）※茨城支部2026年度確認要
+const KENPO_KAIGO_RATE = 0.0593; // 健保（介護あり・40〜64歳）※茨城支部2026年度確認要
 const KOSEI_RATE       = 0.0915; // 厚生年金
+const SHIENKIN_RATE    = 0.00115; // 子ども・子育て支援金（本人負担0.115%）2026年4月分〜
 
 // 年齢から介護保険対象かどうかを判定（40歳以上65歳未満）
 function isKaigoTarget(birthDateStr) {
@@ -83,13 +85,18 @@ function isKaigoTarget(birthDateStr) {
 }
 
 // 社会保険料計算（標準報酬月額ベース）
-function calcShakai(grossForShakai, birthDateStr = '') {
-  // 標準報酬月額（1000円単位に丸め）
-  const hyojun = Math.round(grossForShakai / 1000) * 1000;
+// hyojunFixed: 従業員マスタの固定標準報酬月額（設定済みの場合はこちらを優先）
+function calcShakai(grossForShakai, birthDateStr = '', hyojunFixed = 0) {
+  // 固定値があればそれを使う・なければ総支給から算出
+  const hyojun = hyojunFixed > 0
+    ? hyojunFixed
+    : Math.round(grossForShakai / 1000) * 1000;
   const kaigo  = isKaigoTarget(birthDateStr);
   const kenpo  = Math.round(hyojun * (kaigo ? KENPO_KAIGO_RATE : KENPO_RATE));
   const kosei  = Math.round(hyojun * KOSEI_RATE);
-  return { kenpo, kosei, kaigo };
+  // 子ども・子育て支援金（2026年4月分〜・社保加入者のみ・標準報酬月額ベース）
+  const shienkin = Math.round(hyojun * SHIENKIN_RATE);
+  return { kenpo, kosei, kaigo, shienkin, hyojun };
 }
 
 // 雇用保険料率（2024年度）: 一般事業 本人負担 6/1000
@@ -428,21 +435,21 @@ function calcSalary(emp, year, month) {
   // ── 役員：固定総支給のみ ──────────────────────────
   if (emp.payType === '役員報酬') {
     const grossTotal = emp.targetGross || 0;
-    let kenpo = 0, kosei = 0;
+    let kenpo = 0, kosei = 0, shienkin = 0;
     if (emp.shakai === '加入') {
-      const s = calcShakai(grossTotal, emp.birthDate);
-      kenpo = s.kenpo; kosei = s.kosei;
+      const s = calcShakai(grossTotal, emp.birthDate, emp.hyojunHoshu || 0);
+      kenpo = s.kenpo; kosei = s.kosei; shienkin = s.shienkin;
     }
     const incomeTax      = calcIncomeTax(grossTotal - kenpo - kosei, emp.dependents, emp.tax);
     const juminzei       = emp.juminzei || 0;
-    const totalDeduction = kenpo + kosei + incomeTax + juminzei;
+    const totalDeduction = kenpo + kosei + shienkin + incomeTax + juminzei;
     const netPay         = Math.round(grossTotal - totalDeduction);
     return {
       basePay: grossTotal, skillPay: 0, skillPayNote: '役員報酬（固定）',
       positionAllowancePay: 0, otPay: 0, midnightPay: 0,
       midnightOnlyPay: 0, midnightOTPay: 0,
       holidayLegalPay: 0, holidayNonLegalPay: 0, holidayPay: 0,
-      commute: 0, commuteNote: '', grossTotal, kenpo, kosei, koyoHoken: 0,
+      commute: 0, commuteNote: '', grossTotal, kenpo, kosei, shienkin, koyoHoken: 0,
       incomeTax, juminzei, totalDeduction, netPay,
       kaigo: isKaigoTarget(emp.birthDate),
       monthOT:0, monthDailyOT:0, monthWeekOT:0,
@@ -512,10 +519,10 @@ function calcSalary(emp, year, month) {
   const grossTotal = Math.round(basePay + skillPay + positionAllowancePay + otPay + midnightPay + holidayLegalPay + actualCommute);
 
   // 社会保険
-  let kenpo = 0, kosei = 0;
+  let kenpo = 0, kosei = 0, shienkin = 0;
   if (emp.shakai === '加入') {
-    const s = calcShakai(grossTotal - actualCommute, emp.birthDate);
-    kenpo = s.kenpo; kosei = s.kosei;
+    const s = calcShakai(grossTotal - actualCommute, emp.birthDate, emp.hyojunHoshu || 0);
+    kenpo = s.kenpo; kosei = s.kosei; shienkin = s.shienkin;
   }
 
   // 雇用保険
@@ -528,7 +535,7 @@ function calcSalary(emp, year, month) {
 
   const juminzei       = emp.juminzei || 0;
   const chutaikyoAmount = (emp.chutaikyo === '加入') ? (emp.chutaikyoAmount || 0) : 0;
-  const totalDeduction = kenpo + kosei + koyoHoken + incomeTax + juminzei + chutaikyoAmount;
+  const totalDeduction = kenpo + kosei + shienkin + koyoHoken + incomeTax + juminzei + chutaikyoAmount;
   const netPay         = Math.round(grossTotal - totalDeduction);
 
   return {
@@ -545,7 +552,7 @@ function calcSalary(emp, year, month) {
     commute:    actualCommute,
     commuteNote: emp.commuteType === 'daily' ? `${(emp.commutePerDay||0).toLocaleString()}円×${workDays}日` : '月額固定',
     kaigo: isKaigoTarget(emp.birthDate),
-    grossTotal, kenpo, kosei, koyoHoken, incomeTax, juminzei, chutaikyoAmount,
+    grossTotal, kenpo, kosei, shienkin, koyoHoken, incomeTax, juminzei, chutaikyoAmount,
     totalDeduction:      Math.round(totalDeduction),
     netPay,
     monthOT, monthDailyOT, monthWeekOT,

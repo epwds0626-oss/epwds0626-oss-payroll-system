@@ -294,18 +294,20 @@ function renderEmployees() {
           ${showList.map((emp, idx)=>{
             // 月額の概算控除を計算（基本給ベース）
             const baseForCalc = emp.payType==='月給' ? emp.baseSalary : (emp.hourlyWage * 173);
-            const sh = calcShakai(baseForCalc - (emp.commute||0), emp.birthDate||'');
+            const sh = calcShakai(baseForCalc - (emp.commute||0), emp.birthDate||'', emp.hyojunHoshu||0);
             const kenpo  = emp.shakai==='加入' ? sh.kenpo : 0;
             const kosei  = emp.shakai==='加入' ? sh.kosei : 0;
+            const shienkin = emp.shakai==='加入' ? sh.shienkin : 0;
             const koyo   = emp.koyo==='加入'   ? Math.round(baseForCalc * KOYO_RATE) : 0;
             const chutai = (emp.chutaikyo==='加入') ? (emp.chutaikyoAmount||0) : 0;
             const jumin  = emp.juminzei||0;
             const income = calcIncomeTax(baseForCalc - (emp.commute||0) - kenpo - kosei - koyo, emp.dependents||0, emp.tax||'甲');
-            const total  = kenpo + kosei + koyo + chutai + jumin + income;
+            const total  = kenpo + kosei + shienkin + koyo + chutai + jumin + income;
+            const hyojunLabel = emp.hyojunHoshu > 0 ? `（標準報酬 ¥${emp.hyojunHoshu.toLocaleString()}）` : '';
 
             const insuranceHtml = `
               <div style="font-size:11px;line-height:1.8">
-                ${emp.shakai==='加入'?`<span style="color:#1e40af">健保 ¥${kenpo.toLocaleString()}</span> / <span style="color:#1e40af">厚年 ¥${kosei.toLocaleString()}</span><br>`:'<span style="color:#999">社保 未加入</span><br>'}
+                ${emp.shakai==='加入'?`<span style="color:#1e40af">健保 ¥${kenpo.toLocaleString()}</span> / <span style="color:#1e40af">厚年 ¥${kosei.toLocaleString()}</span> / <span style="color:#0369a1">支援金 ¥${shienkin.toLocaleString()}</span>${hyojunLabel}<br>`:'<span style="color:#999">社保 未加入</span><br>'}
                 ${emp.koyo==='加入'?`<span style="color:#166534">雇保 ¥${koyo.toLocaleString()}</span>`:'<span style="color:#999">雇保 未加入</span>'}
                 ${chutai?` / <span style="color:#166534">中退共 ¥${chutai.toLocaleString()}</span>`:''}
                 <br><span style="color:#7c3aed">所得税 ¥${income.toLocaleString()}</span>
@@ -525,6 +527,7 @@ function employeeForm(emp, isNew) {
       </select>
     </div>
     <div class="form-group"><label>住民税（月額）</label><input type="number" id="ef_juminzei" value="${emp.juminzei||0}"></div>
+    <div class="form-group"><label>標準報酬月額（固定）</label><input type="number" id="ef_hyojunHoshu" value="${emp.hyojunHoshu||0}" placeholder="0=自動計算"></div>
   </div>
   <div class="form-row">
     <div class="form-group"><label>入社日</label><input type="date" id="ef_hireDate" value="${emp.hireDate||''}"></div>
@@ -570,6 +573,7 @@ function saveEmployee(id, isNew) {
     chutaikyo: get('ef_chutaikyo').value,
     chutaikyoAmount: parseInt(get('ef_chutaikyoAmount').value)||0,
     tax: get('ef_tax').value, juminzei: parseInt(get('ef_juminzei').value)||0,
+    hyojunHoshu: parseInt(get('ef_hyojunHoshu').value)||0,
     hireDate: get('ef_hireDate').value, birthDate: get('ef_birthDate').value,
     address: get('ef_address').value||'',
     phone: get('ef_phone').value||'',
@@ -615,7 +619,7 @@ function exportEmployeeCSV() {
     'No','氏名','フリガナ','雇用区分','店舗','部門',
     '給与形態','基本給','時給','交通費種別','交通費月額','交通費日額',
     '役職手当','目標総支給額',
-    '社保','雇保','税区分','扶養人数','住民税',
+    '社保','雇保','税区分','扶養人数','住民税','標準報酬月額',
     '入社日','生年月日','状態'
   ];
   const rows = employees.map(e => [
@@ -623,7 +627,7 @@ function exportEmployeeCSV() {
     e.payType, e.baseSalary, e.hourlyWage,
     e.commuteType||'fixed', e.commute||0, e.commutePerDay||0,
     e.positionAllowance||0, e.targetGross||0,
-    e.shakai, e.koyo, e.tax, e.dependents||0, e.juminzei||0,
+    e.shakai, e.koyo, e.tax, e.dependents||0, e.juminzei||0, e.hyojunHoshu||0,
     e.hireDate||'', e.birthDate||'', e.status||'active'
   ]);
   const csv = [header, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
@@ -683,6 +687,7 @@ function importEmployeeCSV() {
       tax:               get('税区分', existing.tax||'甲'),
       dependents:        parseInt(get('扶養人数', existing.dependents||0))||0,
       juminzei:          parseInt(get('住民税', existing.juminzei||0))||0,
+      hyojunHoshu:       parseInt(get('標準報酬月額', existing.hyojunHoshu||0))||0,
       hireDate:          get('入社日', existing.hireDate||''),
       birthDate:         get('生年月日', existing.birthDate||''),
       status:            get('状態', existing.status||'active'),

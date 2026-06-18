@@ -19,7 +19,7 @@ function renderSalary(year, month) {
     acc.deduct   += sal.totalDeduction;
     acc.net      += sal.netPay;
     return acc;
-  }, { gross:0,base:0,otPay:0,midnight:0,holiday:0,commute:0,kenpo:0,kosei:0,koyo:0,income:0,jumin:0,deduct:0,net:0 });
+  }, { gross:0,base:0,otPay:0,midnight:0,holiday:0,commute:0,kenpo:0,kosei:0,shienkin:0,koyo:0,income:0,jumin:0,deduct:0,net:0 });
 
   return `
   <div class="section-header">
@@ -57,7 +57,7 @@ function renderSalary(year, month) {
           <th>基本給<br>/時給計</th><th>残業<br>(〜60h)</th><th>残業<br>(60h超)</th>
           <th>深夜</th><th>法定休日<br>35%</th><th>法定外休日<br>(週OT分)</th><th>交通費</th>
           <th>健保</th><th>厚年</th><th>雇保</th>
-          <th>所得税</th><th>住民税</th><th>欠勤控除</th>
+          <th>子育支援金</th><th>所得税</th><th>住民税</th><th>欠勤控除</th>
         </tr>
       </thead>
       <tbody>
@@ -75,6 +75,7 @@ function renderSalary(year, month) {
         <td>¥${sal.commute.toLocaleString()}</td>
         <td>${sal.kenpo>0?`¥${sal.kenpo.toLocaleString()}`:'—'}</td>
         <td>${sal.kosei>0?`¥${sal.kosei.toLocaleString()}`:'—'}</td>
+        <td>${sal.shienkin>0?`¥${sal.shienkin.toLocaleString()}`:'—'}</td>
         <td>${sal.koyoHoken>0?`¥${sal.koyoHoken.toLocaleString()}`:'—'}</td>
         <td>${sal.incomeTax>0?`¥${sal.incomeTax.toLocaleString()}`:'—'}</td>
         <td>${sal.juminzei>0?`¥${sal.juminzei.toLocaleString()}`:'—'}</td>
@@ -92,6 +93,7 @@ function renderSalary(year, month) {
         <td>¥${totals.commute.toLocaleString()}</td>
         <td>¥${totals.kenpo.toLocaleString()}</td>
         <td>¥${totals.kosei.toLocaleString()}</td>
+        <td>¥${(totals.shienkin||0).toLocaleString()}</td>
         <td>¥${totals.koyo.toLocaleString()}</td>
         <td>¥${totals.income.toLocaleString()}</td>
         <td>¥${totals.jumin.toLocaleString()}</td>
@@ -103,10 +105,10 @@ function renderSalary(year, month) {
 }
 
 function exportSalaryCSV(year, month) {
-  const header = ['氏名','雇用区分','基本給/時給計','残業手当','深夜手当','休日手当','交通費','支給合計','健保','厚年','雇保','所得税','住民税','控除合計','振込額'];
+  const header = ['氏名','雇用区分','基本給/時給計','残業手当','深夜手当','休日手当','交通費','支給合計','健保','厚年','子育支援金','雇保','所得税','住民税','控除合計','振込額'];
   const rows = activeEmployees().map(emp => {
     const s = calcSalary(emp, year, month);
-    return [emp.name, emp.type, s.basePay, s.otPay, s.midnightPay, s.holidayPay, s.commute, s.grossTotal, s.kenpo, s.kosei, s.koyoHoken, s.incomeTax, s.juminzei, s.totalDeduction, s.netPay];
+    return [emp.name, emp.type, s.basePay, s.otPay, s.midnightPay, s.holidayPay, s.commute, s.grossTotal, s.kenpo, s.kosei, s.shienkin||0, s.koyoHoken, s.incomeTax, s.juminzei, s.totalDeduction, s.netPay];
   });
   const csv = [header,...rows].map(r=>r.join(',')).join('\n');
   dlFile(`給与計算_${year}年${month}月.csv`, csv, 'text/csv');
@@ -171,6 +173,7 @@ function payslipHTML(emp, sal, year, month) {
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">控除項目</div>
         ${payRow(`健康保険料（${sal.kaigo?'介護込11.86%':'10.06%'}・茨城支部）`, sal.kenpo)}
         ${payRow('厚生年金保険料（18.30%）', sal.kosei)}
+        ${sal.shienkin>0?payRow('子ども・子育て支援金（0.23%）', sal.shienkin):''}
         ${payRow('雇用保険料（6‰）', sal.koyoHoken)}
         ${payRow('所得税', sal.incomeTax)}
         ${payRow('住民税', sal.juminzei)}
