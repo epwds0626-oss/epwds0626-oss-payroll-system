@@ -218,7 +218,7 @@ function adjCell(empId, year, month, field, value) {
   const disp = value > 0 ? `¥${value.toLocaleString()}` : '—';
   const style = isAdj ? 'color:#d97706;font-weight:700;cursor:pointer' : 'cursor:pointer';
   return `<td style="${style}" title="クリックして編集"
-    onclick="openAdjInput(${empId},${year},${month},'${field}',${value},this)">${disp}</td>`;
+    onclick="openAdjInput(${empId},${year},${month},'${field}',${value})">${disp}</td>`;
 }
 
 // 編集可能行（給与明細用）
@@ -229,39 +229,59 @@ function adjRow(empId, year, month, field, label, value) {
   const adjBadge = isAdj ? ' <span style="font-size:10px;background:#fef3c7;color:#d97706;border-radius:3px;padding:0 3px">調整</span>' : '';
   const style = isAdj ? 'color:#d97706;font-weight:700' : '';
   return `<div style="display:flex;justify-content:space-between;padding:3px 0;cursor:pointer" title="クリックして編集"
-    onclick="openAdjInput(${empId},${year},${month},'${field}',${value},this)">
+    onclick="openAdjInput(${empId},${year},${month},'${field}',${value})">
     <span>${label}${adjBadge}</span><span style="${style}">${disp}</span></div>`;
 }
 
-// インライン入力を開く
-function openAdjInput(empId, year, month, field, currentVal, el) {
-  // 既存の入力欄があれば閉じる
-  document.querySelectorAll('.adj-input-wrap').forEach(e => e.remove());
+// モーダルで編集
+function openAdjInput(empId, year, month, field, currentVal) {
+  // 既存モーダルを削除
+  const existing = document.getElementById('adjModal');
+  if (existing) existing.remove();
 
-  const wrap = document.createElement('span');
-  wrap.className = 'adj-input-wrap';
-  wrap.style.cssText = 'display:inline-flex;align-items:center;gap:4px';
-  wrap.innerHTML = `
-    <input type="number" value="${currentVal||0}" style="width:90px;border:1px solid #f59e0b;border-radius:4px;padding:2px 4px;font-size:12px">
-    <button style="background:#1a3a5c;color:#fff;border:none;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer" onclick="saveAdj(${empId},${year},${month},'${field}',this)">保存</button>
-    <button style="background:#eee;border:none;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer" onclick="resetAdj(${empId},${year},${month},'${field}',this)">元に戻す</button>
-  `;
-  el.appendChild(wrap);
-  wrap.querySelector('input').focus();
+  const modal = document.createElement('div');
+  modal.id = 'adjModal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:24px;min-width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+      <div style="font-weight:700;font-size:15px;margin-bottom:16px;color:#1a3a5c">金額を編集</div>
+      <input id="adjModalInput" type="number" value="${currentVal||0}"
+        style="width:100%;border:2px solid #f59e0b;border-radius:8px;padding:8px 12px;font-size:16px;box-sizing:border-box;margin-bottom:16px">
+      <div style="display:flex;gap:8px">
+        <button onclick="saveAdjModal(${empId},${year},${month},'${field}')"
+          style="flex:1;background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;cursor:pointer;font-weight:700">保存</button>
+        <button onclick="resetAdjModal(${empId},${year},${month},'${field}')"
+          style="flex:1;background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:10px;font-size:14px;cursor:pointer">元に戻す</button>
+        <button onclick="document.getElementById('adjModal').remove()"
+          style="background:#eee;color:#666;border:none;border-radius:8px;padding:10px 14px;font-size:14px;cursor:pointer">✕</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const input = document.getElementById('adjModalInput');
+  input.focus();
+  input.select();
+  // Enterキーで保存
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveAdjModal(empId, year, month, field);
+    if (e.key === 'Escape') modal.remove();
+  });
+  // 背景クリックで閉じる
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 }
 
-function saveAdj(empId, year, month, field, btn) {
-  const input = btn.parentElement.querySelector('input');
-  const val = parseInt(input.value) || 0;
+function saveAdjModal(empId, year, month, field) {
+  const val = parseInt(document.getElementById('adjModalInput').value) || 0;
   setAdj(year, month, empId, field, val);
+  document.getElementById('adjModal').remove();
 }
 
-function resetAdj(empId, year, month, field, btn) {
+function resetAdjModal(empId, year, month, field) {
   const ym = `${year}-${String(month).padStart(2,'0')}`;
   if (salaryAdj[ym] && salaryAdj[ym][empId]) {
     delete salaryAdj[ym][empId][field];
     FB.salaryAdj(ym).child(String(empId)).child(field).remove();
   }
+  document.getElementById('adjModal').remove();
 }
 
 function printAllPayslips(year, month) {
