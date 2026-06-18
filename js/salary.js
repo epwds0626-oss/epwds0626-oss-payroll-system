@@ -3,7 +3,8 @@
 // ============================================================
 
 function renderSalary(year, month) {
-  const results = activeEmployees().map(emp => ({ emp, sal: calcSalary(emp, year, month) }));
+  subscribeAdj(year, month);
+  const results = activeEmployees().map(emp => ({ emp, sal: calcSalaryWithAdj(emp, year, month) }));
   const totals  = results.reduce((acc, { sal }) => {
     acc.gross    += sal.grossTotal;
     acc.base     += sal.basePay;
@@ -66,19 +67,19 @@ function renderSalary(year, month) {
         const ot60oPay = sal.monthOT>60 ? Math.round(Math.max(0,sal.monthOT-60)* sal.hourlyBase * 1.50 - Math.max(0,sal.monthOT-60)* sal.hourlyBase) : 0;
         return `<tr>
         <td class="tl">${emp.name}</td>
-        <td>¥${sal.basePay.toLocaleString()}</td>
-        <td>${sal.monthOT>0?`¥${Math.round(Math.min(sal.monthOT,60)*sal.hourlyBase*0.25).toLocaleString()}`:'—'}</td>
-        <td>${sal.monthOT>60?`¥${Math.round(Math.max(0,sal.monthOT-60)*sal.hourlyBase*0.25).toLocaleString()}`:'—'}</td>
-        <td>${sal.midnightPay>0?`¥${sal.midnightPay.toLocaleString()}`:'—'}</td>
-        <td>${sal.holidayLegalPay>0?`¥${sal.holidayLegalPay.toLocaleString()}`:'—'}</td>
-        <td title="法定外休日出勤の週40h超分は残業手当に含まれます">${sal.monthHolidayNonLegal>0?`${sal.monthHolidayNonLegal}h(OT含)`:'—'}</td>
-        <td>¥${sal.commute.toLocaleString()}</td>
-        <td>${sal.kenpo>0?`¥${sal.kenpo.toLocaleString()}`:'—'}</td>
-        <td>${sal.kosei>0?`¥${sal.kosei.toLocaleString()}`:'—'}</td>
-        <td>${sal.shienkin>0?`¥${sal.shienkin.toLocaleString()}`:'—'}</td>
-        <td>${sal.koyoHoken>0?`¥${sal.koyoHoken.toLocaleString()}`:'—'}</td>
-        <td>${sal.incomeTax>0?`¥${sal.incomeTax.toLocaleString()}`:'—'}</td>
-        <td>${sal.juminzei>0?`¥${sal.juminzei.toLocaleString()}`:'—'}</td>
+        ${adjCell(emp.id,year,month,'basePay',sal.basePay)}
+        ${adjCell(emp.id,year,month,'otPay',sal.otPay)}
+        <td>—</td>
+        ${adjCell(emp.id,year,month,'midnightPay',sal.midnightPay)}
+        ${adjCell(emp.id,year,month,'holidayLegalPay',sal.holidayLegalPay)}
+        <td>—</td>
+        ${adjCell(emp.id,year,month,'commute',sal.commute)}
+        ${adjCell(emp.id,year,month,'kenpo',sal.kenpo)}
+        ${adjCell(emp.id,year,month,'kosei',sal.kosei)}
+        ${adjCell(emp.id,year,month,'shienkin',sal.shienkin)}
+        ${adjCell(emp.id,year,month,'koyoHoken',sal.koyoHoken)}
+        ${adjCell(emp.id,year,month,'incomeTax',sal.incomeTax)}
+        ${adjCell(emp.id,year,month,'juminzei',sal.juminzei)}
         <td>—</td>
         <td><strong>¥${sal.netPay.toLocaleString()}</strong></td>
       </tr>`;}).join('')}
@@ -107,7 +108,7 @@ function renderSalary(year, month) {
 function exportSalaryCSV(year, month) {
   const header = ['氏名','雇用区分','基本給/時給計','残業手当','深夜手当','休日手当','交通費','支給合計','健保','厚年','子育支援金','雇保','所得税','住民税','控除合計','振込額'];
   const rows = activeEmployees().map(emp => {
-    const s = calcSalary(emp, year, month);
+    const s = calcSalaryWithAdj(emp, year, month);
     return [emp.name, emp.type, s.basePay, s.otPay, s.midnightPay, s.holidayPay, s.commute, s.grossTotal, s.kenpo, s.kosei, s.shienkin||0, s.koyoHoken, s.incomeTax, s.juminzei, s.totalDeduction, s.netPay];
   });
   const csv = [header,...rows].map(r=>r.join(',')).join('\n');
@@ -137,7 +138,7 @@ function renderPayslipDetail(year, month) {
   const empId = parseInt(sel.value);
   const emp   = employees.find(e=>e.id===empId);
   if (!emp) return;
-  const sal = calcSalary(emp, year, month);
+  const sal = calcSalaryWithAdj(emp, year, month);
   document.getElementById('payslipWrap').innerHTML = payslipHTML(emp, sal, year, month);
 }
 
@@ -155,29 +156,29 @@ function payslipHTML(emp, sal, year, month) {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">支給項目</div>
-        ${payRow('基本給', sal.basePay)}
-        ${sal.skillPay>0?payRow('職能給', sal.skillPay):''}
-        ${sal.positionAllowancePay>0?payRow('役職手当', sal.positionAllowancePay):''}
-        ${payRow('残業手当（〜60h 25%）', sal.monthOT>0?Math.round(Math.min(sal.monthOT,60)*sal.hourlyBase*0.25):0)}
+        ${adjRow(emp.id,year,month,'basePay','基本給',sal.basePay)}
+        ${sal.skillPay>0?adjRow(emp.id,year,month,'skillPay','職能給',sal.skillPay):''}
+        ${sal.positionAllowancePay>0?adjRow(emp.id,year,month,'positionAllowancePay','役職手当',sal.positionAllowancePay):''}
+        ${adjRow(emp.id,year,month,'otPay','残業手当（〜60h 25%）',sal.monthOT>0?Math.round(Math.min(sal.monthOT,60)*sal.hourlyBase*0.25):0)}
         ${payRow('残業手当（60h超 追加25%）', sal.ot60over>0?Math.round(sal.ot60over*sal.hourlyBase*0.25):0)}
-        ${payRow('深夜手当（22時〜 25%）', sal.midnightOnlyPay)}
+        ${adjRow(emp.id,year,month,'midnightPay','深夜手当（22時〜 25%）',sal.midnightOnlyPay)}
         ${sal.midnightOTPay>0?payRow('深夜残業 追加割増（+25%）', sal.midnightOTPay):''}
-        ${payRow('法定休日手当（木曜 35%）', sal.holidayLegalPay)}
+        ${adjRow(emp.id,year,month,'holidayLegalPay','法定休日手当（木曜 35%）',sal.holidayLegalPay)}
         ${sal.monthHolidayNonLegal>0?`<div style="display:flex;justify-content:space-between;padding:3px 0;color:#999"><span>法定外休日（水曜）出勤 ${sal.monthHolidayNonLegal}h</span><span>週OT分に含む</span></div>`:''}
-        ${payRow(`交通費${sal.commuteNote?' ('+sal.commuteNote+')':''}`, sal.commute)}
+        ${adjRow(emp.id,year,month,'commute',`交通費${sal.commuteNote?' ('+sal.commuteNote+')':''}`,sal.commute)}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>支給合計</span><span>¥${sal.grossTotal.toLocaleString()}</span>
         </div>
       </div>
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">控除項目</div>
-        ${payRow(`健康保険料（${sal.kaigo?'介護込11.86%':'10.06%'}・茨城支部）`, sal.kenpo)}
-        ${payRow('厚生年金保険料（18.30%）', sal.kosei)}
-        ${sal.shienkin>0?payRow('子ども・子育て支援金（0.23%）', sal.shienkin):''}
-        ${payRow('雇用保険料（6‰）', sal.koyoHoken)}
-        ${payRow('所得税', sal.incomeTax)}
-        ${payRow('住民税', sal.juminzei)}
-        ${sal.chutaikyoAmount>0?payRow('中退共掛金', sal.chutaikyoAmount):''}
+        ${adjRow(emp.id,year,month,'kenpo',`健康保険料（${sal.kaigo?'介護込11.86%':'10.06%'}・茨城支部）`,sal.kenpo)}
+        ${adjRow(emp.id,year,month,'kosei','厚生年金保険料（18.30%）',sal.kosei)}
+        ${sal.shienkin>0?adjRow(emp.id,year,month,'shienkin','子ども・子育て支援金（0.23%）',sal.shienkin):''}
+        ${adjRow(emp.id,year,month,'koyoHoken','雇用保険料（6‰）',sal.koyoHoken)}
+        ${adjRow(emp.id,year,month,'incomeTax','所得税',sal.incomeTax)}
+        ${adjRow(emp.id,year,month,'juminzei','住民税',sal.juminzei)}
+        ${sal.chutaikyoAmount>0?adjRow(emp.id,year,month,'chutaikyoAmount','中退共掛金',sal.chutaikyoAmount):''}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>控除合計</span><span>¥${sal.totalDeduction.toLocaleString()}</span>
         </div>
@@ -208,6 +209,59 @@ function payslipHTML(emp, sal, year, month) {
 function payRow(label, amount) {
   if (!amount) return `<div style="display:flex;justify-content:space-between;padding:3px 0;color:#999"><span>${label}</span><span>—</span></div>`;
   return `<div style="display:flex;justify-content:space-between;padding:3px 0"><span>${label}</span><span>¥${amount.toLocaleString()}</span></div>`;
+}
+
+// 編集可能セル（給与計算一覧用）
+function adjCell(empId, year, month, field, value) {
+  const adj = getAdj(year, month, empId);
+  const isAdj = adj[field] !== undefined;
+  const disp = value > 0 ? `¥${value.toLocaleString()}` : '—';
+  const style = isAdj ? 'color:#d97706;font-weight:700;cursor:pointer' : 'cursor:pointer';
+  return `<td style="${style}" title="クリックして編集"
+    onclick="openAdjInput(${empId},${year},${month},'${field}',${value},this)">${disp}</td>`;
+}
+
+// 編集可能行（給与明細用）
+function adjRow(empId, year, month, field, label, value) {
+  const adj = getAdj(year, month, empId);
+  const isAdj = adj[field] !== undefined;
+  const disp = value > 0 ? `¥${value.toLocaleString()}` : '—';
+  const adjBadge = isAdj ? ' <span style="font-size:10px;background:#fef3c7;color:#d97706;border-radius:3px;padding:0 3px">調整</span>' : '';
+  const style = isAdj ? 'color:#d97706;font-weight:700' : '';
+  return `<div style="display:flex;justify-content:space-between;padding:3px 0;cursor:pointer" title="クリックして編集"
+    onclick="openAdjInput(${empId},${year},${month},'${field}',${value},this)">
+    <span>${label}${adjBadge}</span><span style="${style}">${disp}</span></div>`;
+}
+
+// インライン入力を開く
+function openAdjInput(empId, year, month, field, currentVal, el) {
+  // 既存の入力欄があれば閉じる
+  document.querySelectorAll('.adj-input-wrap').forEach(e => e.remove());
+
+  const wrap = document.createElement('span');
+  wrap.className = 'adj-input-wrap';
+  wrap.style.cssText = 'display:inline-flex;align-items:center;gap:4px';
+  wrap.innerHTML = `
+    <input type="number" value="${currentVal||0}" style="width:90px;border:1px solid #f59e0b;border-radius:4px;padding:2px 4px;font-size:12px">
+    <button style="background:#1a3a5c;color:#fff;border:none;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer" onclick="saveAdj(${empId},${year},${month},'${field}',this)">保存</button>
+    <button style="background:#eee;border:none;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer" onclick="resetAdj(${empId},${year},${month},'${field}',this)">元に戻す</button>
+  `;
+  el.appendChild(wrap);
+  wrap.querySelector('input').focus();
+}
+
+function saveAdj(empId, year, month, field, btn) {
+  const input = btn.parentElement.querySelector('input');
+  const val = parseInt(input.value) || 0;
+  setAdj(year, month, empId, field, val);
+}
+
+function resetAdj(empId, year, month, field, btn) {
+  const ym = `${year}-${String(month).padStart(2,'0')}`;
+  if (salaryAdj[ym] && salaryAdj[ym][empId]) {
+    delete salaryAdj[ym][empId][field];
+    FB.salaryAdj(ym).child(String(empId)).child(field).remove();
+  }
 }
 
 function printAllPayslips(year, month) {

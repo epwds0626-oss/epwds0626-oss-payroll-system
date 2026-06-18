@@ -172,6 +172,7 @@ const FB = {
   attendance: () => db.ref('payroll/attendance'),
   paidLeave:  () => db.ref('payroll/paidLeave'),
   article36:  () => db.ref('payroll/article36'),
+  salaryAdj:  (ym) => db.ref(`payroll/salaryAdj/${ym}`),
 };
 
 // -------- State --------
@@ -179,7 +180,59 @@ let employees  = [];
 let attendance = {};
 let paidLeave  = {};
 let article36  = {};
+let salaryAdj  = {}; // 給与調整値 { ym: { empId: { field: value } } }
 let _fbLoaded  = false; // 初回ロード完了フラグ
+
+// -------- 給与調整値 API --------
+function getAdj(year, month, empId) {
+  const ym = `${year}-${String(month).padStart(2,'0')}`;
+  return (salaryAdj[ym] || {})[empId] || {};
+}
+
+function setAdj(year, month, empId, field, value) {
+  const ym = `${year}-${String(month).padStart(2,'0')}`;
+  if (!salaryAdj[ym]) salaryAdj[ym] = {};
+  if (!salaryAdj[ym][empId]) salaryAdj[ym][empId] = {};
+  salaryAdj[ym][empId][field] = value;
+  FB.salaryAdj(ym).child(String(empId)).update({ [field]: value });
+}
+
+// 調整値を適用して給与を再計算
+function calcSalaryWithAdj(emp, year, month) {
+  const sal = calcSalary(emp, year, month);
+  const adj = getAdj(year, month, emp.id);
+  if (!adj || Object.keys(adj).length === 0) return sal;
+
+  // 各項目に調整値を上書き
+  const fields = ['basePay','skillPay','positionAllowancePay','otPay','midnightPay',
+    'holidayLegalPay','commute','kenpo','kosei','shienkin','koyoHoken',
+    'incomeTax','juminzei','chutaikyoAmount'];
+  for (const f of fields) {
+    if (adj[f] !== undefined) sal[f] = adj[f];
+  }
+
+  // 支給合計・控除合計・振込額を再計算
+  sal.grossTotal    = sal.basePay + sal.skillPay + sal.positionAllowancePay
+    + sal.otPay + sal.midnightPay + sal.holidayLegalPay + sal.commute;
+  sal.totalDeduction = sal.kenpo + sal.kosei + sal.shienkin + sal.koyoHoken
+    + sal.incomeTax + sal.juminzei + sal.chutaikyoAmount;
+  sal.netPay = Math.round(sal.grossTotal - sal.totalDeduction);
+  return sal;
+}
+
+// salaryAdj の Firebase 購読（月が変わった時に呼ぶ）
+let _adjUnsub = null;
+function subscribeAdj(year, month) {
+  if (_adjUnsub) _adjUnsub();
+  const ym = `${year}-${String(month).padStart(2,'0')}`;
+  const ref = FB.salaryAdj(ym);
+  const handler = snap => {
+    salaryAdj[ym] = snap.val() || {};
+    if (_fbLoaded) renderPage(currentPage);
+  };
+  ref.on('value', handler);
+  _adjUnsub = () => ref.off('value', handler);
+}
 
 // 在籍中スタッフのみ
 function activeEmployees() {
