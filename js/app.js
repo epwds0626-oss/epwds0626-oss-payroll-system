@@ -529,7 +529,9 @@ function employeeForm(emp, isNew) {
       </select>
     </div>
     <div class="form-group"><label>住民税（月額）</label><input type="number" id="ef_juminzei" value="${emp.juminzei||0}"></div>
-    <div class="form-group"><label>標準報酬月額（固定）</label><input type="number" id="ef_hyojunHoshu" value="${emp.hyojunHoshu||0}" placeholder="0=自動計算"></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>標準報酬月額（固定）</label><input type="number" id="ef_hyojunHoshu" value="${emp.hyojunHoshu||0}" placeholder="0=自動計算（等級表で自動判定）"></div>
   </div>
   <div class="form-row">
     <div class="form-group"><label>入社日</label><input type="date" id="ef_hireDate" value="${emp.hireDate||''}"></div>
