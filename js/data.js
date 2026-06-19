@@ -574,7 +574,7 @@ function calcSalary(emp, year, month) {
   // 社会保険
   let kenpo = 0, kosei = 0, shienkin = 0;
   if (emp.shakai === '加入') {
-    const s = calcShakai(grossTotal - actualCommute, emp.birthDate, emp.hyojunHoshu || 0);
+    const s = calcShakai(grossTotal, emp.birthDate, emp.hyojunHoshu || 0); // 交通費込みで標準報酬算出
     kenpo = s.kenpo; kosei = s.kosei; shienkin = s.shienkin;
   }
 

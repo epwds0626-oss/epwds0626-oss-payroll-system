@@ -296,7 +296,7 @@ function renderEmployees() {
             // 標準報酬月額固定値 > 目標総支給 > 基本給 の優先順位で概算計算
             const baseForCalc = emp.hyojunHoshu > 0 ? emp.hyojunHoshu
               : (emp.payType==='月給' && emp.targetGross > 0 ? emp.targetGross : (emp.payType==='月給' ? emp.baseSalary : (emp.hourlyWage * 173)));
-            const sh = calcShakai(baseForCalc - (emp.commute||0), emp.birthDate||'', emp.hyojunHoshu||0);
+            const sh = calcShakai(baseForCalc, emp.birthDate||'', emp.hyojunHoshu||0);
             const kenpo  = emp.shakai==='加入' ? sh.kenpo : 0;
             const kosei  = emp.shakai==='加入' ? sh.kosei : 0;
             const shienkin = emp.shakai==='加入' ? sh.shienkin : 0;
