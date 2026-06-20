@@ -304,7 +304,7 @@ function renderEmployees() {
             const koyo   = emp.koyo==='加入'   ? Math.round(baseForCalc * KOYO_RATE) : 0;
             const chutai = (emp.chutaikyo==='加入') ? (emp.chutaikyoAmount||0) : 0;
             const jumin  = emp.juminzei||0;
-            const income = calcIncomeTax(baseForCalc - (emp.commute||0) - kenpo - kosei - koyo, emp.dependents||0, emp.tax||'甲');
+            const income = calcIncomeTax(baseForCalc - (emp.commute||0) - kenpo - kosei - shienkin - koyo, emp.dependents||0, emp.tax||'甲');
             const total  = kenpo + kosei + shienkin + koyo + chutai + jumin + income;
             const hyojunLabel = emp.hyojunHoshu > 0 ? `（標準報酬 ¥${emp.hyojunHoshu.toLocaleString()}）` : '';
 
