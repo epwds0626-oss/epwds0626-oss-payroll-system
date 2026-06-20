@@ -62,6 +62,7 @@ function renderPage(page) {
     case 'monthly':     container.innerHTML = renderMonthly(y,m);     break;
     case 'salary':      container.innerHTML = renderSalary(y,m);      break;
     case 'payslip':     container.innerHTML = renderPayslip(y,m);     break;
+    case 'freelance':   container.innerHTML = renderFreelance(y,m);   break;
     case 'paid_leave':  container.innerHTML = renderPaidLeave();       break;
     case 'article36':   container.innerHTML = renderArticle36(y,m);   break;
     case 'labor_report':container.innerHTML = renderLaborReport(y,m); break;
@@ -443,7 +444,7 @@ function employeeForm(emp, isNew) {
   <div class="form-row">
     <div class="form-group"><label>雇用区分</label>
       <select id="ef_type">
-        ${['正社員','パート','アルバイト','契約社員'].map(t=>`<option ${emp.type===t?'selected':''}>${t}</option>`).join('')}
+        ${['正社員','パート','アルバイト','契約社員','業務委託'].map(t=>`<option ${emp.type===t?'selected':''}>${t}</option>`).join('')}
       </select>
     </div>
     <div class="form-group"><label>店舗</label>
