@@ -755,7 +755,7 @@ function calcSalary(emp, year, month) {
       const s = calcShakai(grossTotal, emp.birthDate, emp.hyojunHoshu || 0);
       kenpo = s.kenpo; kosei = s.kosei; shienkin = s.shienkin;
     }
-    const incomeTax      = calcIncomeTax(grossTotal - kenpo - kosei, emp.dependents, emp.tax);
+    const incomeTax      = calcIncomeTax(grossTotal - kenpo - kosei - shienkin, emp.dependents, emp.tax);
     const juminzei       = emp.juminzei || 0;
     const totalDeduction = kenpo + kosei + shienkin + incomeTax + juminzei;
     const netPay         = Math.round(grossTotal - totalDeduction);
@@ -845,7 +845,7 @@ function calcSalary(emp, year, month) {
   if (emp.koyo === '加入') koyoHoken = Math.round(grossTotal * KOYO_RATE);
 
   // 所得税
-  const taxable   = grossTotal - actualCommute - kenpo - kosei - koyoHoken;
+  const taxable   = grossTotal - actualCommute - kenpo - kosei - shienkin - koyoHoken;
   const incomeTax = calcIncomeTax(taxable, emp.dependents, emp.tax);
 
   const juminzei       = emp.juminzei || 0;
