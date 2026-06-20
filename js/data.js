@@ -123,8 +123,8 @@ function calcShakai(grossForShakai, birthDateStr = '', hyojunFixed = 0) {
   return { kenpo, kosei, kaigo, shienkin, hyojun };
 }
 
-// 雇用保険料率（2024年度）: 一般事業 本人負担 6/1000
-const KOYO_RATE = 0.006;
+// 雇用保険料率（2025年度〜）: 一般事業 本人負担 5/1000
+const KOYO_RATE = 0.005;
 
 // -------- 所得税計算 --------
 function calcIncomeTax(taxableGross, dependents = 0, taxType = '甲') {
