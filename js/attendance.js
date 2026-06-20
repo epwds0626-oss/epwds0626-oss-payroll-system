@@ -7,6 +7,131 @@ function hm(h) {
   const mm = total % 60;
   return mm ? `${hh}h${mm}m` : `${hh}h`;
 }
+// ── 打刻タイムライン表示 ──────────────────────────────────
+function renderPunchTimeline(rec) {
+  if (!rec || (!rec.punchIn && !rec.actual)) return '<span style="color:#ccc">—</span>';
+  const lines = [];
+  if (rec.punchIn)  lines.push(`<span style="color:#1a3a5c">▶ ${rec.punchIn}</span>`);
+  // 休憩ブロック
+  if (rec.breaks && rec.breaks.length) {
+    const labels = ['ランチ前','ランチ後','ディナー後'];
+    rec.breaks.forEach((b,i) => {
+      if (b && (b.start || b.end)) {
+        const lbl = labels[i] || `休憩${i+1}`;
+        if (b.start) lines.push(`<span style="color:#888">⏸ ${lbl}入り ${b.start}</span>`);
+        if (b.end)   lines.push(`<span style="color:#888">▷ ${lbl}終了 ${b.end}</span>`);
+      }
+    });
+  }
+  if (rec.punchOut) lines.push(`<span style="color:#c0392b">⏹ ${rec.punchOut}</span>`);
+  if (!lines.length && rec.actual) return `<span style="color:#666">${hm(rec.actual)}</span>`;
+  return lines.join('<br>');
+}
+
+// ── 打刻編集ダイアログ ────────────────────────────────────
+function openPunchEditor(empId, dateStr, dy, dm) {
+  const ym  = `${dy}-${String(dm).padStart(2,'0')}`;
+  const rec = ((attendance[ym]||{})[empId]||{})[dateStr] || {};
+  const br  = rec.breaks || [{},{},{}];
+  while (br.length < 3) br.push({});
+
+  const labels = ['ランチ前','ランチ後','ディナー後'];
+  const existing = document.getElementById('punchEditorModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'punchEditorModal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center';
+
+  const brRows = labels.map((lbl,i) => `
+    <div style="margin-bottom:8px">
+      <div style="font-size:11px;color:#666;margin-bottom:3px">${lbl}休憩</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <label style="font-size:12px;width:32px">入り</label>
+        <input type="time" id="pe_brStart_${i}" value="${br[i]?.start||''}" style="${timeStyle}">
+        <label style="font-size:12px;width:32px">終了</label>
+        <input type="time" id="pe_brEnd_${i}" value="${br[i]?.end||''}" style="${timeStyle}">
+      </div>
+    </div>`).join('');
+
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:24px;min-width:320px;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.2);max-height:90vh;overflow-y:auto">
+      <div style="font-weight:700;font-size:15px;margin-bottom:16px;color:#1a3a5c">打刻・勤怠編集 — ${dateStr}</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+        <label style="font-size:12px;width:40px">出勤</label>
+        <input type="time" id="pe_in" value="${rec.punchIn||''}" style="${timeStyle}">
+      </div>
+      ${brRows}
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
+        <label style="font-size:12px;width:40px">退勤</label>
+        <input type="time" id="pe_out" value="${rec.punchOut||''}" style="${timeStyle}">
+      </div>
+      <div style="background:#f8faff;border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:#555">
+        ※ 実働・残業・深夜時間は保存後に自動計算されます
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="savePunchEditor(${empId},'${dateStr}',${dy},${dm})"
+          style="flex:1;background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;cursor:pointer;font-weight:700">保存</button>
+        <button onclick="document.getElementById('punchEditorModal').remove()"
+          style="background:#eee;color:#666;border:none;border-radius:8px;padding:10px 14px;font-size:14px;cursor:pointer">✕</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
+const timeStyle = 'border:1px solid #ddd;border-radius:6px;padding:5px 8px;font-size:13px;flex:1';
+
+function savePunchEditor(empId, dateStr, dy, dm) {
+  const punchIn  = document.getElementById('pe_in')?.value  || '';
+  const punchOut = document.getElementById('pe_out')?.value || '';
+  const breaks   = [0,1,2].map(i => {
+    const start = document.getElementById(`pe_brStart_${i}`)?.value || '';
+    const end   = document.getElementById(`pe_brEnd_${i}`)?.value   || '';
+    if (!start && !end) return null;
+    const minutes = (start && end) ? calcBreakMinutes(start, end) : 0;
+    return { start, end, minutes };
+  }).filter(Boolean);
+
+  // 実働・深夜を自動計算
+  let actual = 0, midnight = 0;
+  if (punchIn && punchOut) {
+    const totalMins  = calcBreakMinutes(punchIn, punchOut);
+    const breakMins  = breaks.reduce((s,b) => s + (b.minutes||0), 0);
+    actual   = Math.round((totalMins - breakMins) / 60 * 10) / 10;
+    midnight = calcMidnight(punchOut, actual);
+  }
+
+  const ym  = `${dy}-${String(dm).padStart(2,'0')}`;
+  const existing = ((attendance[ym]||{})[empId]||{})[dateStr] || {};
+  const updated  = {
+    ...existing,
+    punchIn, punchOut, breaks,
+    actual:   actual   || existing.actual   || 0,
+    midnight: midnight || existing.midnight || 0,
+    source:   'manual',
+  };
+
+  db.ref(`payroll/attendance/${ym}/${empId}/${dateStr}`).update(updated);
+  document.getElementById('punchEditorModal').remove();
+}
+
+function calcBreakMinutes(start, end) {
+  const [sh,sm] = start.split(':').map(Number);
+  let   [eh,em] = end.split(':').map(Number);
+  if (eh < sh) eh += 24; // 日またぎ
+  return (eh*60+em) - (sh*60+sm);
+}
+
+function calcMidnight(punchOut, actual) {
+  if (!punchOut) return 0;
+  const [h,m] = punchOut.split(':').map(Number);
+  const outH  = h + m/60;
+  if (outH >= 22) return Math.round((outH - 22) * 10) / 10;
+  if (outH < 5)   return Math.round((outH + 2) * 10) / 10;
+  return 0;
+}
 
 // ============================================================
 // attendance.js  ―  勤怠入力（日次打刻・CSV取込）
@@ -88,7 +213,7 @@ function renderAttendanceTable(year, month) {
       <th title="22時以降かつ残業（8h超/週40h超）の時間">深夜×残業<br>(h)</th>
       <th title="法定休日（木曜）出勤 → 35%割増">法定休日<br>🔴木</th>
       <th title="法定外休日（水曜）出勤 → 週40h超のみ25%">法定外休日<br>🟠水</th>
-      <th>有給</th><th>欠勤</th><th>備考</th>
+      <th>有給</th><th>欠勤</th><th style="min-width:160px">打刻・勤怠時間</th>
     </tr>
     <tr style="background:#f8faff;font-size:11px;color:var(--text-muted)">
       <td colspan="2"></td>
@@ -141,9 +266,9 @@ function renderAttendanceTable(year, month) {
         onchange="setAttFull(${empId},'${dateStr}','paidLeave',this.checked?1:0,${dy},${dm})"></td>
       <td><input type="checkbox" ${rec.absent?'checked':''}
         onchange="setAttFull(${empId},'${dateStr}','absent',this.checked?1:0,${dy},${dm})"></td>
-      <td><input type="text" style="width:90px;text-align:left"
-        value="${rec.note||''}"
-        onchange="setAttFull(${empId},'${dateStr}','note',this.value,${dy},${dm})"></td>
+      <td style="font-size:11px;line-height:1.7;cursor:pointer;min-width:160px" onclick="openPunchEditor(${empId},'${dateStr}',${dy},${dm})" title="クリックして打刻・勤怠を編集">
+        ${renderPunchTimeline(rec)}
+      </td>
     </tr>`;
   }
 
