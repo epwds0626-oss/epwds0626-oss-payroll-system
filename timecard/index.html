@@ -137,6 +137,7 @@ body {
 @keyframes slideUp { from { transform:translateX(-50%) translateY(16px); opacity:0; } }
 .loading { color:#444; text-align:center; padding:20px; font-size:13px; }
 </style>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 </head>
 <body>
 
@@ -358,6 +359,7 @@ function punch(type) {
   dayRef(selectedId).update({ [type]: time, [`${type}Ts`]: Date.now() }, err => {
     if (err) { showToast('通信エラー', true); return; }
     showToast(`${emp.name}　${label}：${time}`);
+    sendPunchMail(emp.name, emp.store, label, time);
     selectedId = null;
     renderNameGrid();
   });
@@ -377,6 +379,7 @@ function breakStart(type) {
     breaks.push({ type, start: time, end: null, startTs: Date.now() });
     dayRef(selectedId).update({ breaks }, err => {
       if (err) { showToast('通信エラー', true); return; }
+      sendPunchMail(emp.name, emp.store, `${lbl.name}休憩 開始`, time);
       showToast(`${lbl.icon} ${lbl.name}休憩 開始：${time}`);
     });
   });
@@ -406,6 +409,7 @@ function breakEnd() {
     breaks[realIdx] = { ...cur, end: time, endTs: Date.now(), minutes: dur };
     dayRef(selectedId).update({ breaks }, err => {
       if (err) { showToast('通信エラー', true); return; }
+      sendPunchMail(emp.name, emp.store, `${lbl.name}休憩 終了`, time);
       showToast(`${lbl.icon} ${lbl.name}休憩 終了：${time}（${dur}分）`);
     });
   });
@@ -481,6 +485,24 @@ function showToast(msg, isErr=false) {
   el.textContent = msg;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 3200);
+}
+
+// ── EmailJS 初期化 ───────────────────────────────────────
+emailjs.init('mwTkJJJtnoXuUFrw0');
+
+const EMAILJS_SERVICE  = 'service_w00rmuf';
+const EMAILJS_TEMPLATE = 'template_u7sfc2y';
+
+function sendPunchMail(staffName, store, punchType, punchTime) {
+  const now = new Date();
+  const punchDate = `${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()}`;
+  emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
+    staff_name: staffName,
+    store:      store || '',
+    punch_type: punchType,
+    punch_time: punchTime,
+    punch_date: punchDate,
+  }).catch(err => console.warn('メール送信エラー:', err));
 }
 
 // ── 初期化 ───────────────────────────────────────────────
