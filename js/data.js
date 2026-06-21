@@ -790,9 +790,8 @@ function calcSalary(emp, year, month) {
   let basePay = 0, hourlyBase = 0;
 
   if (emp.payType === '月給') {
-    const workingDays = getMonthWorkingDays(year, month);
-    const totalHours  = workingDays * 8;
-    hourlyBase = totalHours > 0 ? emp.baseSalary / totalHours : 0;
+    const MONTHLY_HOURS = emp.monthlyHours || 173.8; // 月平均所定労働時間（デフォルト173.8h）
+    hourlyBase = emp.baseSalary / MONTHLY_HOURS;
     basePay = emp.baseSalary - absentDays * 8 * hourlyBase;
   } else {
     hourlyBase = emp.hourlyWage;
