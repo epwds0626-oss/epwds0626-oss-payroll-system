@@ -253,18 +253,26 @@ function renderAttendanceTable(year, month) {
     html += `<tr style="${rowBg}">
       <td>${parseInt(mm)}/${parseInt(dd)}</td>
       <td style="font-weight:${isLegal||isNonLegal?'700':'400'};color:${dowColor||'inherit'}">${DOW_NAMES[dow]}${isLegal?' 🔴':isNonLegal?' 🟠':''}</td>
-      <td><input type="number" min="0" max="24" step="0.5" style="width:58px"
+      <td>
+        ${rec.actual?`<div style="font-size:10px;color:#1a5fa0;font-weight:600;margin-bottom:1px">${hm(rec.actual)}</div>`:''}
+        <input type="number" min="0" max="24" step="0.01" style="width:58px;font-size:11px"
         value="${rec.actual||''}"
         onchange="setAttFull(${empId},'${dateStr}','actual',this.value,${dy},${dm})"></td>
-      <td style="background:#fff5f5"><input type="number" min="0" max="16" step="0.5" style="width:58px"
+      <td style="background:#fff5f5">
+        ${rec.dailyOT?`<div style="font-size:10px;color:#c0392b;font-weight:600;margin-bottom:1px">${hm(rec.dailyOT)}</div>`:''}
+        <input type="number" min="0" max="16" step="0.01" style="width:58px;font-size:11px"
         title="日8h超の残業時間のみ（例：10h勤務→2と入力）"
         value="${rec.dailyOT||''}"
         onchange="setAttFull(${empId},'${dateStr}','dailyOT',this.value,${dy},${dm})"></td>
-      <td style="background:#f0f5ff"><input type="number" min="0" max="8" step="0.5" style="width:58px"
+      <td style="background:#f0f5ff">
+        ${rec.midnight?`<div style="font-size:10px;color:#2980b9;font-weight:600;margin-bottom:1px">${hm(rec.midnight)}</div>`:''}
+        <input type="number" min="0" max="8" step="0.01" style="width:58px;font-size:11px"
         title="22時〜5時の労働時間合計"
         value="${rec.midnight||''}"
         onchange="setAttFull(${empId},'${dateStr}','midnight',this.value,${dy},${dm})"></td>
-      <td style="background:#f5f0ff"><input type="number" min="0" max="8" step="0.5" style="width:58px"
+      <td style="background:#f5f0ff">
+        ${rec.midnightOT?`<div style="font-size:10px;color:#8e44ad;font-weight:600;margin-bottom:1px">${hm(rec.midnightOT)}</div>`:''}
+        <input type="number" min="0" max="8" step="0.01" style="width:58px;font-size:11px"
         title="22時以降 かつ 残業（8h超または週40h超）の時間"
         value="${rec.midnightOT||''}"
         onchange="setAttFull(${empId},'${dateStr}','midnightOT',this.value,${dy},${dm})"></td>
