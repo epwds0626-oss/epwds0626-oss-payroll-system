@@ -531,7 +531,10 @@ function initFirebaseData() {
   });
 
   FB.attendance().on('value', snap => {
-    attendance = snap.val() || {};
+    const raw = snap.val() || {};
+    // FirebaseのキーはすべてStringで来るが、empIdは数値として扱う
+    // 両方のキー(数値/文字列)でアクセスできるよう正規化
+    attendance = raw;
     if (!_fbLoaded) onLoad(); else if (currentPage === 'attendance' || currentPage === 'weekly' || currentPage === 'monthly') renderPage(currentPage);
   });
 
@@ -594,7 +597,7 @@ function getYM(year, month) {
 // 指定年月の打刻データを取得
 function getMonthAttendance(year, month, empId) {
   const ym = getYM(year, month);
-  return (attendance[ym] && attendance[ym][empId]) || {};
+  return (attendance[ym] && (attendance[ym][empId] || attendance[ym][String(empId)])) || {};
 }
 
 // 週マタギ残業計算（日8h超・週40h超・月60h超・深夜・休日 完全対応）
@@ -716,7 +719,7 @@ function getExtendedDailyList(empId, year, month) {
 
   for (const [y,m] of monthsToScan) {
     const ym = getYM(y,m);
-    const empData = (attendance[ym] && attendance[ym][empId]) || {};
+    const empData = (attendance[ym] && (attendance[ym][empId] || attendance[ym][String(empId)])) || {};
     for (const [date, rec] of Object.entries(empData)) {
       if (!list.find(d=>d.date===date)) {
         list.push({ date, ...rec });
