@@ -444,19 +444,24 @@ function parseAttCsv(text, year, month) {
       }
     }
 
-    // 実労働時間
+    // 実労働時間（分単位精度）
     let work = timeToH(punchOut) - timeToH(punchIn);
     if (work < 0) work += 24;
-    const netH = Math.max(0, Math.round((work - breakMins/60) * 10) / 10);
-    const dailyOT = Math.max(0, Math.round((netH - 8) * 10) / 10);
+    const workMins  = Math.round(work * 60);
+    const netMins   = Math.max(0, workMins - breakMins);
+    const netHdec   = Math.round(netMins / 60 * 100) / 100; // 小数h（給与計算用）
+    const netH      = netHdec; // プレビュー表示用
+    const otMins    = Math.max(0, netMins - 480);
+    const dailyOT   = Math.round(otMins / 60 * 100) / 100;
 
-    // 深夜時間（22時以降）
-    let midnight = 0;
+    // 深夜時間（分単位）
     const outH = timeToH(punchOut);
-    if (outH >= 22) midnight = Math.round((outH - 22) * 10) / 10;
-    else if (outH < 5) midnight = Math.round((outH + 2) * 10) / 10;
+    let midnightMins = 0;
+    if (outH >= 22)    midnightMins = Math.round((outH - 22) * 60);
+    else if (outH < 5) midnightMins = Math.round((outH + 2) * 60);
+    const midnight = Math.round(midnightMins / 60 * 100) / 100;
 
-    rows.push({ emp, dateStr, punchIn, punchOut, breakMins, breaks, netH, dailyOT, midnight });
+    rows.push({ emp, dateStr, punchIn, punchOut, breakMins, breaks, netH, netHdec, dailyOT, midnight });
   }
 
   attCsvParsedRows = rows;
@@ -509,7 +514,7 @@ function execAttCsvImport(year, month) {
     const payY = payM > 12 ? dy + 1 : dy;
     const ym = `${payY}-${String(payM > 12 ? payM - 12 : payM).padStart(2,'0')}`;
     updates[`${ym}/${r.emp.id}/${r.dateStr}`] = {
-      actual:     r.netH,
+      actual:     r.netHdec,  // 計算用小数（給与計算に使用）
       dailyOT:    r.dailyOT,
       midnight:   r.midnight,
       midnightOT: Math.min(r.midnight, r.dailyOT),
