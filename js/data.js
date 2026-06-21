@@ -594,7 +594,7 @@ function getYM(year, month) {
 // 指定年月の打刻データを取得
 function getMonthAttendance(year, month, empId) {
   const ym = getYM(year, month);
-  return (attendance[ym] && attendance[ym][empId]) || {};
+  return (attendance[ym] && (attendance[ym][empId] || attendance[ym][String(empId)])) || {};
 }
 
 // 週マタギ残業計算（日8h超・週40h超・月60h超・深夜・休日 完全対応）
