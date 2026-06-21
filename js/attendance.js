@@ -408,8 +408,9 @@ function parseAttCsv(text, year, month) {
       continue;
     }
 
-    // 氏名マッチ
-    const emp = employees.find(e => e.name.replace(/\s/g,'') === nameRaw.replace(/\s/g,''));
+    // 氏名マッチ（全角スペース・半角スペース・スペースなし全対応）
+    const normName = s => s.replace(/　/g,' ').replace(/\s+/g,'').trim();
+    const emp = employees.find(e => normName(e.name) === normName(nameRaw));
     if (!emp) {
       errors.push(`行${i+1}: 「${nameRaw}」は給与システムに存在しません`);
       continue;
