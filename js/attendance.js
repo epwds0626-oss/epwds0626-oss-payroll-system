@@ -145,9 +145,13 @@ function savePunchEditor(empId, dateStr, dy, dm) {
 
   db.ref(`payroll/attendance/${ym}/${empId}/${dateStr}`).update(updated)
     .then(function() {
-      // 保存後に再描画
+      // 保存後に現在選択中のスタッフのまま再描画
       const y = parseInt(document.getElementById('targetYear')?.value || dy);
       const m = parseInt(document.getElementById('targetMonth')?.value || dm);
+      const sel = document.getElementById('attEmpSel');
+      const currentEmpId = sel ? parseInt(sel.value) : empId;
+      // 選択を保持したまま再描画
+      if (sel) sel.value = currentEmpId;
       renderAttendanceTable(y, m);
     });
   document.getElementById('punchEditorModal').remove();
@@ -240,6 +244,7 @@ function hideCSVImport() {
 function renderAttendanceTable(year, month) {
   const sel = document.getElementById('attEmpSel');
   if (!sel) return;
+  const savedEmpId = sel.value; // 現在の選択を保存
   const empId = parseInt(sel.value);
   const emp = employees.find(e=>e.id===empId);
   if (!emp) return;
@@ -352,6 +357,9 @@ function renderAttendanceTable(year, month) {
   </tfoot></table></div>`;
 
   document.getElementById('attTableWrap').innerHTML = html;
+  // 従業員選択を復元
+  const selAfter = document.getElementById('attEmpSel');
+  if (selAfter && savedEmpId) selAfter.value = savedEmpId;
 }
 
 function setAtt(empId, dateStr, field, value, year, month) {
@@ -381,11 +389,15 @@ function setAttFull(empId, dateStr, field, value, actualYear, actualMonth) {
     attendance[ym][empId][dateStr][field] = v;
     path.update({ [field]: v });
   }
-  // 合計行を再計算・再描画
+  // 合計行を再計算・再描画（現在選択中のスタッフを維持）
   setTimeout(function() {
     const y = parseInt(document.getElementById('targetYear')?.value || actualYear);
     const m = parseInt(document.getElementById('targetMonth')?.value || actualMonth);
+    const sel = document.getElementById('attEmpSel');
+    const currentEmpId = sel ? sel.value : String(empId);
     renderAttendanceTable(y, m);
+    // 再描画後も選択を維持
+    if (sel) sel.value = currentEmpId;
   }, 300);
 }
 
