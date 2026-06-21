@@ -117,25 +117,39 @@ function savePunchEditor(empId, dateStr, dy, dm) {
   }).filter(Boolean);
 
   // 実働・深夜を自動計算
-  let actual = 0, midnight = 0;
+  let actual = 0, midnight = 0, dailyOT = 0;
   if (punchIn && punchOut) {
     const totalMins  = calcBreakMinutes(punchIn, punchOut);
     const breakMins  = breaks.reduce((s,b) => s + (b.minutes||0), 0);
-    actual   = Math.round((totalMins - breakMins) / 60 * 10) / 10;
+    const netMins    = Math.max(0, totalMins - breakMins);
+    actual   = Math.round(netMins / 60 * 100) / 100; // 分単位精度
+    dailyOT  = Math.round(Math.max(0, netMins - 480) / 60 * 100) / 100;
     midnight = calcMidnight(punchOut, actual);
   }
 
   const ym  = `${dy}-${String(dm).padStart(2,'0')}`;
-  const existing = ((attendance[ym]||{})[empId]||{})[dateStr] || {};
+  if (!attendance[ym]) attendance[ym] = {};
+  if (!attendance[ym][empId]) attendance[ym][empId] = {};
+  const existing = attendance[ym][empId][dateStr] || {};
   const updated  = {
     ...existing,
     punchIn, punchOut, breaks,
     actual:   actual   || existing.actual   || 0,
+    dailyOT:  dailyOT  || existing.dailyOT  || 0,
     midnight: midnight || existing.midnight || 0,
     source:   'manual',
   };
 
-  db.ref(`payroll/attendance/${ym}/${empId}/${dateStr}`).update(updated);
+  // メモリ更新
+  attendance[ym][empId][dateStr] = updated;
+
+  db.ref(`payroll/attendance/${ym}/${empId}/${dateStr}`).update(updated)
+    .then(function() {
+      // 保存後に再描画
+      const y = parseInt(document.getElementById('targetYear')?.value || dy);
+      const m = parseInt(document.getElementById('targetMonth')?.value || dm);
+      renderAttendanceTable(y, m);
+    });
   document.getElementById('punchEditorModal').remove();
 }
 
