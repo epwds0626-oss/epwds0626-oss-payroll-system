@@ -367,6 +367,12 @@ function setAttFull(empId, dateStr, field, value, actualYear, actualMonth) {
     attendance[ym][empId][dateStr][field] = v;
     path.update({ [field]: v });
   }
+  // 合計行を再計算・再描画
+  setTimeout(function() {
+    const y = parseInt(document.getElementById('targetYear')?.value || actualYear);
+    const m = parseInt(document.getElementById('targetMonth')?.value || actualMonth);
+    renderAttendanceTable(y, m);
+  }, 300);
 }
 
 // CSV取込
