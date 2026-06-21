@@ -157,15 +157,29 @@ function renderAttendance(year, month) {
     <strong>週マタギ計算</strong>：期間をまたぐ週も自動で週40h超えを計算します。</div>
   </div>
 
-  <div class="card" id="csvImportCard" style="display:none">
-    <div class="card-title">📋 CSV一括取込</div>
+  <div class="card" id="csvImportCard" style="display:none;border:2px solid #e8a020;">
+    <div class="card-title" style="color:#b07d00;">📂 エクセルCSV一括取込</div>
     <div class="alert alert-info"><span>📌</span>
-    <div>形式：<code>氏名,日付(YYYY/MM/DD),実働時間(h),深夜時間(h),休日(0/1)</code><br>
-    1行目にヘッダがある場合は自動スキップします。</div></div>
-    <textarea id="csvPasteArea" style="width:100%;height:120px;font-family:monospace;font-size:12px;border:1px solid #dce3ec;border-radius:8px;padding:10px" placeholder="ここにCSVデータを貼り付け..."></textarea>
-    <div style="display:flex;gap:8px;margin-top:10px">
-      <button class="btn-primary" onclick="importCSV(${year},${month})">取込実行</button>
+    <div>
+      <strong>必須列：</strong>スタッフ名, 日付(YYYY/MM/DD), 出勤, 退勤, 休憩入1, 休憩終1, 休憩入2, 休憩終2, 休憩入3, 休憩終3<br>
+      <span style="font-size:12px;color:#666;">※ 社員はランチ前・ランチ後・ディナー休憩の3回まで対応。パートは休憩列を空白でOK。</span>
+    </div></div>
+    <div style="margin-bottom:10px;">
+      <button class="btn-outline" onclick="downloadAttCsvTemplate()" style="font-size:12px;">📄 CSVテンプレートをダウンロード</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+      <label style="font-size:13px;font-weight:600;">CSVファイル：</label>
+      <input type="file" id="attCsvFileInput" accept=".csv" onchange="previewAttCsv(this,${year},${month})">
+    </div>
+    <div id="attCsvPreview" style="display:none;margin-bottom:10px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">📋 取込プレビュー</div>
+      <div id="attCsvPreviewTable" style="overflow-x:auto;max-height:260px;overflow-y:auto;border:1px solid #dce3ec;border-radius:8px;"></div>
+      <div id="attCsvParseError" style="color:#c00;font-size:12px;margin-top:6px;display:none;"></div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <button class="btn-primary" id="attCsvImportBtn" onclick="execAttCsvImport(${year},${month})" style="display:none;">📥 取込実行</button>
       <button class="btn-outline" onclick="hideCSVImport()">キャンセル</button>
+      <span id="attCsvStatus" style="font-size:13px;color:#555;"></span>
     </div>
   </div>
 
@@ -321,45 +335,201 @@ function setAttFull(empId, dateStr, field, value, actualYear, actualMonth) {
 }
 
 // CSV取込
-function importCSV(year, month) {
-  const raw = document.getElementById('csvPasteArea').value.trim();
-  if (!raw) { showToast('CSVを貼り付けてください','error'); return; }
+// -------- 勤怠入力ページ CSV取込 --------
+let attCsvParsedRows = [];
 
-  const lines = raw.split('\n').map(l=>l.trim()).filter(Boolean);
-  let imported = 0, skipped = 0;
+function downloadAttCsvTemplate() {
+  const header = 'スタッフ名,日付,出勤,退勤,休憩入1,休憩終1,休憩入2,休憩終2,休憩入3,休憩終3';
+  const samples = [
+    '青木,2026/05/21,07:43,21:44,10:10,10:21,15:29,16:50,,',
+    '原,2026/05/21,07:42,21:58,10:12,10:21,,,,',
+    '小沼,2026/05/21,08:00,17:00,12:00,13:00,,,,',
+    '武田,2026/05/21,11:00,21:00,15:00,16:00,,,,'
+  ];
+  const csv = [header, ...samples].join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '勤怠CSV_テンプレート.csv';
+  a.click();
+}
 
-  const ym = getYM(year, month);
-  if (!attendance[ym]) attendance[ym] = {};
+function timeToH(str) {
+  if (!str) return null;
+  const [h, m] = str.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return null;
+  return h + m / 60;
+}
 
-  for (const line of lines) {
-    const cols = line.split(',').map(c=>c.trim().replace(/"/g,''));
-    if (cols[0]==='氏名'||cols[0]==='name') continue; // ヘッダスキップ
-    if (cols.length < 3) { skipped++; continue; }
+function previewAttCsv(input, year, month) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    let text = e.target.result.replace(/^\uFEFF/, '');
+    parseAttCsv(text, year, month);
+  };
+  reader.readAsText(file, 'UTF-8');
+}
 
-    const [nameRaw, dateRaw, actualRaw, midnightRaw, holidayRaw] = cols;
+function parseAttCsv(text, year, month) {
+  const errEl  = document.getElementById('attCsvParseError');
+  const prevEl = document.getElementById('attCsvPreview');
+  const btnEl  = document.getElementById('attCsvImportBtn');
+  const stEl   = document.getElementById('attCsvStatus');
+  errEl.style.display = 'none';
+  btnEl.style.display = 'none';
+  stEl.textContent = '';
+  attCsvParsedRows = [];
 
-    // 氏名マッチ（前後スペース除去・部分一致）
-    const emp = employees.find(e=>e.name.replace(/\s/g,'')===nameRaw.replace(/\s/g,'') || e.name===nameRaw);
-    if (!emp) { skipped++; console.warn('不明な従業員:', nameRaw); continue; }
-
-    // 日付パース
-    const dateStr = dateRaw.replace(/\//g,'-');
-    const [y,mo,d] = dateStr.split('-').map(Number);
-    if (!y||!mo||!d) { skipped++; continue; }
-
-    if (!attendance[ym][emp.id]) attendance[ym][emp.id] = {};
-    attendance[ym][emp.id][dateStr] = {
-      actual:   parseFloat(actualRaw)||0,
-      midnight: parseFloat(midnightRaw)||0,
-      holiday:  parseInt(holidayRaw)||0,
-    };
-    imported++;
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) {
+    errEl.textContent = 'CSVにデータがありません。';
+    errEl.style.display = 'block';
+    prevEl.style.display = 'block';
+    return;
   }
 
-  saveLS('attendance', attendance);
-  hideCSVImport();
-  renderAttendanceTable(year, month);
-  showToast(`${imported}件取込完了（スキップ${skipped}件）`);
+  // ヘッダ行スキップ
+  let startIdx = 0;
+  const firstCell = lines[0].split(',')[0].trim();
+  if (firstCell === 'スタッフ名' || firstCell === '氏名' || firstCell === 'name') startIdx = 1;
+
+  const errors = [];
+  const rows = [];
+  const timeRe = /^\d{1,2}:\d{2}$/;
+
+  for (let i = startIdx; i < lines.length; i++) {
+    const cols = lines[i].split(',').map(c => c.trim().replace(/"/g, ''));
+    const [nameRaw, dateRaw, punchIn, punchOut, b1in, b1out, b2in, b2out, b3in, b3out] = cols;
+
+    if (!nameRaw || !dateRaw || !punchIn || !punchOut) {
+      errors.push(`行${i+1}: スタッフ名・日付・出退勤が必要です`);
+      continue;
+    }
+
+    // 氏名マッチ
+    const emp = employees.find(e => e.name.replace(/\s/g,'') === nameRaw.replace(/\s/g,''));
+    if (!emp) {
+      errors.push(`行${i+1}: 「${nameRaw}」は給与システムに存在しません`);
+      continue;
+    }
+
+    // 日付正規化
+    const dateStr = dateRaw.replace(/\//g, '-');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      errors.push(`行${i+1}: 日付はYYYY/MM/DD形式で入力してください (${dateRaw})`);
+      continue;
+    }
+
+    // 時刻バリデーション
+    if (!timeRe.test(punchIn) || !timeRe.test(punchOut)) {
+      errors.push(`行${i+1}: 出退勤はHH:MM形式で入力してください`);
+      continue;
+    }
+
+    // 休憩計算
+    let breakMins = 0;
+    const breaks = [];
+    for (const [bi, bo] of [[b1in,b1out],[b2in,b2out],[b3in,b3out]]) {
+      if (bi && bo && timeRe.test(bi) && timeRe.test(bo)) {
+        const mins = Math.round((timeToH(bo) - timeToH(bi)) * 60);
+        if (mins > 0) { breakMins += mins; breaks.push({ start:bi, end:bo, minutes:mins }); }
+      }
+    }
+
+    // 実労働時間
+    let work = timeToH(punchOut) - timeToH(punchIn);
+    if (work < 0) work += 24;
+    const netH = Math.max(0, Math.round((work - breakMins/60) * 10) / 10);
+    const dailyOT = Math.max(0, Math.round((netH - 8) * 10) / 10);
+
+    // 深夜時間（22時以降）
+    let midnight = 0;
+    const outH = timeToH(punchOut);
+    if (outH >= 22) midnight = Math.round((outH - 22) * 10) / 10;
+    else if (outH < 5) midnight = Math.round((outH + 2) * 10) / 10;
+
+    rows.push({ emp, dateStr, punchIn, punchOut, breakMins, breaks, netH, dailyOT, midnight });
+  }
+
+  attCsvParsedRows = rows;
+
+  if (errors.length) {
+    errEl.innerHTML = '<strong>⚠ エラー（スキップ）：</strong><br>' + errors.join('<br>');
+    errEl.style.display = 'block';
+  }
+
+  if (!rows.length) {
+    document.getElementById('attCsvPreviewTable').innerHTML =
+      '<div style="padding:12px;color:#c00;">取込できる行がありません。</div>';
+    prevEl.style.display = 'block';
+    return;
+  }
+
+  let tbl = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  tbl += '<thead><tr style="background:#f5f5f5;position:sticky;top:0;">';
+  for (const h of ['スタッフ','日付','出勤','退勤','休憩(分)','実労働h','残業h','深夜h']) {
+    tbl += `<th style="padding:5px 8px;border:1px solid #ddd;white-space:nowrap;">${h}</th>`;
+  }
+  tbl += '</tr></thead><tbody>';
+  for (const r of rows) {
+    tbl += `<tr>
+      <td style="padding:4px 8px;border:1px solid #eee;">${r.emp.name}</td>
+      <td style="padding:4px 8px;border:1px solid #eee;">${r.dateStr.replace(/-/g,'/')}</td>
+      <td style="padding:4px 8px;border:1px solid #eee;">${r.punchIn}</td>
+      <td style="padding:4px 8px;border:1px solid #eee;">${r.punchOut}</td>
+      <td style="padding:4px 8px;border:1px solid #eee;text-align:right;">${r.breakMins}</td>
+      <td style="padding:4px 8px;border:1px solid #eee;text-align:right;font-weight:700;color:#1a5fa0;">${r.netH}</td>
+      <td style="padding:4px 8px;border:1px solid #eee;text-align:right;color:${r.dailyOT>0?'#c0001a':'#666'};">${r.dailyOT}</td>
+      <td style="padding:4px 8px;border:1px solid #eee;text-align:right;color:${r.midnight>0?'#6b2fa0':'#666'};">${r.midnight}</td>
+    </tr>`;
+  }
+  tbl += '</tbody></table>';
+  document.getElementById('attCsvPreviewTable').innerHTML = tbl;
+  prevEl.style.display = 'block';
+  btnEl.style.display = 'inline-block';
+  stEl.textContent = `${rows.length}件を取込できます`;
+}
+
+function execAttCsvImport(year, month) {
+  if (!attCsvParsedRows.length) return;
+  if (!confirm(`${attCsvParsedRows.length}件を取込みます。よろしいですか？`)) return;
+
+  const updates = {};
+  for (const r of attCsvParsedRows) {
+    const [dy, dm] = r.dateStr.split('-').map(Number);
+    const payM = dm + (dy >= 21 ? 1 : 0);
+    const payY = payM > 12 ? dy + 1 : dy;
+    const ym = `${payY}-${String(payM > 12 ? payM - 12 : payM).padStart(2,'0')}`;
+    updates[`${ym}/${r.emp.id}/${r.dateStr}`] = {
+      actual:     r.netH,
+      dailyOT:    r.dailyOT,
+      midnight:   r.midnight,
+      midnightOT: Math.min(r.midnight, r.dailyOT),
+      punchIn:    r.punchIn,
+      punchOut:   r.punchOut,
+      breakMins:  r.breakMins,
+      breakCount: r.breaks.length,
+      breaks:     r.breaks,
+      source:     'csv',
+    };
+  }
+
+  db.ref('payroll/attendance').update(updates)
+    .then(() => {
+      hideCSVImport();
+      document.getElementById('attCsvFileInput').value = '';
+      attCsvParsedRows = [];
+      renderAttendanceTable(year, month);
+      showToast(`✅ ${Object.keys(updates).length}件を取込みました`);
+    })
+    .catch(e => showToast('取込エラー：' + e.message, 'error'));
+}
+
+function importCSV(year, month) {
+  // 旧貼り付け方式（後方互換）
+  showToast('ファイル選択からCSVを取込んでください');
 }
 
 function exportAttendanceCSV(year, month) {
