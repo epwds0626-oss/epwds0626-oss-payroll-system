@@ -523,6 +523,28 @@ function execAttCsvImport(year, month) {
 
   db.ref('payroll/attendance').update(updates)
     .then(() => {
+      // localStorageのattendanceも同時に更新（画面反映のため）
+      for (const r of attCsvParsedRows) {
+        const [dy, dm] = r.dateStr.split('-').map(Number);
+        const payM = dm + (dy >= 21 ? 1 : 0);
+        const payY = payM > 12 ? dy + 1 : dy;
+        const ym = `${payY}-${String(payM > 12 ? payM - 12 : payM).padStart(2,'0')}`;
+        if (!attendance[ym]) attendance[ym] = {};
+        if (!attendance[ym][r.emp.id]) attendance[ym][r.emp.id] = {};
+        attendance[ym][r.emp.id][r.dateStr] = {
+          actual:     r.netH,
+          dailyOT:    r.dailyOT,
+          midnight:   r.midnight,
+          midnightOT: Math.min(r.midnight, r.dailyOT),
+          punchIn:    r.punchIn,
+          punchOut:   r.punchOut,
+          breakMins:  r.breakMins,
+          breakCount: r.breaks.length,
+          breaks:     r.breaks,
+          source:     'csv',
+        };
+      }
+      saveLS('attendance', attendance);
       hideCSVImport();
       document.getElementById('attCsvFileInput').value = '';
       attCsvParsedRows = [];
