@@ -293,12 +293,13 @@ function renderAttendanceTable(year, month) {
     <tr class="total-row">
       <td colspan="2">期間計</td>
       <td>${hm(result.totalActual)}</td>
-      <td><strong>${hm(result.monthDailyOT)}</strong></td>
+      <td><strong>${hm(result.monthOT)}</strong><br><span style="font-size:10px;font-weight:400">日超:${hm(result.monthDailyOT)} 週超:${hm(result.monthWeekOT)}</span></td>
       <td>${hm(result.monthMidnight)}</td>
       <td>${hm(result.monthMidnightOT)}</td>
       <td>${hm(result.monthHolidayLegal)}</td>
       <td>${hm(result.monthHolidayNonLegal)}</td>
-      <td colspan="3">週40h超残業：${hm(result.monthWeekOT)}　残業計：<strong>${hm(result.monthOT)}</strong></td>
+      <td></td><td></td>
+      <td style="font-size:11px">残業計：<strong>${hm(result.monthOT)}</strong>（日超${hm(result.monthDailyOT)}＋週超${hm(result.monthWeekOT)}）</td>
     </tr>
   </tfoot></table></div>`;
 
