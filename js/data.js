@@ -649,7 +649,7 @@ function calcWeeklyOT(dailyList, year, month) {
     let wkHolidayLegal=0, wkHolidayNonLegal=0;
 
     for (const d of wkData.days) {
-      wkActual          += d.actual          || 0;
+      wkActual          += Math.round((d.actual||0) * 60) / 60; // 分単位精度
       wkDailyOT         += d.dailyOT         || 0;
       wkMidnight        += d.midnight        || 0;
       wkMidnightOT      += d.midnightOT      || 0;
@@ -675,7 +675,7 @@ function calcWeeklyOT(dailyList, year, month) {
 
     const actualInPeriod = wkData.days
       .filter(d => isInPayPeriod(d.date, year, month))
-      .reduce((s,d) => s + (d.actual||0), 0);
+      .reduce((s,d) => s + Math.round((d.actual||0) * 60), 0); // 分単位で集計
     totalActual += actualInPeriod;
 
     weeks.push({ start:wkStart, end:wkEnd, actual:wkActual,
@@ -695,7 +695,7 @@ function calcWeeklyOT(dailyList, year, month) {
     monthHolidayLegal:    r(monthHolidayLegal),
     monthHolidayNonLegal: r(monthHolidayNonLegal),
     monthHoliday:         r(monthHolidayLegal + monthHolidayNonLegal),
-    totalActual:          r(totalActual),
+    totalActual:          totalActual / 60, // 分単位集計→h変換（誤差なし）
   };
 }
 
