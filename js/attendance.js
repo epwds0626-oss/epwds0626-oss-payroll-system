@@ -415,8 +415,13 @@ function parseAttCsv(text, year, month) {
       continue;
     }
 
-    // 日付正規化
-    const dateStr = dateRaw.replace(/\//g, '-');
+    // 日付正規化（月日のゼロ埋め対応: 2026/5/22 → 2026-05-22）
+    const dateParts = dateRaw.replace(/\//g, '-').split('-');
+    if (dateParts.length !== 3) {
+      errors.push(`行${i+1}: 日付はYYYY/MM/DD形式で入力してください (${dateRaw})`);
+      continue;
+    }
+    const dateStr = `${dateParts[0]}-${String(Number(dateParts[1])).padStart(2,'0')}-${String(Number(dateParts[2])).padStart(2,'0')}`;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       errors.push(`行${i+1}: 日付はYYYY/MM/DD形式で入力してください (${dateRaw})`);
       continue;
