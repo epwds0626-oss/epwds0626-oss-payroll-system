@@ -162,7 +162,49 @@ tr:hover td { background: #f8faff; }
     <div class="alert alert-info">
       <span>💡</span>
       <div>スタッフが打刻したデータをリアルタイムで確認・取込できます。<br>
-      「給与システムへ取込」を実行すると、給与管理システムの勤怠データに自動で反映されます。</div>
+      「給与システムへ取込」を実行すると、給与管理システムの勤怠データに自動で反映されます。<br>
+      エクセル勤怠表からのCSV一括取込も対応しています。</div>
+    </div>
+
+
+    <!-- CSV一括取込 -->
+    <div class="card" style="border:2px solid #e8a020;">
+      <div class="card-title" style="color:#e8a020;">📂 エクセルCSV一括取込</div>
+      <div style="font-size:13px;color:#555;margin-bottom:14px;line-height:1.7;">
+        エクセル勤怠表を全スタッフ分まとめた<strong>CSV</strong>で取込します。<br>
+        <span style="color:#e8a020;font-weight:600;">必須列：</span>
+        スタッフ名, 日付(YYYY-MM-DD), 出勤, 退勤, 休憩入1, 休憩終1, 休憩入2, 休憩終2, 休憩入3, 休憩終3<br>
+        <span style="font-size:12px;color:#888;">※ 社員はランチ前・ランチ後・ディナー休憩の3回まで対応。パートは休憩列を空白でもOK。</span>
+      </div>
+
+      <!-- CSVサンプルDL -->
+      <div style="margin-bottom:12px;">
+        <button class="btn btn-primary" onclick="downloadCsvTemplate()" style="font-size:12px;padding:6px 14px;">
+          📄 CSVテンプレートをダウンロード
+        </button>
+      </div>
+
+      <!-- ファイル選択 -->
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+        <label style="font-size:13px;font-weight:600;color:#333;">CSVファイル：</label>
+        <input type="file" id="csvFileInput" accept=".csv" style="font-size:13px;"
+          onchange="previewCsv(this)">
+      </div>
+
+      <!-- プレビュー -->
+      <div id="csvPreview" style="display:none;margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:600;color:#333;margin-bottom:6px;">📋 取込プレビュー</div>
+        <div id="csvPreviewTable" style="overflow-x:auto;max-height:280px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:8px;"></div>
+        <div id="csvParseError" style="color:#c00;font-size:12px;margin-top:6px;display:none;"></div>
+      </div>
+
+      <!-- 取込実行 -->
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <button class="btn btn-accent" id="csvImportBtn" onclick="importCsv()" style="display:none;">
+          📥 CSVを給与システムへ取込
+        </button>
+        <span id="csvImportStatus" style="font-size:13px;color:#555;"></span>
+      </div>
     </div>
 
     <!-- 月選択 -->
@@ -377,6 +419,216 @@ function renderMonthlyTable(year, month, raw) {
       <thead><tr><th class="tl">氏名</th><th>店舗</th>${headerDates}<th>合計</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
+}
+
+
+// ======== CSV一括取込 ========
+let csvParsedRows = [];
+
+function downloadCsvTemplate() {
+  const header = 'スタッフ名,日付,出勤,退勤,休憩入1,休憩終1,休憩入2,休憩終2,休憩入3,休憩終3';
+  const sample = [
+    '青木,2026-05-21,07:43,21:44,10:10,10:21,15:29,16:50,,',
+    '原,2026-05-21,07:42,21:58,10:12,10:21,15:30,16:51,,',
+    '小沼,2026-05-21,08:00,17:00,12:00,13:00,,,,',
+    '武田,2026-05-21,11:00,21:00,15:00,16:00,,,,'
+  ];
+  const csv = [header, ...sample].join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '勤怠CSV_テンプレート.csv';
+  a.click();
+}
+
+function previewCsv(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    let text = e.target.result;
+    // BOM除去
+    text = text.replace(/^\uFEFF/, '');
+    parseCsvAndPreview(text);
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function parseCsvAndPreview(text) {
+  const errEl = document.getElementById('csvParseError');
+  const previewEl = document.getElementById('csvPreview');
+  const btnEl = document.getElementById('csvImportBtn');
+  const statusEl = document.getElementById('csvImportStatus');
+  errEl.style.display = 'none';
+  btnEl.style.display = 'none';
+  statusEl.textContent = '';
+  csvParsedRows = [];
+
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) {
+    errEl.textContent = 'CSVにデータがありません。';
+    errEl.style.display = 'block';
+    previewEl.style.display = 'block';
+    return;
+  }
+
+  // ヘッダー行スキップ（1行目がスタッフ名でなければヘッダーとみなす）
+  let startIdx = 0;
+  const firstCell = lines[0].split(',')[0].trim();
+  if (firstCell === 'スタッフ名' || firstCell === '氏名' || firstCell === 'name') {
+    startIdx = 1;
+  }
+
+  const errors = [];
+  const rows = [];
+
+  for (let i = startIdx; i < lines.length; i++) {
+    const cols = lines[i].split(',').map(c => c.trim());
+    const [name, dateStr, punchIn, punchOut, b1in, b1out, b2in, b2out, b3in, b3out] = cols;
+
+    if (!name || !dateStr || !punchIn || !punchOut) {
+      errors.push(`行${i+1}: スタッフ名・日付・出退勤が必要です (${lines[i]})`);
+      continue;
+    }
+    // 日付バリデーション
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      errors.push(`行${i+1}: 日付はYYYY-MM-DD形式で入力してください (${dateStr})`);
+      continue;
+    }
+    // 時刻バリデーション
+    const timeRe = /^\d{1,2}:\d{2}$/;
+    if (!timeRe.test(punchIn) || !timeRe.test(punchOut)) {
+      errors.push(`行${i+1}: 出退勤は HH:MM 形式で入力してください`);
+      continue;
+    }
+
+    // 休憩計算（分）
+    let breakMins = 0;
+    const breaks = [];
+    const bPairs = [[b1in,b1out],[b2in,b2out],[b3in,b3out]];
+    for (const [bi, bo] of bPairs) {
+      if (bi && bo && timeRe.test(bi) && timeRe.test(bo)) {
+        const mins = Math.round((timeToHour(bo) - timeToHour(bi)) * 60);
+        if (mins > 0) {
+          breakMins += mins;
+          breaks.push({ start: bi, end: bo, minutes: mins });
+        }
+      }
+    }
+
+    // 実労働時間
+    let workHours = timeToHour(punchOut) - timeToHour(punchIn);
+    if (workHours < 0) workHours += 24; // 日跨ぎ
+    const netHours = Math.max(0, Math.round((workHours - breakMins/60) * 10) / 10);
+
+    // 日8h超残業
+    const dailyOT = Math.max(0, Math.round((netHours - 8) * 10) / 10);
+
+    // 深夜時間（22時以降）
+    let midnight = 0;
+    const outH = timeToHour(punchOut);
+    if (outH >= 22) midnight = Math.round((outH - 22) * 10) / 10;
+    else if (outH < 5) midnight = Math.round((outH + 2) * 10) / 10;
+
+    rows.push({
+      name, dateStr, punchIn, punchOut,
+      breakMins, breaks,
+      netHours, dailyOT, midnight,
+      midnightOT: Math.min(midnight, dailyOT)
+    });
+  }
+
+  csvParsedRows = rows;
+
+  // エラー表示
+  if (errors.length) {
+    errEl.innerHTML = '<strong>⚠ 以下の行にエラーがあります（スキップされます）：</strong><br>' + errors.join('<br>');
+    errEl.style.display = 'block';
+  }
+
+  // プレビューテーブル
+  if (rows.length === 0) {
+    document.getElementById('csvPreviewTable').innerHTML = '<div style="padding:12px;color:#c00;">取込できる行がありません。フォーマットを確認してください。</div>';
+    previewEl.style.display = 'block';
+    return;
+  }
+
+  let tbl = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  tbl += '<thead><tr style="background:#f5f5f5;position:sticky;top:0;">';
+  for (const h of ['スタッフ','日付','出勤','退勤','休憩(分)','実労働h','日超残業h','深夜h']) {
+    tbl += `<th style="padding:6px 8px;border:1px solid #ddd;text-align:left;white-space:nowrap;">${h}</th>`;
+  }
+  tbl += '</tr></thead><tbody>';
+  for (const r of rows) {
+    tbl += `<tr>
+      <td style="padding:5px 8px;border:1px solid #eee;">${r.name}</td>
+      <td style="padding:5px 8px;border:1px solid #eee;">${r.dateStr}</td>
+      <td style="padding:5px 8px;border:1px solid #eee;">${r.punchIn}</td>
+      <td style="padding:5px 8px;border:1px solid #eee;">${r.punchOut}</td>
+      <td style="padding:5px 8px;border:1px solid #eee;text-align:right;">${r.breakMins}</td>
+      <td style="padding:5px 8px;border:1px solid #eee;text-align:right;font-weight:700;color:#1a5fa0;">${r.netHours}</td>
+      <td style="padding:5px 8px;border:1px solid #eee;text-align:right;color:${r.dailyOT>0?'#c0001a':'#666'};">${r.dailyOT}</td>
+      <td style="padding:5px 8px;border:1px solid #eee;text-align:right;color:${r.midnight>0?'#6b2fa0':'#666'};">${r.midnight}</td>
+    </tr>`;
+  }
+  tbl += '</tbody></table>';
+
+  document.getElementById('csvPreviewTable').innerHTML = tbl;
+  previewEl.style.display = 'block';
+  btnEl.style.display = 'inline-block';
+  statusEl.textContent = `${rows.length}件を取込できます`;
+}
+
+function importCsv() {
+  if (!csvParsedRows.length) {
+    alert('取込データがありません。CSVファイルを選択してください。');
+    return;
+  }
+  if (!confirm(`${csvParsedRows.length}件のデータを給与システムへ取込みます。よろしいですか？`)) return;
+
+  const updates = {};
+  for (const r of csvParsedRows) {
+    const [dy, dm] = r.dateStr.split('-').map(Number);
+    // 20日締めの給与月計算
+    const payM = dy >= 21 ? dm + 1 : dm;
+    const payY = payM > 12 ? dy + 1 : dy;
+    const ym = `${payY}-${String(payM > 12 ? payM - 12 : payM).padStart(2,'0')}`;
+
+    // empIdはスタッフ名をそのまま使う（STAFF_LISTのidと照合）
+    const staffRec = (typeof STAFF_LIST !== 'undefined')
+      ? STAFF_LIST.find(s => s.name === r.name || s.id === r.name)
+      : null;
+    const empId = staffRec ? staffRec.id : r.name;
+
+    updates[`${ym}/${empId}/${r.dateStr}`] = {
+      actual:     r.netHours,
+      dailyOT:    r.dailyOT,
+      midnight:   r.midnight,
+      midnightOT: r.midnightOT,
+      punchIn:    r.punchIn,
+      punchOut:   r.punchOut,
+      breakMins:  r.breakMins,
+      breakCount: r.breaks.length,
+      breaks:     r.breaks,
+      source:     'csv',
+    };
+  }
+
+  const statusEl = document.getElementById('csvImportStatus');
+  statusEl.textContent = '書込み中...';
+
+  db.ref('payroll/attendance').update(updates)
+    .then(() => {
+      statusEl.textContent = `✅ ${csvParsedRows.length}件の取込が完了しました`;
+      document.getElementById('csvImportBtn').style.display = 'none';
+      document.getElementById('csvFileInput').value = '';
+      csvParsedRows = [];
+      alert(`✅ CSV取込完了\n\n${Object.keys(updates).length}件を給与システムへ反映しました。\n「勤怠入力」で確認・修正できます。`);
+    })
+    .catch(e => {
+      statusEl.textContent = '⚠ 取込エラー';
+      alert('取込エラー：' + e.message);
+    });
 }
 
 // -------- 給与システムへ取込 --------
