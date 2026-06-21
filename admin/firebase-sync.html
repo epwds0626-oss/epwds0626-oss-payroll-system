@@ -173,7 +173,7 @@ tr:hover td { background: #f8faff; }
       <div style="font-size:13px;color:#555;margin-bottom:14px;line-height:1.7;">
         エクセル勤怠表を全スタッフ分まとめた<strong>CSV</strong>で取込します。<br>
         <span style="color:#e8a020;font-weight:600;">必須列：</span>
-        スタッフ名, 日付(YYYY-MM-DD), 出勤, 退勤, 休憩入1, 休憩終1, 休憩入2, 休憩終2, 休憩入3, 休憩終3<br>
+        スタッフ名, 日付(YYYY/MM/DD), 出勤, 退勤, 休憩入1, 休憩終1, 休憩入2, 休憩終2, 休憩入3, 休憩終3<br>
         <span style="font-size:12px;color:#888;">※ 社員はランチ前・ランチ後・ディナー休憩の3回まで対応。パートは休憩列を空白でもOK。</span>
       </div>
 
@@ -428,10 +428,10 @@ let csvParsedRows = [];
 function downloadCsvTemplate() {
   const header = 'スタッフ名,日付,出勤,退勤,休憩入1,休憩終1,休憩入2,休憩終2,休憩入3,休憩終3';
   const sample = [
-    '青木,2026-05-21,07:43,21:44,10:10,10:21,15:29,16:50,,',
-    '原,2026-05-21,07:42,21:58,10:12,10:21,15:30,16:51,,',
-    '小沼,2026-05-21,08:00,17:00,12:00,13:00,,,,',
-    '武田,2026-05-21,11:00,21:00,15:00,16:00,,,,'
+    '青木,2026/05/21,07:43,21:44,10:10,10:21,15:29,16:50,,',
+    '原,2026/05/21,07:42,21:58,10:12,10:21,15:30,16:51,,',
+    '小沼,2026/05/21,08:00,17:00,12:00,13:00,,,,',
+    '武田,2026/05/21,11:00,21:00,15:00,16:00,,,,'
   ];
   const csv = [header, ...sample].join('\n');
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -492,7 +492,7 @@ function parseCsvAndPreview(text) {
     }
     // 日付バリデーション
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      errors.push(`行${i+1}: 日付はYYYY-MM-DD形式で入力してください (${dateStr})`);
+      errors.push(`行${i+1}: 日付はYYYY/MM/DD形式で入力してください (${dateStr})`);
       continue;
     }
     // 時刻バリデーション
@@ -531,7 +531,7 @@ function parseCsvAndPreview(text) {
     else if (outH < 5) midnight = Math.round((outH + 2) * 10) / 10;
 
     rows.push({
-      name, dateStr, punchIn, punchOut,
+      name, dateStr: normDate, punchIn, punchOut,
       breakMins, breaks,
       netHours, dailyOT, midnight,
       midnightOT: Math.min(midnight, dailyOT)
@@ -584,23 +584,41 @@ function importCsv() {
     alert('取込データがありません。CSVファイルを選択してください。');
     return;
   }
+
+  // STAFF_LISTが読み込まれているか確認
+  if (!STAFF_LIST || !STAFF_LIST.length) {
+    alert('スタッフマスタが読み込まれていません。\nページを再読み込みしてから再度お試しください。');
+    return;
+  }
+
+  // スタッフ名→empId(数値)の対応確認
+  const unmatchedNames = [];
+  for (const r of csvParsedRows) {
+    const found = STAFF_LIST.find(s => s.name === r.name);
+    if (!found) unmatchedNames.push(r.name);
+  }
+  const uniqueUnmatched = [...new Set(unmatchedNames)];
+  if (uniqueUnmatched.length) {
+    alert('⚠ 以下のスタッフ名が給与システムのマスタと一致しません:\n' + uniqueUnmatched.join('\n') + '\n\n給与システムのスタッフ名と完全一致させてください。');
+    return;
+  }
+
   if (!confirm(`${csvParsedRows.length}件のデータを給与システムへ取込みます。よろしいですか？`)) return;
 
   const updates = {};
   for (const r of csvParsedRows) {
-    const [dy, dm] = r.dateStr.split('-').map(Number);
+    const normDs = r.dateStr.replace(/\//g, '-');
+    const [dy, dm] = normDs.split('-').map(Number);
     // 20日締めの給与月計算
-    const payM = dy >= 21 ? dm + 1 : dm;
+    const payM = dm + (dy >= 21 ? 1 : 0);
     const payY = payM > 12 ? dy + 1 : dy;
     const ym = `${payY}-${String(payM > 12 ? payM - 12 : payM).padStart(2,'0')}`;
 
-    // empIdはスタッフ名をそのまま使う（STAFF_LISTのidと照合）
-    const staffRec = (typeof STAFF_LIST !== 'undefined')
-      ? STAFF_LIST.find(s => s.name === r.name || s.id === r.name)
-      : null;
-    const empId = staffRec ? staffRec.id : r.name;
+    // empIdを数値で取得（給与システムのid）
+    const staffRec = STAFF_LIST.find(s => s.name === r.name);
+    const empId = staffRec.id; // 数値
 
-    updates[`${ym}/${empId}/${r.dateStr}`] = {
+    updates[`${ym}/${empId}/${normDs}`] = {
       actual:     r.netHours,
       dailyOT:    r.dailyOT,
       midnight:   r.midnight,
