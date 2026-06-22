@@ -829,8 +829,8 @@ function getMonthSummary(empId, year, month) {
   const monthMidnightOT  = sumMidnightOTMins      / 60;
   const monthHolidayLegal    = sumHolidayLegalMins    / 60;
   const monthHolidayNonLegal = sumHolidayNonLegalMins / 60;
-  // 週超残業はcalcWeeklyOTの結果を流用
-  const monthWeekOT      = result.monthWeekOT;
+  // 週超残業 = calcWeeklyOTの総残業 - 直接合算の日超（勤怠入力ページと同じ計算）
+  const monthWeekOT      = Math.max(0, result.monthOT - monthDailyOT);
   const monthOT          = monthDailyOT + monthWeekOT;
 
   return {
