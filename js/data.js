@@ -764,25 +764,30 @@ function getExtendedDailyList(empId, year, month) {
   const list = [];
   const { startDate, endDate } = getPayPeriod(year, month);
 
-  // 週マタギのため、計算期間の前後1週間もスキャン（前々月末〜翌月初）
-  const prevPrev = month <= 2 ? [year-1, month+10] : [year, month-2];
-  const next     = month === 12 ? [year+1, 1] : [year, month+1];
-  const monthsToScan = [
-    prevPrev,
-    [month===1?year-1:year, month===1?12:month-1],
-    [year, month],
-    next,
-  ];
+  // 週マタギのため、給与期間の前後1週間（7日）だけを取得範囲とする
+  // 期間外の過去データを大量に入れても週超計算が変わらないようにする
+  const start = new Date(startDate);
+  const end   = new Date(endDate);
+  const rangeStart = new Date(start); rangeStart.setDate(rangeStart.getDate() - 6);
+  const rangeEnd   = new Date(end);   rangeEnd.setDate(rangeEnd.getDate() + 6);
+
+  // スキャン対象月を絞る（前月・当月・翌月の3ヶ月だけ）
+  const prev = month === 1 ? [year-1, 12] : [year, month-1];
+  const next = month === 12 ? [year+1, 1] : [year, month+1];
+  const monthsToScan = [prev, [year, month], next];
 
   for (const [y,m] of monthsToScan) {
     const ym = getYM(y,m);
     const empData = (attendance[ym] && attendance[ym][empId]) || {};
     for (const [date, rec] of Object.entries(empData)) {
+      // 取得範囲外のデータは無視
+      const d = new Date(date);
+      if (d < rangeStart || d > rangeEnd) continue;
+
       const existing = list.findIndex(d=>d.date===date);
       if (existing === -1) {
         list.push({ date, ...recomputeRec(rec) });
       } else if (rec.source === 'csv' || rec.source === 'timecard') {
-        // CSVや打刻データは手動入力より優先して上書き
         list[existing] = { date, ...recomputeRec(rec) };
       }
     }
