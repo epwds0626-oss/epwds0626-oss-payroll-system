@@ -645,18 +645,25 @@ function calcWeeklyOT(dailyList, year, month) {
     endDt.setDate(endDt.getDate() + 6);
     const wkEnd = endDt.toISOString().slice(0,10);
 
-    let wkActual=0, wkDailyOT=0, wkMidnight=0, wkMidnightOT=0;
-    let wkHolidayLegal=0, wkHolidayNonLegal=0;
+    let wkActualMins=0, wkDailyOTMins=0, wkMidnightMins=0, wkMidnightOTMins=0;
+    let wkHolidayLegalMins=0, wkHolidayNonLegalMins=0;
 
     for (const d of wkData.days) {
-      wkActual          += Math.round((d.actual||0) * 60) / 60; // 分単位精度
-      wkDailyOT         += d.dailyOT         || 0;
-      wkMidnight        += d.midnight        || 0;
-      wkMidnightOT      += d.midnightOT      || 0;
-      wkHolidayLegal    += d.holidayLegal    || 0;
-      wkHolidayNonLegal += d.holidayNonLegal || 0;
-      if (d.holiday && !d.holidayLegal && !d.holidayNonLegal) wkHolidayNonLegal += d.holiday;
+      wkActualMins          += Math.round((d.actual       ||0) * 60); // 分単位精度
+      wkDailyOTMins         += Math.round((d.dailyOT      ||0) * 60);
+      wkMidnightMins        += Math.round((d.midnight     ||0) * 60);
+      wkMidnightOTMins      += Math.round((d.midnightOT   ||0) * 60);
+      wkHolidayLegalMins    += Math.round((d.holidayLegal ||0) * 60);
+      wkHolidayNonLegalMins += Math.round((d.holidayNonLegal||0) * 60);
+      if (d.holiday && !d.holidayLegal && !d.holidayNonLegal) wkHolidayNonLegalMins += Math.round((d.holiday||0) * 60);
     }
+    // 分単位 → h変換
+    const wkActual          = wkActualMins          / 60;
+    const wkDailyOT         = wkDailyOTMins         / 60;
+    const wkMidnight        = wkMidnightMins        / 60;
+    const wkMidnightOT      = wkMidnightOTMins      / 60;
+    const wkHolidayLegal    = wkHolidayLegalMins    / 60;
+    const wkHolidayNonLegal = wkHolidayNonLegalMins / 60;
 
     // 週40h超残業：日8h超分を除いた純週残業
     const wkWeekOT = Math.max(0, wkActual - 40 - wkDailyOT);
@@ -684,16 +691,17 @@ function calcWeeklyOT(dailyList, year, month) {
       holidayLegal:wkHolidayLegal, holidayNonLegal:wkHolidayNonLegal, daysInPeriod });
   }
 
-  const r = v => Math.round(v*10)/10;
+  // 分単位精度でhに変換（×60/60で誤差なし）
+  const rm = v => Math.round(v * 60) / 60;
   return {
     weeks,
-    monthOT:              r(monthOT),
-    monthDailyOT:         r(monthDailyOT),
-    monthWeekOT:          r(monthWeekOT),
-    monthMidnight:        r(monthMidnight),
-    monthMidnightOT:      r(monthMidnightOT),
-    monthHolidayLegal:    r(monthHolidayLegal),
-    monthHolidayNonLegal: r(monthHolidayNonLegal),
+    monthOT:              rm(monthOT),
+    monthDailyOT:         rm(monthDailyOT),
+    monthWeekOT:          rm(monthWeekOT),
+    monthMidnight:        rm(monthMidnight),
+    monthMidnightOT:      rm(monthMidnightOT),
+    monthHolidayLegal:    rm(monthHolidayLegal),
+    monthHolidayNonLegal: rm(monthHolidayNonLegal),
     monthHoliday:         r(monthHolidayLegal + monthHolidayNonLegal),
     totalActual:          totalActual / 60, // 分単位集計→h変換（誤差なし）
   };
