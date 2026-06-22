@@ -345,35 +345,42 @@ function renderAttendanceTable(year, month) {
     </tr>`;
   }
 
-  // 合計行
+  // 合計行：全列を画面表示行（empMap）から直接合算して一致させる
   const result = calcWeeklyOT(extended, year, month);
 
-  // 深夜・深夜残業・休日は画面表示行と一致させるため empMap から直接合算
+  let sumActualMins = 0, sumDailyOTMins = 0;
   let sumMidnightMins = 0, sumMidnightOTMins = 0;
   let sumHolidayLegalMins = 0, sumHolidayNonLegalMins = 0;
   for (let dt2 = new Date(start); dt2 <= end; dt2.setDate(dt2.getDate()+1)) {
     const rec2 = empMap[dt2.toISOString().slice(0,10)] || {};
-    sumMidnightMins        += Math.round((rec2.midnight       ||0) * 60);
-    sumMidnightOTMins      += Math.round((rec2.midnightOT     ||0) * 60);
-    sumHolidayLegalMins    += Math.round((rec2.holidayLegal   ||0) * 60);
-    sumHolidayNonLegalMins += Math.round((rec2.holidayNonLegal||0) * 60);
+    sumActualMins          += Math.round((rec2.actual          ||0) * 60);
+    sumDailyOTMins         += Math.round((rec2.dailyOT         ||0) * 60);
+    sumMidnightMins        += Math.round((rec2.midnight        ||0) * 60);
+    sumMidnightOTMins      += Math.round((rec2.midnightOT      ||0) * 60);
+    sumHolidayLegalMins    += Math.round((rec2.holidayLegal    ||0) * 60);
+    sumHolidayNonLegalMins += Math.round((rec2.holidayNonLegal ||0) * 60);
   }
+  const sumActual          = sumActualMins          / 60;
+  const sumDailyOT         = sumDailyOTMins         / 60;
   const sumMidnight        = sumMidnightMins        / 60;
   const sumMidnightOT      = sumMidnightOTMins      / 60;
   const sumHolidayLegal    = sumHolidayLegalMins    / 60;
   const sumHolidayNonLegal = sumHolidayNonLegalMins / 60;
+  // 週超残業 = calcWeeklyOTの週マタギ計算結果を使う
+  const sumWeekOT          = Math.max(0, result.monthOT - sumDailyOT);
+  const sumTotalOT         = sumDailyOT + sumWeekOT;
 
   html += `</tbody><tfoot>
     <tr class="total-row">
       <td colspan="2">期間計</td>
-      <td>${hm(result.totalActual)}</td>
-      <td><strong>${hm(result.monthOT)}</strong><br><span style="font-size:10px;font-weight:400">日超:${hm(result.monthDailyOT)} 週超:${hm(result.monthWeekOT)}</span></td>
+      <td>${hm(sumActual)}</td>
+      <td><strong>${hm(sumTotalOT)}</strong><br><span style="font-size:10px;font-weight:400">日超:${hm(sumDailyOT)} 週超:${hm(sumWeekOT)}</span></td>
       <td>${hm(sumMidnight)}</td>
       <td>${hm(sumMidnightOT)}</td>
       <td>${hm(sumHolidayLegal)}</td>
       <td>${hm(sumHolidayNonLegal)}</td>
       <td></td><td></td>
-      <td style="font-size:11px">残業計：<strong>${hm(result.monthOT)}</strong>（日超${hm(result.monthDailyOT)}＋週超${hm(result.monthWeekOT)}）</td>
+      <td style="font-size:11px">残業計：<strong>${hm(sumTotalOT)}</strong>（日超${hm(sumDailyOT)}＋週超${hm(sumWeekOT)}）</td>
     </tr>
   </tfoot></table></div>`;
 
