@@ -11,16 +11,16 @@ function attachPageEvents(page) {
 
   switch (page) {
     case 'attendance':
-      setTimeout(() => renderAttendanceTable(y, m), 0);
+      setTimeout(() => renderAttendanceTable(y, m), 50);
       break;
     case 'weekly':
       setTimeout(() => {
         const s = document.getElementById('weekEmpSel');
         if (s) renderWeekDetail(y, m);
-      }, 0);
+      }, 50);
       break;
     case 'payslip':
-      setTimeout(() => renderPayslipDetail(y, m), 0);
+      setTimeout(() => renderPayslipDetail(y, m), 50);
       break;
     case 'paid_leave':
       // nothing extra; the page renders fully from renderPaidLeave()
