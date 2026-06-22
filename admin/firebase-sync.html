@@ -524,7 +524,8 @@ function parseCsvAndPreview(text) {
     // 実労働時間
     let work = timeToHour(punchOut) - timeToHour(punchIn);
     if (work < 0) work += 24;
-    const netH    = Math.max(0, Math.round((work - breakMins/60) * 10) / 10);
+    const netHMins = Math.max(0, Math.round((work - breakMins/60) * 60));
+    const netH    = netHMins / 60; // 分単位精度
     const dailyOTMins = Math.max(0, Math.round((netH - 8) * 60));
     const dailyOT = dailyOTMins / 60; // 分単位精度
 
@@ -665,7 +666,7 @@ function importToPayroll() {
       const dailyOT = Math.round(otMins / 60 * 100) / 100;
 
       updates[`${ym}/${s.id}/${dateStr}`] = {
-        actual:     Math.round(netDur * 10) / 10,
+        actual:     Math.round(netDur * 60) / 60, // 分単位精度
         dailyOT:    dailyOT,
         midnight:   Math.round(midnight * 60) / 60, // 分単位精度
         midnightOT: Math.min(midnight, dailyOT),
@@ -729,7 +730,7 @@ function calcDurationNum(inStr, outStr) {
   if (!inStr || !outStr) return null;
   let diff = timeToHour(outStr) - timeToHour(inStr);
   if (diff < 0) diff += 24; // 日跨ぎ
-  return Math.round(diff * 10) / 10;
+  return Math.round(diff * 60) / 60; // 分単位精度
 }
 function timeToHour(str) {
   const [h,m] = str.split(':').map(Number);
