@@ -525,7 +525,12 @@ function initFirebaseData() {
     if (!_fbLoaded) {
       onLoad();
     } else {
-      renderPage(currentPage);
+      // employees更新時は employees/dashboard/salary/payslip/monthly ページのみ再描画
+      // attendance等は自前のFirebase購読で更新するためここでは再描画しない
+      const pagesNeedingEmpRefresh = ['employees','dashboard','salary','payslip','monthly','weekly','article36','labor_report'];
+      if (pagesNeedingEmpRefresh.includes(currentPage)) {
+        renderPage(currentPage);
+      }
       showToast('データが更新されました ✓');
     }
   });
