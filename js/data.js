@@ -490,7 +490,8 @@ function subscribeAdj(year, month) {
   const ref = FB.salaryAdj(ym);
   const handler = snap => {
     salaryAdj[ym] = snap.val() || {};
-    if (_fbLoaded) renderPage(currentPage);
+    // salaryAdj更新時は給与・明細ページのみ再描画
+    if (_fbLoaded && ['salary','payslip','dashboard'].includes(currentPage)) renderPage(currentPage);
   };
   ref.on('value', handler);
   _adjUnsub = () => ref.off('value', handler);
