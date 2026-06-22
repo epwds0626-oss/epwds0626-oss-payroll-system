@@ -246,9 +246,16 @@ function renderAttendanceTable(year, month) {
   const sel = document.getElementById('attEmpSel');
   if (!sel) return;
   const savedEmpId = sel.value; // 現在の選択を保存
-  const empId = parseInt(sel.value);
-  const emp = employees.find(e=>e.id===empId);
-  if (!emp) return;
+  let empId = parseInt(sel.value);
+  let emp = employees.find(e=>e.id===empId);
+  // empが見つからない場合は先頭の在籍スタッフで代替
+  if (!emp) {
+    const fallback = activeEmployees()[0];
+    if (!fallback) return;
+    emp = fallback;
+    empId = fallback.id;
+    if (sel) sel.value = empId;
+  }
 
   const { startDate, endDate } = getPayPeriod(year, month);
   const start = new Date(startDate);
