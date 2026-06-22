@@ -1,3 +1,13 @@
+// hm: 時間数(小数)を "Xh Ym" 形式に変換
+function hm(h) {
+  if (h === null || h === undefined || h === '' || isNaN(h)) return '—';
+  const total = Math.round(Number(h) * 60);
+  if (total === 0) return '0h';
+  const hh = Math.floor(total / 60);
+  const mm = total % 60;
+  return mm ? `${hh}h${mm}m` : `${hh}h`;
+}
+
 // ============================================================
 // reports.js  ―  労基提出書類
 // ============================================================
@@ -192,12 +202,12 @@ function printAttendanceRecord(year, month) {
     }
     html += `</tbody><tfoot><tr>
       <td colspan="4" style="text-align:right;font-weight:bold">月計</td>
-      <td>${summary.totalActual}</td>
-      <td>${summary.monthMidnight}</td>
-      <td>${summary.monthHoliday}</td>
+      <td>${hm(summary.totalActual)}</td>
+      <td>${hm(summary.monthMidnight)}</td>
+      <td>${hm(summary.monthHoliday)}</td>
       <td>${summary.paidDays}</td>
       <td>${summary.absentDays}</td>
-      <td>週残業：${summary.monthOT}h</td>
+      <td>週残業：${hm(summary.monthOT)}</td>
     </tr></tfoot></table>
     <div style="display:flex;gap:40px;margin-top:4px;margin-bottom:16px">
       <div>確認署名：＿＿＿＿＿＿＿＿＿</div>
@@ -276,9 +286,9 @@ function printWageLedger(year, month) {
 
   html += `</tbody><tfoot><tr style="font-weight:bold;background:#f0f0f0">
     <td class="tl" colspan="3">合　計</td>
-    <td>${totals.workDays}</td><td>${Math.round(totals.actual*10)/10}</td>
-    <td>${Math.round(totals.ot*10)/10}</td><td>${Math.round(totals.mid*10)/10}</td>
-    <td>${Math.round(totals.hol*10)/10}</td>
+    <td>${totals.workDays}</td><td>${hm(Math.round(totals.actual*60)/60)}</td>
+    <td>${hm(Math.round(totals.ot*60)/60)}</td><td>${hm(Math.round(totals.mid*60)/60)}</td>
+    <td>${hm(Math.round(totals.hol*60)/60)}</td>
     <td>${totals.base.toLocaleString()}</td><td>${totals.otP.toLocaleString()}</td>
     <td>${totals.midP.toLocaleString()}</td><td>${totals.holP.toLocaleString()}</td>
     <td>${totals.comm.toLocaleString()}</td>
@@ -353,7 +363,7 @@ function print36Notice(year) {
   const summaries = activeEmployees().map(emp=>{
     let yearlyOT=0;
     for(let m=1;m<=12;m++) yearlyOT+=getMonthSummary(emp.id,year,m).monthOT;
-    return { emp, yearlyOT: Math.round(yearlyOT*10)/10 };
+    return { emp, yearlyOT: Math.round(yearlyOT*60)/60 };
   });
 
   const html = `<html><head><meta charset="UTF-8"><title>36協定届 記入補助</title>
@@ -430,7 +440,7 @@ function printOTReport(year) {
         const cls=o>a36.specialLimit?'danger':o>a36.limit36?'warn':'';
         return `<td class="${cls}">${o>0?o:''}</td>`;
       }).join('')}
-      <td ${Math.round(yearly*10)/10>a36.yearLimit?'style="color:red;font-weight:bold"':''}>${Math.round(yearly*10)/10}</td>
+      <td ${Math.round(yearly*60)/60>a36.yearLimit?'style="color:red;font-weight:bold"':''}>${hm(Math.round(yearly*60)/60)}</td>
       <td ${max>a36.specialLimit?'style="color:red;font-weight:bold"':''}>${max}</td>
     </tr>`;
   }
