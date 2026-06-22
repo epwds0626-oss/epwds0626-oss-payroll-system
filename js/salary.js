@@ -157,8 +157,8 @@ function payslipHTML(emp, sal, year, month) {
         ${adjRow(emp.id,year,month,'basePay','基本給',sal.basePay)}
         ${sal.skillPay>0?adjRow(emp.id,year,month,'skillPay','職能給',sal.skillPay):''}
         ${sal.positionAllowancePay>0?adjRow(emp.id,year,month,'positionAllowancePay','役職手当',sal.positionAllowancePay):''}
-        ${adjRow(emp.id,year,month,'otPay','残業手当（〜60h 25%）',sal.monthOT>0?Math.round(sal.ot60under*sal.hourlyBase*0.25):0)}
-        ${payRow('残業手当（60h超 追加25%）', sal.ot60over>0?Math.round(sal.ot60over*sal.hourlyBase*0.50):0)}
+        ${adjRow(emp.id,year,month,'otPay','残業手当（〜60h 25%）',sal.monthOT>0?Math.round(Math.min(sal.monthOT,60)*sal.hourlyBase*0.25):0)}
+        ${sal.ot60over>0?payRow('残業手当（60h超 追加25%）', sal.otPay - Math.round(Math.min(sal.monthOT,60)*sal.hourlyBase*0.25)):''}
         ${adjRow(emp.id,year,month,'midnightPay','深夜手当（22時〜 25%）',sal.midnightOnlyPay)}
         ${sal.midnightOTPay>0?payRow('深夜残業 追加割増（+25%）', sal.midnightOTPay):''}
         ${adjRow(emp.id,year,month,'holidayLegalPay','法定休日手当（木曜 35%）',sal.holidayLegalPay)}
