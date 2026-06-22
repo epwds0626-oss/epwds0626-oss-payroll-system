@@ -300,25 +300,4 @@ function printAllPayslips(year, month) {
 }
 
 // payslip page event
-const _sAttach = attachPageEvents;
-function attachPageEvents(page) {
-  if (page === 'payslip') {
-    setTimeout(()=>{
-      const y = parseInt(document.getElementById('targetYear').value);
-      const m = parseInt(document.getElementById('targetMonth').value);
-      renderPayslipDetail(y, m);
-    }, 0);
-  } else if (page === 'weekly') {
-    setTimeout(()=>{
-      const y = parseInt(document.getElementById('targetYear').value);
-      const m = parseInt(document.getElementById('targetMonth').value);
-      renderWeekDetail(y, m);
-    }, 0);
-  } else if (page === 'attendance') {
-    setTimeout(()=>{
-      const y = parseInt(document.getElementById('targetYear').value);
-      const m = parseInt(document.getElementById('targetMonth').value);
-      renderAttendanceTable(y, m);
-    }, 0);
-  }
-}
+// attachPageEvents は app.js で一元管理
