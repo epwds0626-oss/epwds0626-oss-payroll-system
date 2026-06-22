@@ -230,17 +230,7 @@ function toggleSidebar() {
 }
 
 // -------- ページイベント後付け --------
-function attachPageEvents(page) {
-  const y = () => parseInt(document.getElementById('targetYear')?.value);
-  const m = () => parseInt(document.getElementById('targetMonth')?.value);
-  if (page === 'payslip') {
-    setTimeout(() => renderPayslipDetail(y(), m()), 0);
-  } else if (page === 'weekly') {
-    setTimeout(() => renderWeekDetail(y(), m()), 0);
-  } else if (page === 'attendance') {
-    setTimeout(() => renderAttendanceTable(y(), m()), 0);
-  }
-}
+// attachPageEvents は ui.js で一元管理
 
 // -------- 従業員ページ --------
 function renderEmployees() {
