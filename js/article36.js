@@ -19,7 +19,7 @@ function renderArticle36(year, month) {
     if (monthlyOTs[month-1] > a36.specialLimit) alerts.push({ level:'danger', msg:`当月${monthlyOTs[month-1].toFixed(1)}h 特別条項超過` });
     else if (monthlyOTs[month-1] > a36.limit36) alerts.push({ level:'warn', msg:`当月${monthlyOTs[month-1].toFixed(1)}h 一般条項超（特別条項適用）` });
     if (yearlyOT > a36.yearLimit) alerts.push({ level:'danger', msg:`年間${yearlyOT.toFixed(1)}h 年間上限超過` });
-    return { emp, monthlyOTs, yearlyOT: Math.round(yearlyOT*10)/10, maxMonth: Math.round(maxMonth*10)/10, alerts };
+    return { emp, monthlyOTs, yearlyOT: Math.round(yearlyOT*60)/60, maxMonth: Math.round(maxMonth*60)/60, alerts };
   });
 
   const MONTHS = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
@@ -165,7 +165,7 @@ function export36CSV(year) {
     }
     const a36 = article36[year]||{limit36:45};
     const specialMonths = monthlyOTs.filter(ot=>ot>a36.limit36).length;
-    return [emp.name, ...monthlyOTs, Math.round(yearlyOT*10)/10, Math.max(...monthlyOTs), specialMonths];
+    return [emp.name, ...monthlyOTs, Math.round(yearlyOT*60)/60, Math.max(...monthlyOTs), specialMonths];
   });
   const csv = [header,...rows].map(r=>r.join(',')).join('\n');
   dlFile(`36協定管理_${year}年.csv`, csv, 'text/csv');
