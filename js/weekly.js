@@ -135,7 +135,7 @@ function renderWeekDetail(year, month) {
           const dt = new Date(d.date);
           const dow = dt.getDay();
           const [y,m]=d.date.split('-').map(Number);
-          const inMonth = y===year&&m===month;
+          const inMonth = isInPayPeriod(d.date, year, month);
           return `<tr ${!inMonth?'style="opacity:0.5"':''}>
             <td>${d.date.replace(/-/g,'/')}</td>
             <td style="color:${dow===0?'#c0392b':dow===6?'#2980b9':'inherit'}">${DOW[dow]}</td>
