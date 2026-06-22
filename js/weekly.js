@@ -105,7 +105,8 @@ function renderWeekDetail(year, month) {
     const endDt  = new Date(wkStart); endDt.setDate(endDt.getDate()+6);
     const wkEnd  = endDt.toISOString().slice(0,10);
     const wkActual   = days.reduce((s,d)=>s+Math.round((d.actual||0)*60),0)/60;
-    const wkOT       = Math.max(0, wkActual-40);
+    const wkDailyOT  = days.reduce((s,d)=>s+Math.round((d.dailyOT||0)*60),0)/60;
+    const wkOT       = Math.max(0, wkActual - 40 - wkDailyOT); // 日超分を除いた純週超残業
     const wkMidnight = days.reduce((s,d)=>s+Math.round((d.midnight||0)*60),0)/60;
     const wkHoliday  = days.reduce((s,d)=>s+Math.round((d.holiday||0)*60),0)/60;
 
