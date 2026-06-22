@@ -343,15 +343,30 @@ function renderAttendanceTable(year, month) {
   // 合計行
   const result = calcWeeklyOT(extended, year, month);
 
+  // 深夜・深夜残業・休日は画面表示行と一致させるため empMap から直接合算
+  let sumMidnightMins = 0, sumMidnightOTMins = 0;
+  let sumHolidayLegalMins = 0, sumHolidayNonLegalMins = 0;
+  for (let dt2 = new Date(start); dt2 <= end; dt2.setDate(dt2.getDate()+1)) {
+    const rec2 = empMap[dt2.toISOString().slice(0,10)] || {};
+    sumMidnightMins        += Math.round((rec2.midnight       ||0) * 60);
+    sumMidnightOTMins      += Math.round((rec2.midnightOT     ||0) * 60);
+    sumHolidayLegalMins    += Math.round((rec2.holidayLegal   ||0) * 60);
+    sumHolidayNonLegalMins += Math.round((rec2.holidayNonLegal||0) * 60);
+  }
+  const sumMidnight        = sumMidnightMins        / 60;
+  const sumMidnightOT      = sumMidnightOTMins      / 60;
+  const sumHolidayLegal    = sumHolidayLegalMins    / 60;
+  const sumHolidayNonLegal = sumHolidayNonLegalMins / 60;
+
   html += `</tbody><tfoot>
     <tr class="total-row">
       <td colspan="2">期間計</td>
       <td>${hm(result.totalActual)}</td>
       <td><strong>${hm(result.monthOT)}</strong><br><span style="font-size:10px;font-weight:400">日超:${hm(result.monthDailyOT)} 週超:${hm(result.monthWeekOT)}</span></td>
-      <td>${hm(result.monthMidnight)}</td>
-      <td>${hm(result.monthMidnightOT)}</td>
-      <td>${hm(result.monthHolidayLegal)}</td>
-      <td>${hm(result.monthHolidayNonLegal)}</td>
+      <td>${hm(sumMidnight)}</td>
+      <td>${hm(sumMidnightOT)}</td>
+      <td>${hm(sumHolidayLegal)}</td>
+      <td>${hm(sumHolidayNonLegal)}</td>
       <td></td><td></td>
       <td style="font-size:11px">残業計：<strong>${hm(result.monthOT)}</strong>（日超${hm(result.monthDailyOT)}＋週超${hm(result.monthWeekOT)}）</td>
     </tr>
