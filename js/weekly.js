@@ -104,10 +104,10 @@ function renderWeekDetail(year, month) {
     const days   = byWeek[wkStart];
     const endDt  = new Date(wkStart); endDt.setDate(endDt.getDate()+6);
     const wkEnd  = endDt.toISOString().slice(0,10);
-    const wkActual   = days.reduce((s,d)=>s+(d.actual||0),0);
+    const wkActual   = days.reduce((s,d)=>s+Math.round((d.actual||0)*60),0)/60;
     const wkOT       = Math.max(0, wkActual-40);
-    const wkMidnight = days.reduce((s,d)=>s+(d.midnight||0),0);
-    const wkHoliday  = days.reduce((s,d)=>s+(d.holiday||0),0);
+    const wkMidnight = days.reduce((s,d)=>s+Math.round((d.midnight||0)*60),0)/60;
+    const wkHoliday  = days.reduce((s,d)=>s+Math.round((d.holiday||0)*60),0)/60;
 
     const daysThisMonth = days.filter(d=>{
       const [y,m]=d.date.split('-').map(Number);
@@ -123,7 +123,7 @@ function renderWeekDetail(year, month) {
       <div style="font-weight:700;color:var(--primary);margin-bottom:6px;display:flex;align-items:center;gap:8px">
         📅 ${wkStart.replace(/-/g,'/')} 〜 ${wkEnd.replace(/-/g,'/')}
         ${isCrossMonth?'<span class="badge badge-yellow">月マタギ週</span>':''}
-        <span style="margin-left:auto">週実働：${wkActual}h ／ 残業：<strong style="color:${wkOT>0?'var(--danger)':'inherit'}">${wkOT}h</strong></span>
+        <span style="margin-left:auto">週実働：${hm(wkActual)} ／ 残業：<strong style="color:${wkOT>0?'var(--danger)':'inherit'}">${hm(wkOT)}</strong></span>
       </div>
       <div class="table-wrap"><table>
         <thead><tr><th>日付</th><th>曜日</th><th>当月</th><th>実働(h)</th><th>深夜(h)</th><th>休日</th><th>備考</th></tr></thead>
@@ -137,8 +137,8 @@ function renderWeekDetail(year, month) {
             <td>${d.date.replace(/-/g,'/')}</td>
             <td style="color:${dow===0?'#c0392b':dow===6?'#2980b9':'inherit'}">${DOW[dow]}</td>
             <td>${inMonth?'✓':'前後月'}</td>
-            <td>${d.actual||0}h</td>
-            <td>${d.midnight||0}h</td>
+            <td>${hm(d.actual||0)}</td>
+            <td>${hm(d.midnight||0)}</td>
             <td>${d.holiday?'●':''}</td>
             <td>${d.note||''}</td>
           </tr>`;
@@ -146,10 +146,10 @@ function renderWeekDetail(year, month) {
         </tbody>
         <tfoot><tr class="total-row">
           <td colspan="3">週計</td>
-          <td>${wkActual}h</td>
-          <td>${wkMidnight}h</td>
-          <td>${wkHoliday}h</td>
-          <td>残業：<strong>${wkOT}h</strong></td>
+          <td>${hm(wkActual)}</td>
+          <td>${hm(wkMidnight)}</td>
+          <td>${hm(wkHoliday)}</td>
+          <td>残業：<strong>${hm(wkOT)}</strong></td>
         </tr></tfoot>
       </table></div>
     </div>`;
