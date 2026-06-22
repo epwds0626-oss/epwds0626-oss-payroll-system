@@ -181,9 +181,9 @@ function renderDashboard(year, month) {
               <td class="tl">${emp.name}</td>
               <td>${emp.type}</td>
               <td>${emp.store||'—'}</td>
-              <td>${s.totalActual}</td>
-              <td>${s.monthOT}</td>
-              <td>${s.monthMidnight}</td>
+              <td>${hm(s.totalActual)}</td>
+              <td>${hm(s.monthOT)}</td>
+              <td>${hm(s.monthMidnight)}</td>
               <td>¥${sal.netPay.toLocaleString()}</td>
               <td>${badge}</td>
             </tr>`;
