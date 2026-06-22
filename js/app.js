@@ -54,6 +54,9 @@ function renderPage(page) {
   const container = document.getElementById('pageContent');
   const y = currentYear, m = currentMonth;
 
+  // ページ切り替え前にコンテナをクリア（前ページのHTMLが残らないように）
+  container.innerHTML = '';
+
   switch(page) {
     case 'dashboard':   container.innerHTML = renderDashboard(y,m);   break;
     case 'employees':   container.innerHTML = renderEmployees();       break;
