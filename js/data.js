@@ -490,8 +490,7 @@ function subscribeAdj(year, month) {
   const ref = FB.salaryAdj(ym);
   const handler = snap => {
     salaryAdj[ym] = snap.val() || {};
-    // salaryAdj更新時は給与・明細ページのみ再描画
-    if (_fbLoaded && ['salary','payslip','dashboard'].includes(currentPage)) renderPage(currentPage);
+    if (_fbLoaded && ['salary','payslip','dashboard'].includes(currentPage)) refreshCurrentPageData();
   };
   ref.on('value', handler);
   _adjUnsub = () => ref.off('value', handler);
@@ -503,6 +502,40 @@ function activeEmployees() {
 }
 
 // -------- Firebase 読み込み・リアルタイム購読 --------
+
+// Firebase更新時にページ全体を再描画せず必要部分だけ更新する
+function refreshCurrentPageData() {
+  switch (currentPage) {
+    case 'attendance':
+      if (typeof renderAttendanceTable === 'function') {
+        const y = parseInt(document.getElementById('targetYear')?.value);
+        const m = parseInt(document.getElementById('targetMonth')?.value);
+        if (!isNaN(y) && !isNaN(m)) setTimeout(() => renderAttendanceTable(y, m), 0);
+      }
+      break;
+    case 'weekly':
+      if (typeof renderWeekDetail === 'function') {
+        const y = parseInt(document.getElementById('targetYear')?.value);
+        const m = parseInt(document.getElementById('targetMonth')?.value);
+        if (!isNaN(y) && !isNaN(m)) setTimeout(() => renderWeekDetail(y, m), 0);
+      }
+      break;
+    case 'monthly':
+    case 'employees':
+    case 'dashboard':
+    case 'salary':
+    case 'payslip':
+    case 'paid_leave':
+    case 'article36':
+    case 'labor_report':
+    case 'freelance':
+      renderPage(currentPage);
+      break;
+    default:
+      break;
+  }
+}
+
 function initFirebaseData() {
   showLoadingOverlay(true);
 
@@ -526,29 +559,26 @@ function initFirebaseData() {
     if (!_fbLoaded) {
       onLoad();
     } else {
-      // employees更新時は employees/dashboard/salary/payslip/monthly ページのみ再描画
-      // attendance等は自前のFirebase購読で更新するためここでは再描画しない
-      const pagesNeedingEmpRefresh = ['employees','dashboard','salary','payslip','monthly','weekly','article36','labor_report'];
-      if (pagesNeedingEmpRefresh.includes(currentPage)) {
-        renderPage(currentPage);
-      }
+      // employees更新時：ページ全体を再描画せずデータだけ反映
+      // ページ内の必要な部分だけ更新してちらつきを防ぐ
+      refreshCurrentPageData();
       showToast('データが更新されました ✓');
     }
   });
 
   FB.attendance().on('value', snap => {
     attendance = snap.val() || {};
-    if (!_fbLoaded) onLoad(); else if (currentPage === 'attendance' || currentPage === 'weekly' || currentPage === 'monthly') renderPage(currentPage);
+    if (!_fbLoaded) onLoad(); else if (currentPage === 'attendance' || currentPage === 'weekly' || currentPage === 'monthly') refreshCurrentPageData();
   });
 
   FB.paidLeave().on('value', snap => {
     paidLeave = snap.val() || {};
-    if (!_fbLoaded) onLoad(); else if (currentPage === 'paid_leave') renderPage(currentPage);
+    if (!_fbLoaded) onLoad(); else if (currentPage === 'paid_leave') refreshCurrentPageData();
   });
 
   FB.article36().on('value', snap => {
     article36 = snap.val() || {};
-    if (!_fbLoaded) onLoad(); else if (currentPage === 'article36') renderPage(currentPage);
+    if (!_fbLoaded) onLoad(); else if (currentPage === 'article36') refreshCurrentPageData();
   });
 }
 
