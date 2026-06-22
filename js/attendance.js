@@ -651,14 +651,5 @@ document.addEventListener('change', e => {
   }
 });
 
-// ページ表示後に初期テーブル描画
-const _origAttach = attachPageEvents;
-function attachPageEvents(page) {
-  if (page === 'attendance') {
-    setTimeout(()=>{
-      const y = parseInt(document.getElementById('targetYear').value);
-      const m = parseInt(document.getElementById('targetMonth').value);
-      renderAttendanceTable(y, m);
-    }, 0);
-  }
+
 }
