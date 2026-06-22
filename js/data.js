@@ -795,17 +795,52 @@ function getMonthSummary(empId, year, month) {
   const extended = getExtendedDailyList(empId, year, month);
   const result = calcWeeklyOT(extended, year, month);
 
-  // ★ 出勤日数・有給・欠勤も「給与計算期間（前月21日〜当月20日）」で集計
+  // 勤怠入力ページと一致させるため 期間内の日を直接合算
+  const { startDate, endDate } = getPayPeriod(year, month);
+  const start = new Date(startDate);
+  const end   = new Date(endDate);
+
+  // empMapを構築（recomputeRec済みのextendedから）
+  const empMap = {};
+  for (const d of extended) empMap[d.date] = d;
+
+  let sumActualMins = 0, sumDailyOTMins = 0;
+  let sumMidnightMins = 0, sumMidnightOTMins = 0;
+  let sumHolidayLegalMins = 0, sumHolidayNonLegalMins = 0;
   let workDays = 0, paidDays = 0, absentDays = 0, lateDays = 0;
-  for (const d of extended) {
-    if (!isInPayPeriod(d.date, year, month)) continue;
+
+  for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate()+1)) {
+    const d = empMap[dt.toISOString().slice(0,10)] || {};
+    sumActualMins          += Math.round((d.actual          ||0) * 60);
+    sumDailyOTMins         += Math.round((d.dailyOT         ||0) * 60);
+    sumMidnightMins        += Math.round((d.midnight        ||0) * 60);
+    sumMidnightOTMins      += Math.round((d.midnightOT      ||0) * 60);
+    sumHolidayLegalMins    += Math.round((d.holidayLegal    ||0) * 60);
+    sumHolidayNonLegalMins += Math.round((d.holidayNonLegal ||0) * 60);
     if (d.actual > 0) workDays++;
     if (d.paidLeave) paidDays++;
     if (d.absent) absentDays++;
     if (d.late > 0) lateDays++;
   }
 
-  return { ...result, workDays, paidDays, absentDays, lateDays };
+  const totalActual      = sumActualMins          / 60;
+  const monthDailyOT     = sumDailyOTMins         / 60;
+  const monthMidnight    = sumMidnightMins        / 60;
+  const monthMidnightOT  = sumMidnightOTMins      / 60;
+  const monthHolidayLegal    = sumHolidayLegalMins    / 60;
+  const monthHolidayNonLegal = sumHolidayNonLegalMins / 60;
+  // 週超残業はcalcWeeklyOTの結果を流用
+  const monthWeekOT      = result.monthWeekOT;
+  const monthOT          = monthDailyOT + monthWeekOT;
+
+  return {
+    ...result,
+    totalActual, monthOT, monthDailyOT, monthWeekOT,
+    monthMidnight, monthMidnightOT,
+    monthHolidayLegal, monthHolidayNonLegal,
+    monthHoliday: monthHolidayLegal + monthHolidayNonLegal,
+    workDays, paidDays, absentDays, lateDays
+  };
 }
 
 // 給与計算本体
