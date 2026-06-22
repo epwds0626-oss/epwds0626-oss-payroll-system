@@ -104,11 +104,13 @@ function renderWeekDetail(year, month) {
     const days   = byWeek[wkStart];
     const endDt  = new Date(wkStart); endDt.setDate(endDt.getDate()+6);
     const wkEnd  = endDt.toISOString().slice(0,10);
-    const wkActual   = days.reduce((s,d)=>s+Math.round((d.actual||0)*60),0)/60;
-    const wkDailyOT  = days.reduce((s,d)=>s+Math.round((d.dailyOT||0)*60),0)/60;
+    // 給与期間内の日だけで計算（期間外の日は週超計算に影響させない）
+    const inPeriod   = days.filter(d => isInPayPeriod(d.date, year, month));
+    const wkActual   = inPeriod.reduce((s,d)=>s+Math.round((d.actual||0)*60),0)/60;
+    const wkDailyOT  = inPeriod.reduce((s,d)=>s+Math.round((d.dailyOT||0)*60),0)/60;
     const wkOT       = Math.max(0, wkActual - 40 - wkDailyOT); // 日超分を除いた純週超残業
-    const wkMidnight = days.reduce((s,d)=>s+Math.round((d.midnight||0)*60),0)/60;
-    const wkHoliday  = days.reduce((s,d)=>s+Math.round((d.holiday||0)*60),0)/60;
+    const wkMidnight = inPeriod.reduce((s,d)=>s+Math.round((d.midnight||0)*60),0)/60;
+    const wkHoliday  = inPeriod.reduce((s,d)=>s+Math.round((d.holiday||0)*60),0)/60;
 
     const daysThisMonth = days.filter(d=>{
       const [y,m]=d.date.split('-').map(Number);
