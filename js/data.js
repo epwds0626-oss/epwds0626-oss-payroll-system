@@ -702,7 +702,7 @@ function calcWeeklyOT(dailyList, year, month) {
     monthMidnightOT:      rm(monthMidnightOT),
     monthHolidayLegal:    rm(monthHolidayLegal),
     monthHolidayNonLegal: rm(monthHolidayNonLegal),
-    monthHoliday:         r(monthHolidayLegal + monthHolidayNonLegal),
+    monthHoliday:         rm(monthHolidayLegal + monthHolidayNonLegal),
     totalActual:          totalActual / 60, // 分単位集計→h変換（誤差なし）
   };
 }
