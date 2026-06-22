@@ -231,7 +231,15 @@ function toggleSidebar() {
 
 // -------- ページイベント後付け --------
 function attachPageEvents(page) {
-  // CSV貼付イベント等はattendance.jsで定義
+  const y = () => parseInt(document.getElementById('targetYear')?.value);
+  const m = () => parseInt(document.getElementById('targetMonth')?.value);
+  if (page === 'payslip') {
+    setTimeout(() => renderPayslipDetail(y(), m()), 0);
+  } else if (page === 'weekly') {
+    setTimeout(() => renderWeekDetail(y(), m()), 0);
+  } else if (page === 'attendance') {
+    setTimeout(() => renderAttendanceTable(y(), m()), 0);
+  }
 }
 
 // -------- 従業員ページ --------
