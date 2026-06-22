@@ -195,6 +195,8 @@ function payslipHTML(emp, sal, year, month) {
         <div>出勤：${sal.workDays}日</div>
         <div>実働：${hm(sal.totalActual)}</div>
         <div>残業：${hm(sal.monthOT)}</div>
+        <div style="color:#888;font-size:11px">└日8h超：${hm(sal.monthDailyOT)}</div>
+        <div style="color:#888;font-size:11px">└週40h超：${hm(sal.monthWeekOT)}</div>
         <div>深夜：${hm(sal.monthMidnight)}</div>
         <div>休日出勤：${hm(sal.monthHoliday)}</div>
         <div>有給：${sal.paidDays}日</div>
