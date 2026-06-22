@@ -169,9 +169,6 @@ function exportWeeklyCSV(year, month) {
   dlFile(`週次集計_${year}年${month}月.csv`, csv, 'text/csv');
 }
 
-
-}
-
 // 月次勤怠ページ
 function renderMonthly(year, month) {
   const rows = activeEmployees().map(emp => {
