@@ -685,6 +685,8 @@ function calcWeeklyOT(dailyList, year, month) {
     let wkHolidayLegalMins=0, wkHolidayNonLegalMins=0;
 
     for (const d of wkData.days) {
+      // 週マタギ計算でも給与期間内の日だけを集計（期間外データの影響を排除）
+      if (!isInPayPeriod(d.date, year, month)) continue;
       wkActualMins          += Math.round((d.actual       ||0) * 60); // 分単位精度
       wkDailyOTMins         += Math.round((d.dailyOT      ||0) * 60);
       wkMidnightMins        += Math.round((d.midnight     ||0) * 60);
@@ -705,17 +707,16 @@ function calcWeeklyOT(dailyList, year, month) {
     const wkWeekOT = Math.max(0, wkActual - 40 - wkDailyOT);
     const wkOT = wkDailyOT + wkWeekOT;
 
+    // 期間内の日だけで集計済みなのでratioは使わず直接加算
+    const wkWeekOTMins = Math.max(0, wkActualMins - 40*60 - wkDailyOTMins);
+    monthOT              += (wkDailyOTMins + wkWeekOTMins) / 60;
+    monthDailyOT         += wkDailyOTMins         / 60;
+    monthWeekOT          += wkWeekOTMins           / 60;
+    monthMidnight        += wkMidnightMins         / 60;
+    monthMidnightOT      += wkMidnightOTMins       / 60;
+    monthHolidayLegal    += wkHolidayLegalMins     / 60;
+    monthHolidayNonLegal += wkHolidayNonLegalMins  / 60;
     const daysInPeriod = wkData.days.filter(d => isInPayPeriod(d.date, year, month)).length;
-    const ratio = wkData.days.length > 0 ? daysInPeriod / wkData.days.length : 1;
-
-    // ratio乗算はすべて分単位で行い誤差ゼロ
-    monthOT              += Math.round(wkDailyOTMins * ratio + Math.max(0, wkActualMins - 40*60 - wkDailyOTMins) * ratio) / 60;
-    monthDailyOT         += Math.round(wkDailyOTMins         * ratio) / 60;
-    monthWeekOT          += Math.round(Math.max(0, wkActualMins - 40*60 - wkDailyOTMins) * ratio) / 60;
-    monthMidnight        += Math.round(wkMidnightMins         * ratio) / 60;
-    monthMidnightOT      += Math.round(wkMidnightOTMins       * ratio) / 60;
-    monthHolidayLegal    += Math.round(wkHolidayLegalMins     * ratio) / 60;
-    monthHolidayNonLegal += Math.round(wkHolidayNonLegalMins  * ratio) / 60;
 
     const actualInPeriod = wkData.days
       .filter(d => isInPayPeriod(d.date, year, month))
