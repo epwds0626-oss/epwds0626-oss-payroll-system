@@ -1,3 +1,13 @@
+// hm: 時間数(小数)を "Xh Ym" 形式に変換
+function hm_a36(h) {
+  if (!h || isNaN(h)) return '';
+  const total = Math.round(Number(h) * 60);
+  if (total === 0) return '';
+  const hh = Math.floor(total / 60);
+  const mm = total % 60;
+  return mm ? `${hh}h${mm}m` : `${hh}h`;
+}
+
 // ============================================================
 // article36.js  ―  ３６協定管理
 // ============================================================
@@ -16,9 +26,9 @@ function renderArticle36(year, month) {
     }
     const maxMonth = Math.max(...monthlyOTs);
     const alerts = [];
-    if (monthlyOTs[month-1] > a36.specialLimit) alerts.push({ level:'danger', msg:`当月${monthlyOTs[month-1].toFixed(1)}h 特別条項超過` });
-    else if (monthlyOTs[month-1] > a36.limit36) alerts.push({ level:'warn', msg:`当月${monthlyOTs[month-1].toFixed(1)}h 一般条項超（特別条項適用）` });
-    if (yearlyOT > a36.yearLimit) alerts.push({ level:'danger', msg:`年間${yearlyOT.toFixed(1)}h 年間上限超過` });
+    if (monthlyOTs[month-1] > a36.specialLimit) alerts.push({ level:'danger', msg:`当月${hm_a36(monthlyOTs[month-1])} 特別条項超過` });
+    else if (monthlyOTs[month-1] > a36.limit36) alerts.push({ level:'warn', msg:`当月${hm_a36(monthlyOTs[month-1])} 一般条項超（特別条項適用）` });
+    if (yearlyOT > a36.yearLimit) alerts.push({ level:'danger', msg:`年間${hm_a36(yearlyOT)} 年間上限超過` });
     return { emp, monthlyOTs, yearlyOT: Math.round(yearlyOT*60)/60, maxMonth: Math.round(maxMonth*60)/60, alerts };
   });
 
@@ -82,10 +92,10 @@ function renderArticle36(year, month) {
                           : ot > a36.limit36       ? 'style="color:var(--warning);font-weight:700"'
                           : '';
             const bg = i===month-1 ? 'style="background:#fffde7"' : '';
-            return `<td ${bg}><span ${cellCls}>${ot>0?ot:''}</span></td>`;
+            return `<td ${bg}><span ${cellCls}>${ot>0?hm_a36(ot):''}</span></td>`;
           }).join('')}
-          <td>${yearlyOT}h</td>
-          <td ${maxMonth>a36.specialLimit?'style="color:var(--danger);font-weight:700"':maxMonth>a36.limit36?'style="color:var(--warning)"':''}>${maxMonth}h</td>
+          <td>${hm_a36(yearlyOT)}</td>
+          <td ${maxMonth>a36.specialLimit?'style="color:var(--danger);font-weight:700"':maxMonth>a36.limit36?'style="color:var(--warning)"':''}>${hm_a36(maxMonth)}</td>
           <td>${alerts.some(a=>a.level==='danger')
             ? '<span class="badge badge-red">超過</span>'
             : alerts.some(a=>a.level==='warn')
