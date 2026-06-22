@@ -167,10 +167,11 @@ function calcBreakMinutes(start, end) {
 function calcMidnight(punchOut, actual) {
   if (!punchOut) return 0;
   const [h,m] = punchOut.split(':').map(Number);
-  const outH  = h + m/60;
-  if (outH >= 22) return Math.round((outH - 22) * 10) / 10;
-  if (outH < 5)   return Math.round((outH + 2) * 10) / 10;
-  return 0;
+  const outMins = h * 60 + m;
+  let midnightMins = 0;
+  if (outMins >= 22 * 60) midnightMins = outMins - 22 * 60;
+  else if (outMins < 5 * 60) midnightMins = outMins + 2 * 60;
+  return Math.round(midnightMins / 60 * 100) / 100; // 分単位精度
 }
 
 // ============================================================
