@@ -709,6 +709,29 @@ function calcWeeklyOT(dailyList, year, month) {
 }
 
 // 給与計算期間（前月21日〜当月20日）＋週マタギのため前後1週間を含む打刻を取得
+// punchOut/punchInからmidnight・dailyOTをリアルタイム再計算（Firebase保存値の精度誤差を上書き）
+function recomputeRec(rec) {
+  if (!rec.punchIn || !rec.punchOut) return rec;
+  // actual（実働）は既存値を使用（分単位で保存済み）
+  // midnight: punchOutから分単位で再計算
+  const toMins = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
+  const outMins = toMins(rec.punchOut);
+  let midnightMins = 0;
+  if (outMins >= 22*60) midnightMins = outMins - 22*60;
+  else if (outMins < 5*60) midnightMins = outMins + 2*60;
+  const midnight = Math.round(midnightMins) / 60; // 分単位精度
+
+  // dailyOT: actualから再計算
+  const actual = rec.actual || 0;
+  const dailyOTMins = Math.max(0, Math.round(actual * 60) - 480);
+  const dailyOT = dailyOTMins / 60;
+
+  // midnightOT: midnight と dailyOT の小さい方
+  const midnightOT = Math.min(midnight, dailyOT);
+
+  return { ...rec, midnight, dailyOT, midnightOT };
+}
+
 function getExtendedDailyList(empId, year, month) {
   const list = [];
   const { startDate, endDate } = getPayPeriod(year, month);
@@ -727,12 +750,13 @@ function getExtendedDailyList(empId, year, month) {
     const ym = getYM(y,m);
     const empData = (attendance[ym] && attendance[ym][empId]) || {};
     for (const [date, rec] of Object.entries(empData)) {
+      // punchOutがあれば midnight/dailyOT をリアルタイム再計算（Firebaseの古い値を上書き）
+      const enriched = recomputeRec(rec);
       const existing = list.findIndex(d=>d.date===date);
       if (existing === -1) {
-        list.push({ date, ...rec });
+        list.push({ date, ...enriched });
       } else if (rec.source === 'csv' || rec.source === 'timecard') {
-        // CSVや打刻データは手動入力より優先して上書き
-        list[existing] = { date, ...rec };
+        list[existing] = { date, ...enriched };
       }
     }
   }
