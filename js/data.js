@@ -672,13 +672,14 @@ function calcWeeklyOT(dailyList, year, month) {
     const daysInPeriod = wkData.days.filter(d => isInPayPeriod(d.date, year, month)).length;
     const ratio = wkData.days.length > 0 ? daysInPeriod / wkData.days.length : 1;
 
-    monthOT           += wkOT         * ratio;
-    monthDailyOT      += wkDailyOT    * ratio;
-    monthWeekOT       += wkWeekOT     * ratio;
-    monthMidnight     += wkMidnight   * ratio;
-    monthMidnightOT   += wkMidnightOT * ratio;
-    monthHolidayLegal    += wkHolidayLegal    * ratio;
-    monthHolidayNonLegal += wkHolidayNonLegal * ratio;
+    // ratioも分単位で計算して誤差ゼロ
+    monthOT           += Math.round(wkOT         * ratio * 60) / 60;
+    monthDailyOT      += Math.round(wkDailyOT    * ratio * 60) / 60;
+    monthWeekOT       += Math.round(wkWeekOT     * ratio * 60) / 60;
+    monthMidnight     += Math.round(wkMidnightMins   * ratio) / 60; // 分×ratio→h
+    monthMidnightOT   += Math.round(wkMidnightOTMins * ratio) / 60;
+    monthHolidayLegal    += Math.round(wkHolidayLegalMins    * ratio) / 60;
+    monthHolidayNonLegal += Math.round(wkHolidayNonLegalMins * ratio) / 60;
 
     const actualInPeriod = wkData.days
       .filter(d => isInPayPeriod(d.date, year, month))
