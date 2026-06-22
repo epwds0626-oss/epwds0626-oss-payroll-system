@@ -655,6 +655,3 @@ document.addEventListener('change', e => {
     renderAttendanceTable(y, m);
   }
 });
-
-
-}
