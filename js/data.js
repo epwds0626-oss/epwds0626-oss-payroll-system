@@ -523,13 +523,19 @@ function refreshCurrentPageData() {
     case 'monthly':
     case 'employees':
     case 'dashboard':
-    case 'salary':
     case 'payslip':
     case 'paid_leave':
     case 'article36':
     case 'labor_report':
     case 'freelance':
       renderPage(currentPage);
+      break;
+    case 'salary':
+      renderPage(currentPage);
+      // 選択合計行を再描画後に復元
+      if (typeof _restoreSubtotal === 'function' && typeof _subtotalState !== 'undefined' && _subtotalState) {
+        setTimeout(() => _restoreSubtotal(), 50);
+      }
       break;
     default:
       break;
