@@ -504,6 +504,7 @@ function activeEmployees() {
 // -------- Firebase 読み込み・リアルタイム購読 --------
 
 // Firebase更新時にページ全体を再描画せず必要部分だけ更新する
+let _salaryRefreshTimer = null;
 function refreshCurrentPageData() {
   switch (currentPage) {
     case 'attendance':
@@ -531,15 +532,18 @@ function refreshCurrentPageData() {
       renderPage(currentPage);
       break;
     case 'salary':
-      // tbody/tfootのみ差し替えて点滅防止
-      if (typeof refreshSalaryTable === 'function') {
-        const y = parseInt(document.getElementById('targetYear')?.value);
-        const m = parseInt(document.getElementById('targetMonth')?.value);
-        if (!isNaN(y) && !isNaN(m)) refreshSalaryTable(y, m);
-        else renderPage(currentPage);
-      } else {
-        renderPage(currentPage);
-      }
+      // デバウンス300ms：連続発火を間引いてボタン操作を妨げない
+      clearTimeout(_salaryRefreshTimer);
+      _salaryRefreshTimer = setTimeout(() => {
+        if (typeof refreshSalaryTable === 'function') {
+          const y = parseInt(document.getElementById('targetYear')?.value);
+          const m = parseInt(document.getElementById('targetMonth')?.value);
+          if (!isNaN(y) && !isNaN(m)) refreshSalaryTable(y, m);
+          else renderPage(currentPage);
+        } else {
+          renderPage(currentPage);
+        }
+      }, 300);
       break;
     default:
       break;
