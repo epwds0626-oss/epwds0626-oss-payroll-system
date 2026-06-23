@@ -26,6 +26,7 @@ function renderSalary(year, month) {
   <div class="section-header">
     <div class="section-title">💴 給与計算書 ― ${year}年${month}月</div>
     <div style="display:flex;gap:8px">
+      <button class="btn-outline" onclick="openSubtotalSelector(${year},${month})">👥 合計選択</button>
       <button class="btn-outline" onclick="exportSalaryCSV(${year},${month})">CSV出力</button>
       <button class="btn-accent" onclick="window.print()">🖨 印刷</button>
     </div>
@@ -83,7 +84,7 @@ function renderSalary(year, month) {
         <td><strong>¥${sal.netPay.toLocaleString()}</strong></td>
       </tr>`;}).join('')}
       </tbody>
-      <tfoot><tr class="total-row">
+      <tfoot id="salaryTfoot"><tr id="subtotalRow" style="display:none"></tr><tr class="total-row">
         <td class="tl">合　計</td>
         <td>¥${totals.base.toLocaleString()}</td>
         <td colspan="2">¥${totals.otPay.toLocaleString()}</td>
@@ -403,3 +404,131 @@ function printAllPayslips(year, month) {
 
 // payslip page event
 // attachPageEvents は app.js で一元管理
+
+// ===== スタッフ選択合計 =====
+function openSubtotalSelector(year, month) {
+  const existing = document.getElementById('subtotalSelectorModal');
+  if (existing) existing.remove();
+
+  const emps = activeEmployees();
+  const checkboxes = emps.map(emp => `
+    <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px;cursor:pointer;transition:background .15s"
+      onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background='transparent'">
+      <input type="checkbox" value="${emp.id}" class="subtotalChk"
+        style="width:16px;height:16px;accent-color:#1a3a5c;cursor:pointer">
+      <span style="font-size:13.5px;color:#1a3a5c;font-weight:500">${emp.name}</span>
+      <span style="font-size:11px;color:#9ca3af;margin-left:auto">${emp.store||''} / ${emp.type}</span>
+    </label>`).join('');
+
+  const modal = document.createElement('div');
+  modal.id = 'subtotalSelectorModal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;padding:24px;width:400px;max-width:94vw;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,0.25)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div>
+          <div style="font-weight:800;font-size:15px;color:#1a3a5c">👥 合計するスタッフを選択</div>
+          <div style="font-size:11.5px;color:#6b7280;margin-top:2px">${year}年${month}月</div>
+        </div>
+        <button onclick="document.getElementById('subtotalSelectorModal').remove()"
+          style="background:#f3f4f6;border:none;border-radius:8px;width:32px;height:32px;font-size:18px;cursor:pointer;color:#6b7280">×</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button onclick="document.querySelectorAll('.subtotalChk').forEach(c=>c.checked=true)"
+          style="font-size:11.5px;padding:4px 10px;border:1px solid #d1d5db;border-radius:5px;background:#f9fafb;cursor:pointer;color:#374151">全選択</button>
+        <button onclick="document.querySelectorAll('.subtotalChk').forEach(c=>c.checked=false)"
+          style="font-size:11.5px;padding:4px 10px;border:1px solid #d1d5db;border-radius:5px;background:#f9fafb;cursor:pointer;color:#374151">全解除</button>
+        <button onclick="document.querySelectorAll('.subtotalChk').forEach(c=>c.checked=(document.getElementById('storeFilter').value===''||employees.find(e=>e.id==c.value)?.store===document.getElementById('storeFilter').value))"
+          id="storeFilterBtn" style="display:none"></button>
+        <select id="storeFilter" onchange="filterSubtotalByStore()"
+          style="font-size:11.5px;padding:4px 10px;border:1px solid #d1d5db;border-radius:5px;background:#f9fafb;cursor:pointer;color:#374151;margin-left:auto">
+          <option value="">店舗絞込</option>
+          <option value="本店">本店</option>
+          <option value="マルコ">マルコ</option>
+        </select>
+      </div>
+      <div style="overflow-y:auto;flex:1;border:1px solid #e5e7eb;border-radius:8px;padding:4px 0">
+        ${checkboxes}
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button onclick="applySubtotal(${year},${month})"
+          style="flex:1;background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;cursor:pointer;font-weight:700">✅ 決定</button>
+        <button onclick="clearSubtotal()"
+          style="background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:11px 14px;font-size:14px;cursor:pointer">クリア</button>
+        <button onclick="document.getElementById('subtotalSelectorModal').remove()"
+          style="background:#e5e7eb;color:#374151;border:none;border-radius:8px;padding:11px 14px;font-size:14px;cursor:pointer">キャンセル</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.addEventListener('keydown', function escH(e) {
+    if (e.key === 'Escape') { modal.remove(); document.removeEventListener('keydown', escH); }
+  });
+}
+
+function filterSubtotalByStore() {
+  const store = document.getElementById('storeFilter').value;
+  document.querySelectorAll('.subtotalChk').forEach(c => {
+    const emp = employees.find(e => e.id == c.value);
+    c.checked = !store || (emp && emp.store === store);
+  });
+}
+
+function applySubtotal(year, month) {
+  const selected = [...document.querySelectorAll('.subtotalChk:checked')].map(c => parseInt(c.value));
+  document.getElementById('subtotalSelectorModal').remove();
+  if (!selected.length) { clearSubtotal(); return; }
+
+  const sel = selected.map(id => {
+    const emp = employees.find(e => e.id === id);
+    return emp ? { emp, sal: calcSalaryWithAdj(emp, year, month) } : null;
+  }).filter(Boolean);
+
+  const t = sel.reduce((acc, { sal }) => {
+    acc.base    += sal.basePay;
+    acc.otPay   += sal.otPay;
+    acc.midnight+= sal.midnightPay;
+    acc.holiday += sal.holidayLegalPay || 0;
+    acc.commute += sal.commute;
+    acc.kenpo   += sal.kenpo;
+    acc.kosei   += sal.kosei;
+    acc.shienkin+= sal.shienkin || 0;
+    acc.koyo    += sal.koyoHoken;
+    acc.income  += sal.incomeTax;
+    acc.jumin   += sal.juminzei;
+    acc.net     += sal.netPay;
+    return acc;
+  }, {base:0,otPay:0,midnight:0,holiday:0,commute:0,kenpo:0,kosei:0,shienkin:0,koyo:0,income:0,jumin:0,net:0});
+
+  const names = sel.map(({emp}) => emp.name).join('・');
+  const row = document.getElementById('subtotalRow');
+  if (!row) return;
+
+  row.style.display = '';
+  row.style.background = '#fffbeb';
+  row.innerHTML = `
+    <td class="tl" style="color:#92400e;font-weight:700;font-size:12px;white-space:nowrap">
+      <div style="font-size:10px;color:#d97706;margin-bottom:2px">▶ 選択合計</div>
+      <div style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${names}">${names}</div>
+    </td>
+    <td style="color:#92400e;font-weight:600">¥${t.base.toLocaleString()}</td>
+    <td colspan="2" style="color:#92400e;font-weight:600">¥${t.otPay.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.midnight.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.holiday.toLocaleString()}</td>
+    <td>—</td>
+    <td style="color:#92400e;font-weight:600">¥${t.commute.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.kenpo.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.kosei.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.shienkin.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.koyo.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.income.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.jumin.toLocaleString()}</td>
+    <td style="color:#92400e"><strong>¥${t.net.toLocaleString()}</strong></td>`;
+}
+
+function clearSubtotal() {
+  const row = document.getElementById('subtotalRow');
+  if (row) { row.style.display = 'none'; row.innerHTML = ''; }
+  const modal = document.getElementById('subtotalSelectorModal');
+  if (modal) modal.remove();
+}
