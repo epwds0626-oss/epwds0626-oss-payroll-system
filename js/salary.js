@@ -87,7 +87,7 @@ function renderSalary(year, month) {
         <td><strong>¥${sal.netPay.toLocaleString()}</strong></td>
       </tr>`;}).join('')}
       </tbody>
-      <tfoot id="salaryTfoot"><tr id="subtotalRow" style="display:none"></tr><tr class="total-row">
+      <tfoot id="salaryTfoot"><tr class="total-row">
         <td class="tl">合　計</td>
         <td>¥${totals.base.toLocaleString()}</td>
         <td colspan="2">¥${totals.otPay.toLocaleString()}</td>
@@ -105,10 +105,6 @@ function renderSalary(year, month) {
       </tr></tfoot>
     </table></div>
   </div>`;
-  // 選択合計を復元（Firebase再描画後の対応）
-  if (_subtotalState && _subtotalState.year === year && _subtotalState.month === month) {
-    setTimeout(() => _restoreSubtotal(), 0);
-  }
 }
 
 function exportSalaryCSV(year, month) {
@@ -510,11 +506,15 @@ function applySubtotal(year, month) {
   }, {base:0,otPay:0,midnight:0,holiday:0,commute:0,kenpo:0,kosei:0,shienkin:0,koyo:0,income:0,jumin:0,net:0});
 
   const names = sel.map(({emp}) => emp.name).join('・');
-  const row = document.getElementById('subtotalRow');
-  if (!row) return;
-
-  row.style.display = '';
+  // 既存の選択合計行を削除してから再追加
+  const existing = document.getElementById('subtotalRow');
+  if (existing) existing.remove();
+  const tfoot = document.getElementById('salaryTfoot');
+  if (!tfoot) return;
+  const row = document.createElement('tr');
+  row.id = 'subtotalRow';
   row.style.background = '#fffbeb';
+  tfoot.insertBefore(row, tfoot.firstChild);
   row.innerHTML = `
     <td class="tl" style="color:#92400e;font-weight:700;font-size:12px;white-space:nowrap">
       <div style="font-size:10px;color:#d97706;margin-bottom:2px">▶ 選択合計</div>
@@ -538,7 +538,7 @@ function applySubtotal(year, month) {
 function clearSubtotal() {
   _subtotalState = null;
   const row = document.getElementById('subtotalRow');
-  if (row) { row.style.display = 'none'; row.innerHTML = ''; }
+  if (row) row.remove();
   const modal = document.getElementById('subtotalSelectorModal');
   if (modal) modal.remove();
 }
@@ -570,10 +570,14 @@ function _restoreSubtotal() {
   }, {base:0,otPay:0,midnight:0,holiday:0,commute:0,kenpo:0,kosei:0,shienkin:0,koyo:0,income:0,jumin:0,net:0});
 
   const names = sel.map(({emp}) => emp.name).join('・');
-  const row = document.getElementById('subtotalRow');
-  if (!row) return;
-  row.style.display = '';
+  const existingR = document.getElementById('subtotalRow');
+  if (existingR) existingR.remove();
+  const tfootR = document.getElementById('salaryTfoot');
+  if (!tfootR) return;
+  const row = document.createElement('tr');
+  row.id = 'subtotalRow';
   row.style.background = '#fffbeb';
+  tfootR.insertBefore(row, tfootR.firstChild);
   row.innerHTML = `
     <td class="tl" style="color:#92400e;font-weight:700;font-size:12px;white-space:nowrap">
       <div style="font-size:10px;color:#d97706;margin-bottom:2px">▶ 選択合計</div>
