@@ -87,7 +87,7 @@ function renderSalary(year, month) {
         <td><strong>¥${sal.netPay.toLocaleString()}</strong></td>
       </tr>`;}).join('')}
       </tbody>
-      <tfoot id="salaryTfoot"><tr class="total-row">
+      <tfoot><tr class="total-row">
         <td class="tl">合　計</td>
         <td>¥${totals.base.toLocaleString()}</td>
         <td colspan="2">¥${totals.otPay.toLocaleString()}</td>
@@ -104,7 +104,8 @@ function renderSalary(year, month) {
         <td><strong>¥${totals.net.toLocaleString()}</strong></td>
       </tr></tfoot>
     </table></div>
-  </div>`;
+  </div>
+  <div id="subtotalBar" style="display:none"></div>`;
 }
 
 function exportSalaryCSV(year, month) {
@@ -481,64 +482,67 @@ function applySubtotal(year, month) {
   const selected = [...document.querySelectorAll('.subtotalChk:checked')].map(c => parseInt(c.value));
   document.getElementById('subtotalSelectorModal').remove();
   if (!selected.length) { clearSubtotal(); return; }
-  // 状態保存（再描画後に復元）
   _subtotalState = { year, month, empIds: selected };
+  _renderSubtotalBar(year, month, selected);
+}
 
-  const sel = selected.map(id => {
+function _renderSubtotalBar(year, month, empIds) {
+  const bar = document.getElementById('subtotalBar');
+  if (!bar) return;
+
+  const sel = empIds.map(id => {
     const emp = employees.find(e => e.id === id);
     return emp ? { emp, sal: calcSalaryWithAdj(emp, year, month) } : null;
   }).filter(Boolean);
+  if (!sel.length) { bar.style.display = 'none'; return; }
 
   const t = sel.reduce((acc, { sal }) => {
+    acc.gross   += sal.grossTotal;
     acc.base    += sal.basePay;
     acc.otPay   += sal.otPay;
     acc.midnight+= sal.midnightPay;
-    acc.holiday += sal.holidayLegalPay || 0;
     acc.commute += sal.commute;
-    acc.kenpo   += sal.kenpo;
-    acc.kosei   += sal.kosei;
-    acc.shienkin+= sal.shienkin || 0;
-    acc.koyo    += sal.koyoHoken;
-    acc.income  += sal.incomeTax;
-    acc.jumin   += sal.juminzei;
+    acc.deduct  += sal.totalDeduction;
     acc.net     += sal.netPay;
     return acc;
-  }, {base:0,otPay:0,midnight:0,holiday:0,commute:0,kenpo:0,kosei:0,shienkin:0,koyo:0,income:0,jumin:0,net:0});
+  }, {gross:0,base:0,otPay:0,midnight:0,commute:0,deduct:0,net:0});
 
   const names = sel.map(({emp}) => emp.name).join('・');
-  // 既存の選択合計行を削除してから再追加
-  const existing = document.getElementById('subtotalRow');
-  if (existing) existing.remove();
-  const tfoot = document.getElementById('salaryTfoot');
-  if (!tfoot) return;
-  const row = document.createElement('tr');
-  row.id = 'subtotalRow';
-  row.style.background = '#fffbeb';
-  tfoot.insertBefore(row, tfoot.firstChild);
-  row.innerHTML = `
-    <td class="tl" style="color:#92400e;font-weight:700;font-size:12px;white-space:nowrap">
-      <div style="font-size:10px;color:#d97706;margin-bottom:2px">▶ 選択合計</div>
-      <div style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${names}">${names}</div>
-    </td>
-    <td style="color:#92400e;font-weight:600">¥${t.base.toLocaleString()}</td>
-    <td colspan="2" style="color:#92400e;font-weight:600">¥${t.otPay.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.midnight.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.holiday.toLocaleString()}</td>
-    <td>—</td>
-    <td style="color:#92400e;font-weight:600">¥${t.commute.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.kenpo.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.kosei.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.shienkin.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.koyo.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.income.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.jumin.toLocaleString()}</td>
-    <td style="color:#92400e"><strong>¥${t.net.toLocaleString()}</strong></td>`;
+  bar.style.display = 'block';
+  bar.innerHTML = `
+    <div class="card" style="margin-top:12px;border:2px solid #f59e0b;background:#fffbeb">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div>
+          <span style="font-size:11px;font-weight:700;color:#d97706;background:#fef3c7;padding:2px 8px;border-radius:10px">▶ 選択合計</span>
+          <span style="font-size:12.5px;color:#92400e;font-weight:700;margin-left:8px">${names}</span>
+        </div>
+        <button onclick="clearSubtotal()" style="font-size:11px;padding:3px 10px;border:1px solid #f59e0b;border-radius:5px;background:#fff;cursor:pointer;color:#92400e">✕ クリア</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+        <div style="background:#fff;border-radius:8px;padding:8px 12px;text-align:center">
+          <div style="font-size:12px;color:#6b7280;margin-bottom:2px">支給合計</div>
+          <div style="font-size:15px;font-weight:700;color:#1a3a5c">¥${t.gross.toLocaleString()}</div>
+        </div>
+        <div style="background:#fff;border-radius:8px;padding:8px 12px;text-align:center">
+          <div style="font-size:12px;color:#6b7280;margin-bottom:2px">控除合計</div>
+          <div style="font-size:15px;font-weight:700;color:#374151">¥${t.deduct.toLocaleString()}</div>
+        </div>
+        <div style="background:#fff;border-radius:8px;padding:8px 12px;text-align:center">
+          <div style="font-size:12px;color:#6b7280;margin-bottom:2px">振込合計</div>
+          <div style="font-size:15px;font-weight:700;color:#059669">¥${t.net.toLocaleString()}</div>
+        </div>
+        <div style="background:#fff;border-radius:8px;padding:8px 12px;text-align:center">
+          <div style="font-size:12px;color:#6b7280;margin-bottom:2px">残業手当</div>
+          <div style="font-size:15px;font-weight:700;color:#d97706">¥${t.otPay.toLocaleString()}</div>
+        </div>
+      </div>
+    </div>`;
 }
 
 function clearSubtotal() {
   _subtotalState = null;
-  const row = document.getElementById('subtotalRow');
-  if (row) row.remove();
+  const bar = document.getElementById('subtotalBar');
+  if (bar) { bar.style.display = 'none'; bar.innerHTML = ''; }
   const modal = document.getElementById('subtotalSelectorModal');
   if (modal) modal.remove();
 }
@@ -547,53 +551,5 @@ function clearSubtotal() {
 function _restoreSubtotal() {
   if (!_subtotalState) return;
   const { year, month, empIds } = _subtotalState;
-  const sel = empIds.map(id => {
-    const emp = employees.find(e => e.id === id);
-    return emp ? { emp, sal: calcSalaryWithAdj(emp, year, month) } : null;
-  }).filter(Boolean);
-  if (!sel.length) return;
-
-  const t = sel.reduce((acc, { sal }) => {
-    acc.base    += sal.basePay;
-    acc.otPay   += sal.otPay;
-    acc.midnight+= sal.midnightPay;
-    acc.holiday += sal.holidayLegalPay || 0;
-    acc.commute += sal.commute;
-    acc.kenpo   += sal.kenpo;
-    acc.kosei   += sal.kosei;
-    acc.shienkin+= sal.shienkin || 0;
-    acc.koyo    += sal.koyoHoken;
-    acc.income  += sal.incomeTax;
-    acc.jumin   += sal.juminzei;
-    acc.net     += sal.netPay;
-    return acc;
-  }, {base:0,otPay:0,midnight:0,holiday:0,commute:0,kenpo:0,kosei:0,shienkin:0,koyo:0,income:0,jumin:0,net:0});
-
-  const names = sel.map(({emp}) => emp.name).join('・');
-  const existingR = document.getElementById('subtotalRow');
-  if (existingR) existingR.remove();
-  const tfootR = document.getElementById('salaryTfoot');
-  if (!tfootR) return;
-  const row = document.createElement('tr');
-  row.id = 'subtotalRow';
-  row.style.background = '#fffbeb';
-  tfootR.insertBefore(row, tfootR.firstChild);
-  row.innerHTML = `
-    <td class="tl" style="color:#92400e;font-weight:700;font-size:12px;white-space:nowrap">
-      <div style="font-size:10px;color:#d97706;margin-bottom:2px">▶ 選択合計</div>
-      <div style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${names}">${names}</div>
-    </td>
-    <td style="color:#92400e;font-weight:600">¥${t.base.toLocaleString()}</td>
-    <td colspan="2" style="color:#92400e;font-weight:600">¥${t.otPay.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.midnight.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.holiday.toLocaleString()}</td>
-    <td>—</td>
-    <td style="color:#92400e;font-weight:600">¥${t.commute.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.kenpo.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.kosei.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.shienkin.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.koyo.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.income.toLocaleString()}</td>
-    <td style="color:#92400e;font-weight:600">¥${t.jumin.toLocaleString()}</td>
-    <td style="color:#92400e"><strong>¥${t.net.toLocaleString()}</strong></td>`;
+  _renderSubtotalBar(year, month, empIds);
 }
