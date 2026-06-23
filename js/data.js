@@ -531,10 +531,14 @@ function refreshCurrentPageData() {
       renderPage(currentPage);
       break;
     case 'salary':
-      renderPage(currentPage);
-      // 選択合計行を再描画後に復元
-      if (typeof _restoreSubtotal === 'function' && typeof _subtotalState !== 'undefined' && _subtotalState) {
-        setTimeout(() => _restoreSubtotal(), 50);
+      // tbody/tfootのみ差し替えて点滅防止
+      if (typeof refreshSalaryTable === 'function') {
+        const y = parseInt(document.getElementById('targetYear')?.value);
+        const m = parseInt(document.getElementById('targetMonth')?.value);
+        if (!isNaN(y) && !isNaN(m)) refreshSalaryTable(y, m);
+        else renderPage(currentPage);
+      } else {
+        renderPage(currentPage);
       }
       break;
     default:
