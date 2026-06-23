@@ -66,7 +66,7 @@ function renderSalary(year, month) {
         const ot60Pay  = sal.ot60under>0 ? Math.round(sal.ot60under * sal.hourlyBase * 0.25) : 0;
         const ot60oPay = sal.ot60over>0  ? Math.round(sal.ot60over  * sal.hourlyBase * 0.50) : 0;
         return `<tr>
-        <td class="tl">${emp.name}</td>
+        <td class="tl" style="cursor:pointer;color:#1a3a5c;font-weight:700;text-decoration:underline dotted" title="クリックして全項目編集" onclick="openEmpAdjDialog(${emp.id},${year},${month})">${emp.name}</td>
         ${adjCell(emp.id,year,month,'basePay',sal.basePay)}
         ${adjCell(emp.id,year,month,'otPay',sal.otPay)}
         <td>—</td>
@@ -231,6 +231,106 @@ function adjRow(empId, year, month, field, label, value) {
   return `<div style="display:flex;justify-content:space-between;padding:3px 0;cursor:pointer" title="クリックして編集"
     onclick="openAdjInput(${empId},${year},${month},'${field}',${value})">
     <span>${label}${adjBadge}</span><span style="${style}">${disp}</span></div>`;
+}
+
+// ===== 全項目まとめて編集ダイアログ =====
+function openEmpAdjDialog(empId, year, month) {
+  const existing = document.getElementById('adjModal');
+  if (existing) existing.remove();
+
+  const emp = employees.find(e => e.id === empId);
+  if (!emp) return;
+  const sal = calcSalaryWithAdj(emp, year, month);
+  const adj = getAdj(year, month, empId);
+
+  // 編集対象フィールド定義
+  const fields = [
+    { section: '支給', items: [
+      { key: 'basePay',          label: emp.payType === '時給' ? '時給計' : '基本給',  val: sal.basePay },
+      { key: 'otPay',            label: '残業手当（〜60h）',   val: sal.otPay },
+      { key: 'midnightPay',      label: '深夜手当',            val: sal.midnightPay },
+      { key: 'holidayLegalPay',  label: '法定休日手当',        val: sal.holidayLegalPay },
+      { key: 'commute',          label: '交通費',              val: sal.commute },
+    ]},
+    { section: '控除', items: [
+      { key: 'kenpo',            label: '健康保険料',          val: sal.kenpo },
+      { key: 'kosei',            label: '厚生年金保険料',      val: sal.kosei },
+      { key: 'shienkin',         label: '子育支援金',          val: sal.shienkin || 0 },
+      { key: 'koyoHoken',        label: '雇用保険料',          val: sal.koyoHoken },
+      { key: 'incomeTax',        label: '所得税',              val: sal.incomeTax },
+      { key: 'juminzei',         label: '住民税',              val: sal.juminzei },
+    ]},
+  ];
+
+  const sectionsHTML = fields.map(sec => `
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;color:#fff;background:${sec.section==='支給'?'#1a3a5c':'#2c3e50'};padding:4px 10px;border-radius:4px;margin-bottom:8px;letter-spacing:.05em">${sec.section}</div>
+      ${sec.items.map(item => {
+        const isAdj = adj[item.key] !== undefined;
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <label style="flex:1;font-size:12.5px;color:${isAdj?'#d97706':'#374151'};font-weight:${isAdj?700:400}">${item.label}${isAdj?' ✎':''}</label>
+          <input type="number" id="adjDlg_${item.key}" value="${item.val}"
+            style="width:110px;border:1.5px solid ${isAdj?'#f59e0b':'#d1d5db'};border-radius:6px;padding:5px 8px;font-size:13px;text-align:right;box-sizing:border-box"
+            onfocus="this.select()">
+          <button onclick="resetSingleField(${empId},${year},${month},'${item.key}')"
+            title="自動計算に戻す"
+            style="background:${isAdj?'#fee2e2':'#f3f4f6'};color:${isAdj?'#dc2626':'#9ca3af'};border:none;border-radius:5px;padding:4px 8px;font-size:11px;cursor:pointer;white-space:nowrap">元に戻す</button>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+
+  const modal = document.createElement('div');
+  modal.id = 'adjModal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;padding:24px;width:420px;max-width:94vw;max-height:88vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,0.25)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+        <div>
+          <div style="font-weight:800;font-size:16px;color:#1a3a5c">${emp.name}</div>
+          <div style="font-size:11.5px;color:#6b7280;margin-top:2px">${year}年${month}月 給与調整</div>
+        </div>
+        <button onclick="document.getElementById('adjModal').remove()"
+          style="background:#f3f4f6;border:none;border-radius:8px;width:32px;height:32px;font-size:18px;cursor:pointer;color:#6b7280;line-height:1">×</button>
+      </div>
+      ${sectionsHTML}
+      <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:#0369a1">
+        ※ 空欄または0は「自動計算値を使用」ではなく0円として保存されます。自動計算に戻すには「元に戻す」を押してください。
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="saveAllEmpAdj(${empId},${year},${month})"
+          style="flex:1;background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;cursor:pointer;font-weight:700">💾 保存</button>
+        <button onclick="document.getElementById('adjModal').remove()"
+          style="background:#e5e7eb;color:#374151;border:none;border-radius:8px;padding:11px 16px;font-size:14px;cursor:pointer">キャンセル</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.addEventListener('keydown', function escHandler(e) {
+    if (e.key === 'Escape') { modal.remove(); document.removeEventListener('keydown', escHandler); }
+  });
+}
+
+function saveAllEmpAdj(empId, year, month) {
+  const fields = ['basePay','otPay','midnightPay','holidayLegalPay','commute',
+                  'kenpo','kosei','shienkin','koyoHoken','incomeTax','juminzei'];
+  fields.forEach(key => {
+    const el = document.getElementById(`adjDlg_${key}`);
+    if (!el) return;
+    const val = parseInt(el.value) || 0;
+    setAdj(year, month, empId, key, val);
+  });
+  document.getElementById('adjModal').remove();
+}
+
+function resetSingleField(empId, year, month, field) {
+  const ym = `${year}-${String(month).padStart(2,'0')}`;
+  if (salaryAdj[ym] && salaryAdj[ym][empId]) {
+    delete salaryAdj[ym][empId][field];
+    FB.salaryAdj(ym).child(String(empId)).child(field).remove();
+  }
+  // ダイアログを再描画
+  document.getElementById('adjModal').remove();
+  openEmpAdjDialog(empId, year, month);
 }
 
 // モーダルで編集
