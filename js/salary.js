@@ -57,8 +57,8 @@ function renderSalary(year, month) {
         <tr>
           <th>基本給<br>/時給計</th><th>残業<br>(〜60h)</th><th>残業<br>(60h超)</th>
           <th>深夜</th><th>法定休日<br>35%</th><th>法定外休日<br>(週OT分)</th><th>交通費</th>
-          <th>健保</th><th>厚年</th><th>雇保</th>
-          <th>子育支援金</th><th>所得税</th><th>住民税</th>
+          <th>健保</th><th>厚年</th><th>子育支援金</th>
+          <th>雇保</th><th>所得税</th><th>住民税</th>
         </tr>
       </thead>
       <tbody>
