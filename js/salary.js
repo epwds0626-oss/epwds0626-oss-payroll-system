@@ -2,6 +2,9 @@
 // salary.js  ―  給与計算・給与明細
 // ============================================================
 
+// 選択合計の状態を保持（Firebaseコールバックによる再描画後も復元）
+let _subtotalState = null;
+
 function renderSalary(year, month) {
   subscribeAdj(year, month);
   const results = activeEmployees().map(emp => ({ emp, sal: calcSalaryWithAdj(emp, year, month) }));
@@ -102,6 +105,10 @@ function renderSalary(year, month) {
       </tr></tfoot>
     </table></div>
   </div>`;
+  // 選択合計を復元（Firebase再描画後の対応）
+  if (_subtotalState && _subtotalState.year === year && _subtotalState.month === month) {
+    setTimeout(() => _restoreSubtotal(), 0);
+  }
 }
 
 function exportSalaryCSV(year, month) {
@@ -478,6 +485,8 @@ function applySubtotal(year, month) {
   const selected = [...document.querySelectorAll('.subtotalChk:checked')].map(c => parseInt(c.value));
   document.getElementById('subtotalSelectorModal').remove();
   if (!selected.length) { clearSubtotal(); return; }
+  // 状態保存（再描画後に復元）
+  _subtotalState = { year, month, empIds: selected };
 
   const sel = selected.map(id => {
     const emp = employees.find(e => e.id === id);
@@ -527,8 +536,60 @@ function applySubtotal(year, month) {
 }
 
 function clearSubtotal() {
+  _subtotalState = null;
   const row = document.getElementById('subtotalRow');
   if (row) { row.style.display = 'none'; row.innerHTML = ''; }
   const modal = document.getElementById('subtotalSelectorModal');
   if (modal) modal.remove();
+}
+
+// 再描画後に選択合計行を復元
+function _restoreSubtotal() {
+  if (!_subtotalState) return;
+  const { year, month, empIds } = _subtotalState;
+  const sel = empIds.map(id => {
+    const emp = employees.find(e => e.id === id);
+    return emp ? { emp, sal: calcSalaryWithAdj(emp, year, month) } : null;
+  }).filter(Boolean);
+  if (!sel.length) return;
+
+  const t = sel.reduce((acc, { sal }) => {
+    acc.base    += sal.basePay;
+    acc.otPay   += sal.otPay;
+    acc.midnight+= sal.midnightPay;
+    acc.holiday += sal.holidayLegalPay || 0;
+    acc.commute += sal.commute;
+    acc.kenpo   += sal.kenpo;
+    acc.kosei   += sal.kosei;
+    acc.shienkin+= sal.shienkin || 0;
+    acc.koyo    += sal.koyoHoken;
+    acc.income  += sal.incomeTax;
+    acc.jumin   += sal.juminzei;
+    acc.net     += sal.netPay;
+    return acc;
+  }, {base:0,otPay:0,midnight:0,holiday:0,commute:0,kenpo:0,kosei:0,shienkin:0,koyo:0,income:0,jumin:0,net:0});
+
+  const names = sel.map(({emp}) => emp.name).join('・');
+  const row = document.getElementById('subtotalRow');
+  if (!row) return;
+  row.style.display = '';
+  row.style.background = '#fffbeb';
+  row.innerHTML = `
+    <td class="tl" style="color:#92400e;font-weight:700;font-size:12px;white-space:nowrap">
+      <div style="font-size:10px;color:#d97706;margin-bottom:2px">▶ 選択合計</div>
+      <div style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${names}">${names}</div>
+    </td>
+    <td style="color:#92400e;font-weight:600">¥${t.base.toLocaleString()}</td>
+    <td colspan="2" style="color:#92400e;font-weight:600">¥${t.otPay.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.midnight.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.holiday.toLocaleString()}</td>
+    <td>—</td>
+    <td style="color:#92400e;font-weight:600">¥${t.commute.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.kenpo.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.kosei.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.shienkin.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.koyo.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.income.toLocaleString()}</td>
+    <td style="color:#92400e;font-weight:600">¥${t.jumin.toLocaleString()}</td>
+    <td style="color:#92400e"><strong>¥${t.net.toLocaleString()}</strong></td>`;
 }
