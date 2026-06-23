@@ -487,62 +487,125 @@ function applySubtotal(year, month) {
 }
 
 function _renderSubtotalBar(year, month, empIds) {
-  const bar = document.getElementById('subtotalBar');
-  if (!bar) return;
+  // 既存のフローティングパネルを削除
+  const existing = document.getElementById('subtotalFloat');
+  if (existing) existing.remove();
 
   const sel = empIds.map(id => {
     const emp = employees.find(e => e.id === id);
     return emp ? { emp, sal: calcSalaryWithAdj(emp, year, month) } : null;
   }).filter(Boolean);
-  if (!sel.length) { bar.style.display = 'none'; return; }
+  if (!sel.length) return;
 
   const t = sel.reduce((acc, { sal }) => {
     acc.gross   += sal.grossTotal;
-    acc.base    += sal.basePay;
     acc.otPay   += sal.otPay;
     acc.midnight+= sal.midnightPay;
-    acc.commute += sal.commute;
     acc.deduct  += sal.totalDeduction;
     acc.net     += sal.netPay;
+    acc.kenpo   += sal.kenpo;
+    acc.kosei   += sal.kosei;
+    acc.koyo    += sal.koyoHoken;
+    acc.income  += sal.incomeTax;
+    acc.jumin   += sal.juminzei;
     return acc;
-  }, {gross:0,base:0,otPay:0,midnight:0,commute:0,deduct:0,net:0});
+  }, {gross:0,otPay:0,midnight:0,deduct:0,net:0,kenpo:0,kosei:0,koyo:0,income:0,jumin:0});
 
   const names = sel.map(({emp}) => emp.name).join('・');
-  bar.style.display = 'block';
-  bar.innerHTML = `
-    <div class="card" style="margin-top:12px;border:2px solid #f59e0b;background:#fffbeb">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div>
-          <span style="font-size:11px;font-weight:700;color:#d97706;background:#fef3c7;padding:2px 8px;border-radius:10px">▶ 選択合計</span>
-          <span style="font-size:12.5px;color:#92400e;font-weight:700;margin-left:8px">${names}</span>
-        </div>
-        <button onclick="clearSubtotal()" style="font-size:11px;padding:3px 10px;border:1px solid #f59e0b;border-radius:5px;background:#fff;cursor:pointer;color:#92400e">✕ クリア</button>
+  const count = sel.length;
+
+  const panel = document.createElement('div');
+  panel.id = 'subtotalFloat';
+  panel.style.cssText = [
+    'position:fixed',
+    'top:50%','left:50%',
+    'transform:translate(-50%,-50%)',
+    'z-index:8000',
+    'background:#fff',
+    'border-radius:16px',
+    'box-shadow:0 8px 40px rgba(0,0,0,0.22)',
+    'border:2px solid #f59e0b',
+    'padding:24px 28px',
+    'min-width:360px',
+    'max-width:92vw',
+  ].join(';');
+
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#d97706;background:#fef3c7;padding:2px 10px;border-radius:10px;display:inline-block;margin-bottom:6px">▶ 選択合計　${count}名</div>
+        <div style="font-size:13px;color:#92400e;font-weight:700;line-height:1.6">${names}</div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
-        <div style="background:#fff;border-radius:8px;padding:8px 12px;text-align:center">
-          <div style="font-size:12px;color:#6b7280;margin-bottom:2px">支給合計</div>
-          <div style="font-size:15px;font-weight:700;color:#1a3a5c">¥${t.gross.toLocaleString()}</div>
-        </div>
-        <div style="background:#fff;border-radius:8px;padding:8px 12px;text-align:center">
-          <div style="font-size:12px;color:#6b7280;margin-bottom:2px">控除合計</div>
-          <div style="font-size:15px;font-weight:700;color:#374151">¥${t.deduct.toLocaleString()}</div>
-        </div>
-        <div style="background:#fff;border-radius:8px;padding:8px 12px;text-align:center">
-          <div style="font-size:12px;color:#6b7280;margin-bottom:2px">振込合計</div>
-          <div style="font-size:15px;font-weight:700;color:#059669">¥${t.net.toLocaleString()}</div>
-        </div>
-        <div style="background:#fff;border-radius:8px;padding:8px 12px;text-align:center">
-          <div style="font-size:12px;color:#6b7280;margin-bottom:2px">残業手当</div>
-          <div style="font-size:15px;font-weight:700;color:#d97706">¥${t.otPay.toLocaleString()}</div>
-        </div>
+      <button onclick="clearSubtotal()" title="閉じる"
+        style="background:#f3f4f6;border:none;border-radius:8px;width:30px;height:30px;font-size:16px;cursor:pointer;color:#6b7280;flex-shrink:0;margin-left:12px">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div style="background:#f0f4ff;border-radius:10px;padding:12px 16px">
+        <div style="font-size:11px;color:#6b7280;margin-bottom:3px">支給合計</div>
+        <div style="font-size:20px;font-weight:800;color:#1a3a5c">¥${t.gross.toLocaleString()}</div>
+      </div>
+      <div style="background:#f0fdf4;border-radius:10px;padding:12px 16px">
+        <div style="font-size:11px;color:#6b7280;margin-bottom:3px">振込合計</div>
+        <div style="font-size:20px;font-weight:800;color:#059669">¥${t.net.toLocaleString()}</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+      <div style="background:#fffbeb;border-radius:8px;padding:8px 10px;text-align:center">
+        <div style="font-size:10.5px;color:#6b7280;margin-bottom:2px">残業手当</div>
+        <div style="font-size:14px;font-weight:700;color:#d97706">¥${t.otPay.toLocaleString()}</div>
+      </div>
+      <div style="background:#fffbeb;border-radius:8px;padding:8px 10px;text-align:center">
+        <div style="font-size:10.5px;color:#6b7280;margin-bottom:2px">深夜手当</div>
+        <div style="font-size:14px;font-weight:700;color:#d97706">¥${t.midnight.toLocaleString()}</div>
+      </div>
+      <div style="background:#fef2f2;border-radius:8px;padding:8px 10px;text-align:center">
+        <div style="font-size:10.5px;color:#6b7280;margin-bottom:2px">控除合計</div>
+        <div style="font-size:14px;font-weight:700;color:#dc2626">¥${t.deduct.toLocaleString()}</div>
+      </div>
+    </div>
+    <div style="border-top:1px solid #f3f4f6;padding-top:8px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+      <div style="text-align:center">
+        <div style="font-size:10px;color:#9ca3af">健保</div>
+        <div style="font-size:12px;font-weight:600;color:#374151">¥${t.kenpo.toLocaleString()}</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:10px;color:#9ca3af">厚年</div>
+        <div style="font-size:12px;font-weight:600;color:#374151">¥${t.kosei.toLocaleString()}</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:10px;color:#9ca3af">所得税</div>
+        <div style="font-size:12px;font-weight:600;color:#374151">¥${t.income.toLocaleString()}</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:10px;color:#9ca3af">住民税</div>
+        <div style="font-size:12px;font-weight:600;color:#374151">¥${t.jumin.toLocaleString()}</div>
       </div>
     </div>`;
+
+  document.body.appendChild(panel);
+
+  // ドラッグ移動
+  let ox=0, oy=0, dragging=false;
+  panel.querySelector('div').addEventListener('mousedown', e => {
+    if (e.target.tagName === 'BUTTON') return;
+    dragging=true; ox=e.clientX-panel.offsetLeft; oy=e.clientY-panel.offsetTop;
+    panel.style.cursor='grabbing';
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    panel.style.left = (e.clientX-ox)+'px';
+    panel.style.top  = (e.clientY-oy)+'px';
+    panel.style.transform = 'none';
+  });
+  document.addEventListener('mouseup', () => { dragging=false; panel.style.cursor=''; });
 }
 
 function clearSubtotal() {
   _subtotalState = null;
   const bar = document.getElementById('subtotalBar');
   if (bar) { bar.style.display = 'none'; bar.innerHTML = ''; }
+  const fl = document.getElementById('subtotalFloat');
+  if (fl) fl.remove();
   const modal = document.getElementById('subtotalSelectorModal');
   if (modal) modal.remove();
 }
