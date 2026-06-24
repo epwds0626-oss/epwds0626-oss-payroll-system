@@ -812,7 +812,11 @@ function getExtendedDailyList(empId, year, month) {
       const existing = list.findIndex(d=>d.date===date);
       if (existing === -1) {
         list.push({ date, ...recomputeRec(rec) });
-      } else if (rec.source === 'csv' || rec.source === 'timecard') {
+      } else if (rec.source === 'manual') {
+        // 手動編集は最優先で上書き
+        list[existing] = { date, ...recomputeRec(rec) };
+      } else if ((rec.source === 'csv' || rec.source === 'timecard') && list[existing].source !== 'manual') {
+        // csv/timecardは既存がmanualでなければ上書き
         list[existing] = { date, ...recomputeRec(rec) };
       }
     }
