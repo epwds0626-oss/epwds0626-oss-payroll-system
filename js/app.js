@@ -3,8 +3,16 @@
 // ============================================================
 
 let currentPage = 'dashboard';
-let currentYear  = new Date().getFullYear();
-let currentMonth = new Date().getMonth() + 1;
+// 20日締め：21日以降は翌月を給与月として扱う
+const _today = new Date();
+const _payMonth = _today.getDate() >= 21
+  ? (_today.getMonth() + 2 > 12 ? 1 : _today.getMonth() + 2)
+  : _today.getMonth() + 1;
+const _payYear = _today.getDate() >= 21 && _today.getMonth() + 2 > 12
+  ? _today.getFullYear() + 1
+  : _today.getFullYear();
+let currentYear  = _payYear;
+let currentMonth = _payMonth;
 
 // -------- 初期化 --------
 document.addEventListener('DOMContentLoaded', () => {
