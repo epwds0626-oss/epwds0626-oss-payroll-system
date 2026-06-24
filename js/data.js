@@ -764,15 +764,25 @@ function calcWeeklyOT(dailyList, year, month) {
 function recomputeRec(rec) {
   if (!rec.punchIn || !rec.punchOut) return rec;
   const toMins = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
-  const outMins = toMins(rec.punchOut);
+
+  // actual を punchIn/punchOut/breaks から再計算（休憩変更を反映）
+  const inMins  = toMins(rec.punchIn);
+  let   outMins = toMins(rec.punchOut);
+  if (outMins <= inMins) outMins += 24 * 60; // 日またぎ
+  const breakMins = (rec.breaks || []).reduce((s, b) => s + (b.minutes || 0), 0);
+  const netMins   = Math.max(0, outMins - inMins - breakMins);
+  const actual    = Math.round(netMins) / 60;
+
+  // 深夜・残業を再計算
+  const rawOut = toMins(rec.punchOut);
   let midnightMins = 0;
-  if (outMins >= 22*60) midnightMins = outMins - 22*60;
-  else if (outMins < 5*60) midnightMins = outMins + 2*60;
-  const midnight = Math.round(midnightMins) / 60;
-  const dailyOTMins = Math.max(0, Math.round((rec.actual||0) * 60) - 480);
-  const dailyOT = dailyOTMins / 60;
-  const midnightOT = Math.min(midnight, dailyOT);
-  return { ...rec, midnight, dailyOT, midnightOT };
+  if (rawOut >= 22*60) midnightMins = rawOut - 22*60;
+  else if (rawOut < 5*60) midnightMins = rawOut + 2*60;
+  const midnight    = Math.round(midnightMins) / 60;
+  const dailyOTMins = Math.max(0, netMins - 480);
+  const dailyOT     = dailyOTMins / 60;
+  const midnightOT  = Math.min(midnight, dailyOT);
+  return { ...rec, actual, midnight, dailyOT, midnightOT };
 }
 
 function getExtendedDailyList(empId, year, month) {
