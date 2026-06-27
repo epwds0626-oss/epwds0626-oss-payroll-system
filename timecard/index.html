@@ -239,8 +239,14 @@ const BREAK_LABELS = {
   C: {name:'ディナー後', icon:'🌙', hint:'20:30頃'},
 };
 
+// ── 両店スタッフ判定 ──────────────────────────────────────
+function isBothStore(id) {
+  const s = STAFF.find(s => s.id === id || s.id === String(id));
+  return s && s.store === '両店';
+}
+
 // ── 状態 ──────────────────────────────────────────────────
-let selectedId  = null;
+let selectedId  = null;  // 例: '10_enya' or '10_marco' or 10
 let todayData   = {};
 let bannerTimer = null;
 
@@ -304,13 +310,34 @@ function subscribeToday() {
 // ── 名前グリッド ──────────────────────────────────────────
 function renderNameGrid() {
   document.getElementById('nameGrid').innerHTML = STAFF.map(s =>
-    `<button class="name-btn ${selectedId===s.id?'selected':''}" onclick="selectStaff(${s.id})">
+    `<button class="name-btn ${selectedId===s.id||selectedId===s.id+'_enya'||selectedId===s.id+'_marco'?'selected':''}" onclick="selectStaff(${s.id})">
       ${s.name}<span class="store-tag">${s.store}</span>
     </button>`
   ).join('');
 }
 function selectStaff(id) {
-  selectedId = (selectedId === id) ? null : id;
+  id = parseInt(id);
+  // 同じスタッフをタップで選択解除
+  const baseId = typeof selectedId === 'string' ? parseInt(selectedId) : selectedId;
+  if (baseId === id) {
+    selectedId = null;
+    renderNameGrid();
+    updateButtons();
+    renderBreakChips();
+    return;
+  }
+
+  // 両店スタッフは店舗選択ダイアログを表示
+  if (isBothStore(id)) {
+    const s = STAFF.find(s => s.id === id);
+    if (confirm(`${s.name}\n\n打刻する店舗を選んでください\n\n[OK] → 本店🐟\n[キャンセル] → マルコ🍝`)) {
+      selectedId = `${id}_enya`;
+    } else {
+      selectedId = `${id}_marco`;
+    }
+  } else {
+    selectedId = id;
+  }
   renderNameGrid();
   updateButtons();
   renderBreakChips();
@@ -346,14 +373,18 @@ function updateButtons() {
 // ── 打刻：出勤・退勤 ─────────────────────────────────────
 function punch(type) {
   if (!selectedId) return;
-  const emp   = STAFF.find(s => s.id === selectedId);
+  const baseId = typeof selectedId === 'string' && selectedId.includes('_')
+    ? parseInt(selectedId) : selectedId;
+  const emp   = STAFF.find(s => s.id === baseId || s.id === parseInt(baseId));
+  const storeSuffix = typeof selectedId === 'string' && selectedId.includes('_enya') ? '【本店】'
+    : typeof selectedId === 'string' && selectedId.includes('_marco') ? '【マルコ】' : '';
   const label = type === 'in' ? '出勤' : '退勤';
   const time  = nowHHMM();
-  if (!confirm(`${emp.name}\n${label}：${time}\n\nよろしいですか？`)) return;
+  if (!confirm(`${emp.name}${storeSuffix}\n${label}：${time}\n\nよろしいですか？`)) return;
 
   dayRef(selectedId).update({ [type]: time, [`${type}Ts`]: Date.now() }, err => {
     if (err) { showToast('通信エラー', true); return; }
-    showToast(`${emp.name}　${label}：${time}`);
+    showToast(`${emp.name}${storeSuffix}　${label}：${time}`);
     selectedId = null;
     renderNameGrid();
   });
@@ -362,10 +393,14 @@ function punch(type) {
 // ── 休憩：開始 ───────────────────────────────────────────
 function breakStart(type) {
   if (!selectedId) return;
-  const emp  = STAFF.find(s => s.id === selectedId);
+  const baseId = typeof selectedId === 'string' && selectedId.includes('_')
+    ? parseInt(selectedId) : selectedId;
+  const emp  = STAFF.find(s => s.id === baseId || s.id === parseInt(baseId));
+  const storeSuffix = typeof selectedId === 'string' && selectedId.includes('_enya') ? '【本店】'
+    : typeof selectedId === 'string' && selectedId.includes('_marco') ? '【マルコ】' : '';
   const lbl  = BREAK_LABELS[type];
   const time = nowHHMM();
-  if (!confirm(`${emp.name}\n${lbl.icon} ${lbl.name}休憩 開始：${time}\n\nよろしいですか？`)) return;
+  if (!confirm(`${emp.name}${storeSuffix}\n${lbl.icon} ${lbl.name}休憩 開始：${time}\n\nよろしいですか？`)) return;
 
   dayRef(selectedId).once('value', snap => {
     const rec    = snap.val() || {};
@@ -381,7 +416,11 @@ function breakStart(type) {
 // ── 休憩：終了 ───────────────────────────────────────────
 function breakEnd() {
   if (!selectedId) return;
-  const emp  = STAFF.find(s => s.id === selectedId);
+  const baseId = typeof selectedId === 'string' && selectedId.includes('_')
+    ? parseInt(selectedId) : selectedId;
+  const emp  = STAFF.find(s => s.id === baseId || s.id === parseInt(baseId));
+  const storeSuffix = typeof selectedId === 'string' && selectedId.includes('_enya') ? '【本店】'
+    : typeof selectedId === 'string' && selectedId.includes('_marco') ? '【マルコ】' : '';
   const time = nowHHMM();
 
   dayRef(selectedId).once('value', snap => {
@@ -397,7 +436,7 @@ function breakEnd() {
     const dur = calcBreakMin(cur.start, time);
     const lbl = BREAK_LABELS[cur.type];
 
-    if (!confirm(`${emp.name}\n${lbl.icon} ${lbl.name}休憩 終了：${time}（${dur}分）\n\nよろしいですか？`)) return;
+    if (!confirm(`${emp.name}${storeSuffix}\n${lbl.icon} ${lbl.name}休憩 終了：${time}（${dur}分）\n\nよろしいですか？`)) return;
 
     breaks[realIdx] = { ...cur, end: time, endTs: Date.now(), minutes: dur };
     dayRef(selectedId).update({ breaks }, err => {
@@ -430,14 +469,29 @@ function renderBreakChips() {
 
 // ── 今日の全員一覧 ────────────────────────────────────────
 function renderTodayList() {
-  const active = STAFF.filter(s => todayData[s.id]);
-  if (!active.length) {
+  // 通常スタッフ + 両店スタッフ(_enya/_marco)を展開してリスト化
+  const displayList = [];
+  for (const s of STAFF) {
+    if (s.store === '両店') {
+      const keyE = `${s.id}_enya`;
+      const keyM = `${s.id}_marco`;
+      if (todayData[keyE]) displayList.push({ key: keyE, name: s.name, label: `${s.name}【本店】` });
+      if (todayData[keyM]) displayList.push({ key: keyM, name: s.name, label: `${s.name}【マルコ】` });
+    } else {
+      if (todayData[s.id] || todayData[String(s.id)]) {
+        const key = todayData[s.id] ? s.id : String(s.id);
+        displayList.push({ key, name: s.name, label: s.name });
+      }
+    }
+  }
+
+  if (!displayList.length) {
     document.getElementById('todayList').innerHTML =
       '<div class="loading" style="color:#444">まだ誰も打刻していません</div>';
     return;
   }
-  document.getElementById('todayList').innerHTML = active.map(s => {
-    const rec     = todayData[s.id] || {};
+  document.getElementById('todayList').innerHTML = displayList.map(item => {
+    const rec     = todayData[item.key] || {};
     const breaks  = rec.breaks || [];
     const onBreak = breaks.some(b => b.start && !b.end);
     const totalBrk = breaks.filter(b=>b.end).reduce((sum,b)=>sum+b.minutes,0);
@@ -455,7 +509,7 @@ function renderTodayList() {
     }).join('');
 
     return `<div class="record-row">
-      <div class="record-name">${s.name}<span style="color:#666;font-size:11px;margin-left:5px">${s.store}</span></div>
+      <div class="record-name">${item.label}</div>
       <div class="record-right">
         ${rec.in  ? `<span class="tc in">${rec.in}</span>` : ''}
         ${breaks.length ? brkChips : ''}
