@@ -68,16 +68,12 @@ function renderSalary(year, month) {
     <div class="table-wrap" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch"><table id="salaryTable">
       <thead>
         <tr>
-          <th rowspan="2" class="tl">氏名</th>
-          <th colspan="7" style="background:#1a3a5c">支　給</th>
-          <th colspan="6" style="background:#2c3e50">控　除</th>
-          <th rowspan="2">差引<br>振込額</th>
-        </tr>
-        <tr>
+          <th class="tl">氏名</th>
           <th>基本給<br>/時給計</th><th>残業<br>(〜60h)</th><th class="col-hide">残業<br>(60h超)</th>
           <th>深夜</th><th class="col-hide">法定休日<br>35%</th><th class="col-hide">法定外休日<br>(週OT分)</th><th>交通費</th>
-          <th>健保</th><th>厚年</th><th>子育支援金</th>
+          <th>健保</th><th>厚年</th><th>子育<br>支援金</th>
           <th>雇保</th><th>所得税</th><th>住民税</th>
+          <th>差引<br>振込額</th>
         </tr>
       </thead>
       <tbody>
