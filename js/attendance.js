@@ -180,7 +180,7 @@ function calcMidnight(punchOut, actual) {
 
 function renderAttendance(year, month) {
   const { startDate, endDate } = getPayPeriod(year, month);
-  const empOptions = activeEmployees().map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
+  const empOptions = activeEmployeesExpanded().map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
 
   return `
   <div class="section-header">
@@ -249,7 +249,7 @@ function renderAttendanceTable(year, month) {
   let empId = parseInt(sel.value);
   let emp = employees.find(e=>e.id===empId);
   if (!emp) {
-    const fallback = activeEmployees()[0];
+    const fallback = activeEmployeesExpanded()[0];
     if (!fallback) return;
     emp = fallback; empId = fallback.id;
     if (sel) sel.value = empId;
@@ -643,7 +643,7 @@ function exportAttendanceCSV(year, month) {
   const ym = getYM(year, month);
   const header = ['氏名','日付','実働時間(h)','深夜時間(h)','休日(0/1)','有給','欠勤','遅刻(h)','備考'];
   const rows = [];
-  for (const emp of activeEmployees()) {
+  for (const emp of activeEmployeesExpanded()) {
     const empData = (attendance[ym] && attendance[ym][emp.id]) || {};
     for (const [date, rec] of Object.entries(empData)) {
       rows.push([emp.name, date.replace(/-/g,'/'), rec.actual||0, rec.midnight||0, rec.holiday||0, rec.paidLeave||0, rec.absent||0, rec.late||0, rec.note||'']);
