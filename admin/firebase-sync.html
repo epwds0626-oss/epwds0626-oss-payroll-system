@@ -633,6 +633,8 @@ function importToPayroll() {
 
   for (const s of STAFF_LIST) {
     const empRec = monthlyRawData[s.id] || {};
+    const isBoth = s.store === '両店';
+
     for (const [dateStr, rec] of Object.entries(empRec)) {
       if (!rec.in) { skipped++; continue; }
 
@@ -665,10 +667,10 @@ function importToPayroll() {
       const otMins  = Math.max(0, netMins - 480);
       const dailyOT = Math.round(otMins / 60 * 100) / 100;
 
-      updates[`${ym}/${s.id}/${dateStr}`] = {
-        actual:     Math.round(netDur * 60) / 60, // 分単位精度
+      const payload = {
+        actual:     Math.round(netDur * 60) / 60,
         dailyOT:    dailyOT,
-        midnight:   Math.round(midnight * 60) / 60, // 分単位精度
+        midnight:   Math.round(midnight * 60) / 60,
         midnightOT: Math.min(midnight, dailyOT),
         punchIn:    rec.in,
         punchOut:   rec.out || '',
@@ -677,7 +679,60 @@ function importToPayroll() {
         breaks:     breaks,
         source:     'timecard',
       };
-      imported++;
+
+      if (isBoth) {
+        // 両店スタッフ: Firebase上のキー(_enya/_marco)をそのまま引く
+        // timecard側のキーが ${id}_enya / ${id}_marco で書かれているので
+        // payroll/attendanceにも同じキーで書き込む
+        const enyaRec  = (monthlyRawData[`${s.id}_enya`]  || {})[dateStr];
+        const marcoRec = (monthlyRawData[`${s.id}_marco`] || {})[dateStr];
+        if (enyaRec && enyaRec.in) {
+          const eBreaks = enyaRec.breaks || [];
+          const eBrkMins = eBreaks.filter(b=>b.end&&b.minutes).reduce((s,b)=>s+b.minutes,0);
+          const eDurMins = Math.round(calcDurationNum(enyaRec.in, enyaRec.out||enyaRec.in)*60);
+          const eNetMins = Math.max(0, eDurMins - eBrkMins);
+          const eOtMins  = Math.max(0, eNetMins - 480);
+          let eMidMins = 0;
+          if (enyaRec.out) {
+            const outH = timeToHour(enyaRec.out);
+            if (outH >= 22) eMidMins = Math.round((outH-22)*60);
+            else if (outH < 5) eMidMins = Math.round((outH+2)*60);
+          }
+          updates[`${ym}/${s.id}_enya/${dateStr}`] = {
+            actual: Math.round(eNetMins)/60, dailyOT: eOtMins/60,
+            midnight: Math.round(eMidMins)/60, midnightOT: Math.min(eMidMins/60, eOtMins/60),
+            punchIn: enyaRec.in, punchOut: enyaRec.out||'',
+            breakMins: eBrkMins, breakCount: eBreaks.filter(b=>b.end).length, breaks: eBreaks,
+            source: 'timecard',
+          };
+          imported++;
+        }
+        if (marcoRec && marcoRec.in) {
+          const mBreaks = marcoRec.breaks || [];
+          const mBrkMins = mBreaks.filter(b=>b.end&&b.minutes).reduce((s,b)=>s+b.minutes,0);
+          const mDurMins = Math.round(calcDurationNum(marcoRec.in, marcoRec.out||marcoRec.in)*60);
+          const mNetMins = Math.max(0, mDurMins - mBrkMins);
+          const mOtMins  = Math.max(0, mNetMins - 480);
+          let mMidMins = 0;
+          if (marcoRec.out) {
+            const outH = timeToHour(marcoRec.out);
+            if (outH >= 22) mMidMins = Math.round((outH-22)*60);
+            else if (outH < 5) mMidMins = Math.round((outH+2)*60);
+          }
+          updates[`${ym}/${s.id}_marco/${dateStr}`] = {
+            actual: Math.round(mNetMins)/60, dailyOT: mOtMins/60,
+            midnight: Math.round(mMidMins)/60, midnightOT: Math.min(mMidMins/60, mOtMins/60),
+            punchIn: marcoRec.in, punchOut: marcoRec.out||'',
+            breakMins: mBrkMins, breakCount: mBreaks.filter(b=>b.end).length, breaks: mBreaks,
+            source: 'timecard',
+          };
+          imported++;
+        }
+        // 両店スタッフのs.idそのままのデータは使わない（store='両店'なのでスキップ）
+      } else {
+        updates[`${ym}/${s.id}/${dateStr}`] = payload;
+        imported++;
+      }
     }
   }
 
