@@ -13,7 +13,7 @@ function hm(h) {
 // ============================================================
 
 function renderWeekly(year, month) {
-  const rows = activeEmployees().map(emp => {
+  const rows = activeEmployeesExpanded().map(emp => {
     const extended = getExtendedDailyList(emp.id, year, month);
     const result   = calcWeeklyOT(extended, year, month);
     return { emp, result };
@@ -70,7 +70,7 @@ function renderWeekly(year, month) {
     <div class="card-title">週別詳細</div>
     <div class="form-group" style="margin-bottom:12px">
       <select id="weekEmpSel" onchange="renderWeekDetail(${year},${month})" style="border:1px solid #dce3ec;border-radius:6px;padding:5px 10px;font-family:inherit;font-size:13px">
-        ${activeEmployees().map(e=>`<option value="${e.id}">${e.name}</option>`).join('')}
+        ${activeEmployeesExpanded().map(e=>`<option value="${e.id}">${e.name}</option>`).join('')}
       </select>
     </div>
     <div id="weekDetailWrap"></div>
@@ -163,7 +163,7 @@ function renderWeekDetail(year, month) {
 
 function exportWeeklyCSV(year, month) {
   const header = ['氏名','雇用区分','店舗','実働合計(h)','週40h超残業(h)','深夜(h)','休日(h)','出勤日数'];
-  const rows = activeEmployees().map(emp => {
+  const rows = activeEmployeesExpanded().map(emp => {
     const r = calcWeeklyOT(getExtendedDailyList(emp.id, year, month), year, month);
     const s = getMonthSummary(emp.id, year, month);
     return [emp.name, emp.type, emp.store||'', r.totalActual, r.monthOT, r.monthMidnight, r.monthHoliday, s.workDays];
@@ -174,7 +174,7 @@ function exportWeeklyCSV(year, month) {
 
 // 月次勤怠ページ
 function renderMonthly(year, month) {
-  const rows = activeEmployees().map(emp => {
+  const rows = activeEmployeesExpanded().map(emp => {
     const s = getMonthSummary(emp.id, year, month);
     return { emp, s };
   });
@@ -235,7 +235,7 @@ function renderMonthly(year, month) {
 
 function exportMonthlyCSV(year, month) {
   const header = ['No','氏名','雇用区分','出勤日数','有給日数','欠勤日数','実働(h)','週残業(h)','深夜(h)','休日(h)'];
-  const rows = activeEmployees().map(emp => {
+  const rows = activeEmployeesExpanded().map(emp => {
     const s = getMonthSummary(emp.id, year, month);
     return [emp.id, emp.name, emp.type, s.workDays, s.paidDays, s.absentDays, s.totalActual, s.monthOT, s.monthMidnight, s.monthHoliday];
   });
