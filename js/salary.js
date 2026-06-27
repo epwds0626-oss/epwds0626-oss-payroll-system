@@ -52,10 +52,10 @@ function renderSalary(year, month) {
 
   <div class="card">
     <style>
-      #salaryTable { width:100%; border-collapse:collapse; font-size:10px; }
-      #salaryTable th { padding:3px 2px; white-space:nowrap; font-size:9px; }
-      #salaryTable td { padding:3px 2px; white-space:nowrap; font-size:9px; }
-      #salaryTable td.tl { max-width:52px; overflow:hidden; text-overflow:ellipsis; font-size:9px; }
+      #salaryTable { width:100%; border-collapse:collapse; }
+      #salaryTable th { padding:2px 1px; white-space:nowrap; font-size:8px; }
+      #salaryTable td { padding:2px 1px; white-space:nowrap; font-size:8px; }
+      #salaryTable td.tl { max-width:44px; overflow:hidden; text-overflow:ellipsis; font-size:8px; }
       .col-hide { display:none; }
       @media (min-width:1200px) {
         #salaryTable { font-size:12.5px; }
