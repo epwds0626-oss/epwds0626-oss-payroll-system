@@ -799,9 +799,22 @@ function printSelectedSalary(year, month) {
       <td style="color:#059669">¥${totals.net.toLocaleString()}</td>
     </tr></tfoot>
   </table>
-  <div class="noprint" style="margin-top:20px">
-    <button onclick="window.print()" style="background:#1a3a5c;color:#fff;border:none;border-radius:7px;padding:8px 20px;font-size:13px;cursor:pointer;margin-right:8px">🖨 印刷</button>
+  <div class="noprint" style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <button onclick="window.print()" style="background:#1a3a5c;color:#fff;border:none;border-radius:7px;padding:8px 20px;font-size:13px;cursor:pointer">🖨 印刷</button>
+    <button onclick="savePDF()" style="background:#dc2626;color:#fff;border:none;border-radius:7px;padding:8px 20px;font-size:13px;cursor:pointer">📄 PDF保存</button>
     <button onclick="window.close()" style="background:#e5e7eb;color:#374151;border:none;border-radius:7px;padding:8px 20px;font-size:13px;cursor:pointer">✕ 閉じる</button>
+  </div>
+  <script>
+  function savePDF() {
+    const msg = document.getElementById('pdfMsg');
+    msg.style.display = 'block';
+    setTimeout(() => window.print(), 300);
+  }
+  </script>
+  <div id="pdfMsg" style="display:none;margin-top:10px;padding:10px 14px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;font-size:12px;color:#92400e">
+    📌 印刷ダイアログが開きます。<br>
+    　iPhone/iPad: 「オプション」→「プリンタ」→ 左下の共有ボタン →「ファイルに保存」<br>
+    　PC（Chrome）: 送信先を「PDFに保存」に変更して保存
   </div>
   </body></html>`);
   w.document.close();
