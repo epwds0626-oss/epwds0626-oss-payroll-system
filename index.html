@@ -2,136 +2,548 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>給与管理システム｜株式会社 One Table Design</title>
-<link rel="stylesheet" href="css/style.css">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>打刻 | One Table Design</title>
 <style>
-#lockScreen {
-  position: fixed; inset: 0;
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: 'Hiragino Sans', 'Noto Sans JP', sans-serif;
   background: #0f1923;
-  display: flex; align-items: center; justify-content: center;
-  z-index: 9999;
+  color: #fff;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 16px 48px;
+  user-select: none;
 }
-.lock-box {
-  background: #1c2837;
-  border-radius: 20px;
-  padding: 40px 36px;
-  width: 320px;
-  text-align: center;
+.header {
+  width: 100%; max-width: 480px;
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 20px;
+}
+.logo { font-size: 12px; color: #e8a020; letter-spacing: 0.1em; font-weight: 600; }
+.clock-time { font-size: 22px; font-weight: 700; letter-spacing: 0.05em; text-align:right; }
+.clock-date { font-size: 11px; color: #888; margin-top: 2px; text-align:right; }
+.conn-status { font-size: 11px; color: #666; margin-top:3px; }
+.conn-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:4px; }
+.conn-dot.online { background:#27ae60; } .conn-dot.offline { background:#c0392b; }
+
+.card {
+  width: 100%; max-width: 480px;
+  background: #1c2837; border-radius: 16px;
+  padding: 20px; margin-bottom: 14px;
   border: 1px solid #2a3a4a;
 }
-.lock-logo { font-size: 13px; color: #e8a020; letter-spacing: 0.1em; margin-bottom: 24px; font-weight: 600; }
-.lock-title { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px; }
-.lock-sub { font-size: 12px; color: #666; margin-bottom: 24px; }
-.lock-input {
-  width: 100%; background: #243040;
-  border: 2px solid #2a3a4a; border-radius: 10px;
-  padding: 12px 16px; color: #fff;
-  font-size: 22px; text-align: center;
-  letter-spacing: 0.4em; margin-bottom: 14px; font-family: inherit;
+.card-label {
+  font-size: 11px; color: #888; letter-spacing: 0.1em;
+  margin-bottom: 12px; text-transform: uppercase;
 }
-.lock-input:focus { outline: none; border-color: #e8a020; }
-.lock-btn {
-  width: 100%; background: #e8a020; color: #fff;
-  border: none; border-radius: 10px; padding: 13px;
-  font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit;
+
+/* 名前グリッド */
+.name-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; }
+.name-btn {
+  background: #243040; border: 2px solid #2a3a4a; border-radius: 12px;
+  padding: 13px 8px; color: #ccc; font-size: 13px; font-family: inherit;
+  cursor: pointer; text-align: center; transition: all 0.15s; line-height: 1.3;
 }
-.lock-links { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
-.lock-links a { color: #888; font-size: 12px; text-decoration: none; }
-.lock-links a:hover { color: #e8a020; }
-.lock-err { color: #e74c3c; font-size: 13px; margin-top: 10px; min-height: 18px; }
+.name-btn:active { transform: scale(0.96); }
+.name-btn.selected { background: #1a3a5c; border-color: #e8a020; color: #fff; font-weight: 600; }
+.name-btn .store-tag { display:block; font-size:10px; color:#888; margin-top:2px; }
+.name-btn.selected .store-tag { color:#e8a020; }
+
+/* 出退勤ボタン */
+.punch-area { width:100%; max-width:480px; display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+.punch-btn {
+  border: none; border-radius: 14px; padding: 20px 10px;
+  font-size: 16px; font-weight: 700; font-family: inherit;
+  cursor: pointer; transition: all 0.15s;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+}
+.punch-btn:active { transform: scale(0.96); }
+.punch-btn .p-icon { font-size: 26px; }
+.punch-btn .p-label { font-size: 13px; font-weight: 600; }
+.punch-btn.in  { background: linear-gradient(135deg,#27ae60,#1e8449); color:#fff; }
+.punch-btn.out { background: linear-gradient(135deg,#2980b9,#1a5f8a); color:#fff; }
+.punch-btn:disabled { background:#1c2837; color:#444; cursor:not-allowed; border:2px solid #2a3a4a; }
+.punch-btn:disabled .p-icon { opacity:0.2; }
+
+/* 休憩エリア */
+.break-area { width:100%; max-width:480px; margin-bottom:14px; }
+.break-title { font-size:11px; color:#888; letter-spacing:0.1em; margin-bottom:10px; text-transform:uppercase; }
+
+/* クイック休憩ボタン */
+.break-quick { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:10px; }
+.brk-btn {
+  border: none; border-radius: 12px; padding: 12px 6px;
+  font-size: 12px; font-weight: 600; font-family: inherit;
+  cursor: pointer; transition: all 0.15s; text-align: center; line-height: 1.4;
+}
+.brk-btn:active { transform: scale(0.96); }
+.brk-btn .b-icon { font-size: 18px; display:block; margin-bottom:3px; }
+.brk-btn .b-name { font-size: 11px; }
+.brk-btn .b-time { font-size: 10px; opacity:0.75; }
+.brk-btn.start { background: linear-gradient(135deg,#e67e22,#ca6f1e); color:#fff; }
+.brk-btn.end   { background: linear-gradient(135deg,#8e44ad,#7d3c98); color:#fff; }
+.brk-btn.active-break { animation: blink 1.5s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.6} }
+.brk-btn:disabled { background:#1c2837; color:#444; cursor:not-allowed; border:2px solid #2a3a4a; }
+
+/* 休憩中バナー */
+.break-banner {
+  background: #2d1a00; border: 1px solid #e67e22; border-radius: 10px;
+  padding: 10px 16px; font-size: 13px; color: #e67e22; font-weight: 600;
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.break-banner.hidden { display: none; }
+
+/* 休憩履歴チップ */
+.break-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.b-chip {
+  background: #243040; border-radius: 8px; padding: 4px 10px;
+  font-size: 11px; color: #aaa; display: flex; align-items: center; gap: 6px;
+}
+.b-chip .b-dur { color: #e67e22; font-weight: 700; }
+
+/* 今日の記録 */
+.today-record { width:100%; max-width:480px; }
+.record-row {
+  display:flex; justify-content:space-between; align-items:center;
+  padding: 10px 0; border-bottom: 1px solid #2a3a4a; font-size:13px;
+}
+.record-row:last-child { border-bottom:none; }
+.record-name { color:#ccc; font-weight:500; min-width:0; flex:1; }
+.record-right { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+.tc { background:#243040; border-radius:7px; padding:3px 9px; font-size:12px; font-weight:600; }
+.tc.in  { border-left:3px solid #27ae60; }
+.tc.out { border-left:3px solid #2980b9; }
+.tc.brk { border-left:3px solid #e67e22; font-size:11px; }
+.working-badge {
+  background:#1e3a1e; color:#27ae60; border-radius:6px;
+  padding:3px 8px; font-size:11px; font-weight:600; animation:pulse 2s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+.toast {
+  position:fixed; bottom:28px; left:50%; transform:translateX(-50%);
+  background:#1c2837; border:1px solid #e8a020; color:#fff;
+  border-radius:12px; padding:13px 22px; font-size:14px; font-weight:600;
+  z-index:999; white-space:nowrap;
+  box-shadow:0 8px 24px rgba(0,0,0,0.5); animation:slideUp 0.25s ease;
+}
+.toast.ok  { border-color:#27ae60; }
+.toast.err { border-color:#c0392b; }
+@keyframes slideUp { from { transform:translateX(-50%) translateY(16px); opacity:0; } }
+.loading { color:#444; text-align:center; padding:20px; font-size:13px; }
 </style>
 </head>
 <body>
 
-<!-- ロック画面 -->
-<div id="lockScreen">
-  <div class="lock-box">
-    <div class="lock-logo">ONE TABLE DESIGN</div>
-    <div class="lock-title">給与管理システム</div>
-    <div class="lock-sub">管理者専用</div>
-    <input type="password" class="lock-input" id="pwInput" placeholder="●●●●"
-      onkeydown="if(event.key==='Enter')doAdminLogin()">
-    <button class="lock-btn" onclick="doAdminLogin()">ログイン</button>
-    <div class="lock-err" id="lockErr"></div>
-    <div class="lock-links">
-      <a href="../timecard/">👉 スタッフ打刻はこちら</a>
-      <a href="admin/firebase-sync.html">📡 打刻データ取込</a>
-    </div>
+<div class="header">
+  <div>
+    <div class="logo">OTD TIMECARD</div>
+    <div class="conn-status"><span class="conn-dot" id="connDot"></span><span id="connText">接続中...</span></div>
+  </div>
+  <div>
+    <div class="clock-time" id="clockTime">--:--:--</div>
+    <div class="clock-date" id="clockDate"></div>
   </div>
 </div>
 
-<script>
-function doAdminLogin() {
-  const pw = document.getElementById('pwInput').value;
-  if (pw === '0626') {
-    document.getElementById('lockScreen').style.display = 'none';
-    document.getElementById('appBody').style.display = 'flex';
-  } else {
-    document.getElementById('lockErr').textContent = 'パスワードが違います';
-    document.getElementById('pwInput').value = '';
-  }
-}
-</script>
+<!-- スタッフ選択 -->
+<div class="card">
+  <div class="card-label">スタッフを選んでください</div>
+  <div class="name-grid" id="nameGrid"><div class="loading">読込中...</div></div>
+</div>
 
-<div id="appBody" style="display:none;width:100%;min-height:100vh">
-<nav class="sidebar" id="sidebar">
-  <div class="sidebar-header">
-    <div class="logo">OTD</div>
-    <div class="company-name">One Table Design</div>
+<!-- 出退勤ボタン -->
+<div class="punch-area">
+  <button class="punch-btn in"  id="btnIn"  onclick="punch('in')"  disabled>
+    <span class="p-icon">🟢</span><span class="p-label">出　勤</span>
+  </button>
+  <button class="punch-btn out" id="btnOut" onclick="punch('out')" disabled>
+    <span class="p-icon">🔵</span><span class="p-label">退　勤</span>
+  </button>
+</div>
+
+<!-- 休憩エリア -->
+<div class="break-area">
+  <div class="break-title">☕ 休憩打刻</div>
+
+  <!-- 休憩中バナー -->
+  <div class="break-banner hidden" id="breakBanner">
+    <span>☕ 休憩中...</span>
+    <span id="breakBannerTime"></span>
   </div>
-  <ul class="nav-menu">
-    <li class="nav-item active" data-page="dashboard"><span class="nav-icon">📊</span>ダッシュボード</li>
-    <li class="nav-item" data-page="employees"><span class="nav-icon">👥</span>従業員マスタ</li>
-    <li class="nav-item" data-page="attendance"><span class="nav-icon">🕐</span>勤怠入力</li>
-    <li class="nav-item" data-page="weekly"><span class="nav-icon">📅</span>週次集計（週マタギ）</li>
-    <li class="nav-item" data-page="monthly"><span class="nav-icon">📋</span>月次勤怠</li>
-    <li class="nav-item" data-page="salary"><span class="nav-icon">💴</span>給与計算</li>
-    <li class="nav-item" data-page="payslip"><span class="nav-icon">🧾</span>給与明細</li>
-    <li class="nav-item" data-page="paid_leave"><span class="nav-icon">🌿</span>有給管理簿</li>
-    <li class="nav-item" data-page="article36"><span class="nav-icon">⚖️</span>３６協定管理</li>
-    <li class="nav-item" data-page="freelance"><span class="nav-icon">🤝</span>業務委託</li>
-    <li class="nav-item" data-page="labor_report"><span class="nav-icon">📁</span>労基提出書類</li>
-  </ul>
-  <div class="sidebar-footer">
-    <div class="version">v3.0 | 労基完全対応</div>
+
+  <!-- クイックボタン3種 + 休憩終了 -->
+  <div class="break-quick">
+    <button class="brk-btn start" id="brkA" onclick="breakStart('A')" disabled>
+      <span class="b-icon">🍱</span>
+      <span class="b-name">ランチ前</span>
+      <span class="b-time">10:15頃</span>
+    </button>
+    <button class="brk-btn start" id="brkB" onclick="breakStart('B')" disabled>
+      <span class="b-icon">😴</span>
+      <span class="b-name">ランチ後</span>
+      <span class="b-time">15:00頃</span>
+    </button>
+    <button class="brk-btn start" id="brkC" onclick="breakStart('C')" disabled>
+      <span class="b-icon">🌙</span>
+      <span class="b-name">ディナー後</span>
+      <span class="b-time">20:30頃</span>
+    </button>
   </div>
-</nav>
-
-<main class="main-content">
-  <header class="top-header">
-    <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
-    <div class="header-title" id="pageTitle">ダッシュボード</div>
-    <div class="header-right">
-      <select id="targetYear" onchange="refreshCurrentPage()"></select>
-      <select id="targetMonth" onchange="refreshCurrentPage()"></select>
-      <button class="btn-primary" onclick="saveData()">💾 保存</button>
-    </div>
-  </header>
-
-  <div class="page-content" id="pageContent">
-    <!-- pages rendered by JS -->
+  <div style="margin-top:8px">
+    <button class="brk-btn end" id="brkEnd" onclick="breakEnd()" disabled
+      style="width:100%;padding:14px;font-size:14px">
+      <span class="b-icon">▶️</span>
+      <span class="b-name">休憩　終了</span>
+    </button>
   </div>
-</main>
 
-<div id="modal" class="modal-overlay" style="display:none">
-  <div class="modal-box" id="modalBox"></div>
+  <!-- 本日の休憩履歴 -->
+  <div class="break-chips" id="breakChips"></div>
+</div>
+
+<!-- 今日の打刻一覧 -->
+<div class="today-record">
+  <div style="font-size:11px;color:#888;letter-spacing:0.1em;margin-bottom:10px;text-transform:uppercase">本日の打刻状況</div>
+  <div id="todayList"><div class="loading">読込中...</div></div>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="js/data.js"></script>
-<script src="js/app.js"></script>
-<script src="js/attendance.js"></script>
-<script src="js/weekly.js"></script>
-<script src="js/salary.js"></script>
-<script src="js/paid_leave.js"></script>
-<script src="js/article36.js"></script>
-<script src="js/reports.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/freelance.js"></script>
-</div><!-- /appBody -->
+<script>
+// ── Firebase ──────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyA3YVQwyAudMEZJs_rfEW8IHfxh4Grvlbw",
+  authDomain: "wcsa-shift.firebaseapp.com",
+  databaseURL: "https://wcsa-shift-default-rtdb.firebaseio.com",
+  projectId: "wcsa-shift",
+  storageBucket: "wcsa-shift.firebasestorage.app",
+  messagingSenderId: "521554404721",
+  appId: "1:521554404721:web:f59a570dd7e10f3aed82d0"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ── スタッフ一覧（Firebaseから動的取得） ─────────────────
+let STAFF = [];
+
+// 休憩パターン
+const BREAK_LABELS = {
+  A: {name:'ランチ前', icon:'🍱', hint:'10:15頃'},
+  B: {name:'ランチ後', icon:'😴', hint:'15:00頃'},
+  C: {name:'ディナー後', icon:'🌙', hint:'20:30頃'},
+};
+
+// ── 両店スタッフ判定 ──────────────────────────────────────
+function isBothStore(id) {
+  const s = STAFF.find(s => s.id === id || s.id === String(id));
+  return s && s.store === '両店';
+}
+
+// ── 状態 ──────────────────────────────────────────────────
+let selectedId  = null;  // 例: '10_enya' or '10_marco' or 10
+let todayData   = {};
+let bannerTimer = null;
+
+// ── 時計 ──────────────────────────────────────────────────
+function updateClock() {
+  const n = new Date();
+  document.getElementById('clockTime').textContent =
+    n.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  document.getElementById('clockDate').textContent =
+    n.toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short'});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── 日付キー ──────────────────────────────────────────────
+function todayKey() {
+  const n = new Date();
+  return `${n.getFullYear()}-${p2(n.getMonth()+1)}-${p2(n.getDate())}`;
+}
+function payMonthKey() {
+  const n = new Date();
+  const d = n.getDate();
+  let m = d >= 21 ? n.getMonth()+2 : n.getMonth()+1;
+  let y = n.getFullYear();
+  if (m > 12) { m -= 12; y++; }
+  return `${y}-${p2(m)}`;
+}
+function p2(v) { return String(v).padStart(2,'0'); }
+function nowHHMM() {
+  const n = new Date();
+  return `${p2(n.getHours())}:${p2(n.getMinutes())}`;
+}
+function hhmm2min(s) { const [h,m]=s.split(':').map(Number); return h*60+m; }
+
+// ── Firebase パス ──────────────────────────────────────────
+function dayRef(empId) {
+  return db.ref(`timecard/${payMonthKey()}/${empId}/${todayKey()}`);
+}
+
+// ── 接続監視 ──────────────────────────────────────────────
+db.ref('.info/connected').on('value', snap => {
+  const on = snap.val();
+  document.getElementById('connDot').className = 'conn-dot ' + (on?'online':'offline');
+  document.getElementById('connText').textContent = on ? 'オンライン' : 'オフライン';
+});
+
+// ── 全員リアルタイム購読 ──────────────────────────────────
+function subscribeToday() {
+  db.ref(`timecard/${payMonthKey()}`).on('value', snap => {
+    const raw = snap.val() || {};
+    todayData = {};
+    Object.entries(raw).forEach(([eid, dates]) => {
+      const rec = (dates||{})[todayKey()];
+      if (rec) todayData[eid] = rec;
+    });
+    renderTodayList();
+    if (selectedId) updateButtons();
+  });
+}
+
+// ── 名前グリッド ──────────────────────────────────────────
+function renderNameGrid() {
+  document.getElementById('nameGrid').innerHTML = STAFF.map(s =>
+    `<button class="name-btn ${selectedId===s.id||selectedId===s.id+'_enya'||selectedId===s.id+'_marco'?'selected':''}" onclick="selectStaff(${s.id})">
+      ${s.name}<span class="store-tag">${s.store}</span>
+    </button>`
+  ).join('');
+}
+function selectStaff(id) {
+  id = parseInt(id);
+  // 同じスタッフをタップで選択解除
+  const baseId = typeof selectedId === 'string' ? parseInt(selectedId) : selectedId;
+  if (baseId === id) {
+    selectedId = null;
+    renderNameGrid();
+    updateButtons();
+    renderBreakChips();
+    return;
+  }
+
+  // 両店スタッフは店舗選択ダイアログを表示
+  if (isBothStore(id)) {
+    const s = STAFF.find(s => s.id === id);
+    if (confirm(`${s.name}\n\n打刻する店舗を選んでください\n\n[OK] → 本店🐟\n[キャンセル] → マルコ🍝`)) {
+      selectedId = `${id}_enya`;
+    } else {
+      selectedId = `${id}_marco`;
+    }
+  } else {
+    selectedId = id;
+  }
+  renderNameGrid();
+  updateButtons();
+  renderBreakChips();
+}
+
+// ── ボタン状態更新 ──────────────────────────────────────
+function updateButtons() {
+  const rec = selectedId ? (todayData[selectedId] || {}) : {};
+  const breaks  = rec.breaks || [];
+  const onBreak = breaks.some(b => b.start && !b.end);
+
+  document.getElementById('btnIn').disabled  = !selectedId || !!rec.in;
+  document.getElementById('btnOut').disabled = !selectedId || !rec.in || !!rec.out || onBreak;
+
+  const canBreak = !!(selectedId && rec.in && !rec.out && !onBreak);
+  ['brkA','brkB','brkC'].forEach(id => {
+    document.getElementById(id).disabled = !canBreak;
+  });
+
+  document.getElementById('brkEnd').disabled = !onBreak;
+
+  const banner = document.getElementById('breakBanner');
+  if (onBreak) {
+    const cur = breaks.find(b => b.start && !b.end);
+    banner.classList.remove('hidden');
+    document.getElementById('breakBannerTime').textContent =
+      BREAK_LABELS[cur.type].icon + ' ' + BREAK_LABELS[cur.type].name + '休憩 ' + cur.start + '〜';
+  } else {
+    banner.classList.add('hidden');
+  }
+}
+
+// ── 打刻：出勤・退勤 ─────────────────────────────────────
+function punch(type) {
+  if (!selectedId) return;
+  const baseId = typeof selectedId === 'string' && selectedId.includes('_')
+    ? parseInt(selectedId) : selectedId;
+  const emp   = STAFF.find(s => s.id === baseId || s.id === parseInt(baseId));
+  const storeSuffix = typeof selectedId === 'string' && selectedId.includes('_enya') ? '【本店】'
+    : typeof selectedId === 'string' && selectedId.includes('_marco') ? '【マルコ】' : '';
+  const label = type === 'in' ? '出勤' : '退勤';
+  const time  = nowHHMM();
+  if (!confirm(`${emp.name}${storeSuffix}\n${label}：${time}\n\nよろしいですか？`)) return;
+
+  dayRef(selectedId).update({ [type]: time, [`${type}Ts`]: Date.now() }, err => {
+    if (err) { showToast('通信エラー', true); return; }
+    showToast(`${emp.name}${storeSuffix}　${label}：${time}`);
+    selectedId = null;
+    renderNameGrid();
+  });
+}
+
+// ── 休憩：開始 ───────────────────────────────────────────
+function breakStart(type) {
+  if (!selectedId) return;
+  const baseId = typeof selectedId === 'string' && selectedId.includes('_')
+    ? parseInt(selectedId) : selectedId;
+  const emp  = STAFF.find(s => s.id === baseId || s.id === parseInt(baseId));
+  const storeSuffix = typeof selectedId === 'string' && selectedId.includes('_enya') ? '【本店】'
+    : typeof selectedId === 'string' && selectedId.includes('_marco') ? '【マルコ】' : '';
+  const lbl  = BREAK_LABELS[type];
+  const time = nowHHMM();
+  if (!confirm(`${emp.name}${storeSuffix}\n${lbl.icon} ${lbl.name}休憩 開始：${time}\n\nよろしいですか？`)) return;
+
+  dayRef(selectedId).once('value', snap => {
+    const rec    = snap.val() || {};
+    const breaks = rec.breaks || [];
+    breaks.push({ type, start: time, end: null, startTs: Date.now() });
+    dayRef(selectedId).update({ breaks }, err => {
+      if (err) { showToast('通信エラー', true); return; }
+      showToast(`${lbl.icon} ${lbl.name}休憩 開始：${time}`);
+    });
+  });
+}
+
+// ── 休憩：終了 ───────────────────────────────────────────
+function breakEnd() {
+  if (!selectedId) return;
+  const baseId = typeof selectedId === 'string' && selectedId.includes('_')
+    ? parseInt(selectedId) : selectedId;
+  const emp  = STAFF.find(s => s.id === baseId || s.id === parseInt(baseId));
+  const storeSuffix = typeof selectedId === 'string' && selectedId.includes('_enya') ? '【本店】'
+    : typeof selectedId === 'string' && selectedId.includes('_marco') ? '【マルコ】' : '';
+  const time = nowHHMM();
+
+  dayRef(selectedId).once('value', snap => {
+    const rec    = snap.val() || {};
+    const breaks = (rec.breaks || []).slice();
+    const idx    = breaks.findLastIndex ? breaks.findLastIndex(b => b.start && !b.end)
+                 : [...breaks].reverse().findIndex(b => b.start && !b.end);
+    const realIdx = breaks.findLastIndex ? idx : breaks.length - 1 - idx;
+
+    if (realIdx < 0) { showToast('休憩中の記録が見つかりません', true); return; }
+
+    const cur = breaks[realIdx];
+    const dur = calcBreakMin(cur.start, time);
+    const lbl = BREAK_LABELS[cur.type];
+
+    if (!confirm(`${emp.name}${storeSuffix}\n${lbl.icon} ${lbl.name}休憩 終了：${time}（${dur}分）\n\nよろしいですか？`)) return;
+
+    breaks[realIdx] = { ...cur, end: time, endTs: Date.now(), minutes: dur };
+    dayRef(selectedId).update({ breaks }, err => {
+      if (err) { showToast('通信エラー', true); return; }
+      showToast(`${lbl.icon} ${lbl.name}休憩 終了：${time}（${dur}分）`);
+    });
+  });
+}
+
+function calcBreakMin(start, end) {
+  let diff = hhmm2min(end) - hhmm2min(start);
+  if (diff < 0) diff += 24 * 60;
+  return diff;
+}
+
+// ── 休憩チップ ───────────────────────────────────────────
+function renderBreakChips() {
+  const el = document.getElementById('breakChips');
+  if (!selectedId) { el.innerHTML = ''; return; }
+  const breaks = (todayData[selectedId] || {}).breaks || [];
+  if (!breaks.length) { el.innerHTML = ''; return; }
+  el.innerHTML = breaks.map(b => {
+    const lbl = BREAK_LABELS[b.type] || {};
+    const dur = b.end ? b.minutes + '分' : '休憩中...';
+    return `<div class="b-chip">${lbl.icon||''} ${lbl.name||b.type}
+      ${b.start}${b.end?'〜'+b.end:'〜?'}
+      <span class="b-dur">${dur}</span></div>`;
+  }).join('');
+}
+
+// ── 今日の全員一覧 ────────────────────────────────────────
+function renderTodayList() {
+  // 通常スタッフ + 両店スタッフ(_enya/_marco)を展開してリスト化
+  const displayList = [];
+  for (const s of STAFF) {
+    if (s.store === '両店') {
+      const keyE = `${s.id}_enya`;
+      const keyM = `${s.id}_marco`;
+      if (todayData[keyE]) displayList.push({ key: keyE, name: s.name, label: `${s.name}【本店】` });
+      if (todayData[keyM]) displayList.push({ key: keyM, name: s.name, label: `${s.name}【マルコ】` });
+    } else {
+      if (todayData[s.id] || todayData[String(s.id)]) {
+        const key = todayData[s.id] ? s.id : String(s.id);
+        displayList.push({ key, name: s.name, label: s.name });
+      }
+    }
+  }
+
+  if (!displayList.length) {
+    document.getElementById('todayList').innerHTML =
+      '<div class="loading" style="color:#444">まだ誰も打刻していません</div>';
+    return;
+  }
+  document.getElementById('todayList').innerHTML = displayList.map(item => {
+    const rec     = todayData[item.key] || {};
+    const breaks  = rec.breaks || [];
+    const onBreak = breaks.some(b => b.start && !b.end);
+    const totalBrk = breaks.filter(b=>b.end).reduce((sum,b)=>sum+b.minutes,0);
+
+    let workStr = '';
+    if (rec.in && rec.out) {
+      const gross = hhmm2min(rec.out) - hhmm2min(rec.in);
+      const net   = gross - totalBrk;
+      workStr = `実働 ${Math.floor(net/60)}h${net%60?net%60+'m':''}`;
+    }
+
+    const brkChips = breaks.map(b => {
+      const lbl = BREAK_LABELS[b.type]||{};
+      return `<span class="tc brk">${lbl.icon||'☕'} ${lbl.name||b.type} ${b.start}${b.end?'〜'+b.end:'〜?'}</span>`;
+    }).join('');
+
+    return `<div class="record-row">
+      <div class="record-name">${item.label}</div>
+      <div class="record-right">
+        ${rec.in  ? `<span class="tc in">${rec.in}</span>` : ''}
+        ${breaks.length ? brkChips : ''}
+        ${rec.out ? `<span class="tc out">${rec.out}</span>` : onBreak ? '<span class="working-badge">休憩中</span>' : rec.in ? '<span class="working-badge">勤務中</span>' : ''}
+        ${workStr ? `<span style="font-size:11px;color:#888">${workStr}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  if (selectedId) { updateButtons(); renderBreakChips(); }
+}
+
+// ── トースト ──────────────────────────────────────────────
+function showToast(msg, isErr=false) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (isErr?'err':'ok');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+// ── 初期化 ───────────────────────────────────────────────
+db.ref('payroll/employees').on('value', snap => {
+  const val = snap.val();
+  if (val) {
+    const raw = Array.isArray(val) ? val.filter(Boolean) : Object.values(val);
+    STAFF = raw
+      .filter(e => e && e.id && e.name && e.status !== 'inactive' && e.status !== 'leave')
+      .sort((a, b) => (a.order ?? a.id * 10) - (b.order ?? b.id * 10))
+      .map(e => ({ id: e.id, name: e.name, store: e.store || '' }));
+  }
+  renderNameGrid();
+  subscribeToday();
+});
+</script>
 </body>
 </html>
