@@ -31,7 +31,8 @@ function renderSalary(year, month) {
     <div style="display:flex;gap:8px">
       <button class="btn-outline" onclick="openSubtotalSelector(${year},${month})">👥 合計選択</button>
       <button class="btn-outline" onclick="exportSalaryCSV(${year},${month})">CSV出力</button>
-      <button class="btn-accent" onclick="window.print()">🖨 印刷</button>
+      <button class="btn-outline" onclick="openPrintSelector(${year},${month})">🖨 選択印刷</button>
+      <button class="btn-accent" onclick="window.print()">全体印刷</button>
     </div>
   </div>
   <div class="alert alert-info" style="margin-bottom:12px">
@@ -615,4 +616,145 @@ function _restoreSubtotal() {
   if (!_subtotalState) return;
   const { year, month, empIds } = _subtotalState;
   _renderSubtotalBar(year, month, empIds);
+}
+
+// ===== 選択印刷 =====
+function openPrintSelector(year, month) {
+  const existing = document.getElementById('printSelectorModal');
+  if (existing) existing.remove();
+
+  const emps = activeEmployees();
+  const checkboxes = emps.map(emp => `
+    <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px;cursor:pointer;transition:background .15s"
+      onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background='transparent'">
+      <input type="checkbox" value="${emp.id}" class="printChk" checked
+        style="width:16px;height:16px;accent-color:#1a3a5c;cursor:pointer">
+      <span style="font-size:13.5px;color:#1a3a5c;font-weight:500">${emp.name}</span>
+      <span style="font-size:11px;color:#9ca3af;margin-left:auto">${emp.store||''} / ${emp.type}</span>
+    </label>`).join('');
+
+  const modal = document.createElement('div');
+  modal.id = 'printSelectorModal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;padding:24px;width:400px;max-width:94vw;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,0.25)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div>
+          <div style="font-weight:800;font-size:15px;color:#1a3a5c">🖨 印刷するスタッフを選択</div>
+          <div style="font-size:11.5px;color:#6b7280;margin-top:2px">${year}年${month}月</div>
+        </div>
+        <button onclick="document.getElementById('printSelectorModal').remove()"
+          style="background:#f3f4f6;border:none;border-radius:8px;width:32px;height:32px;font-size:18px;cursor:pointer;color:#6b7280">×</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button onclick="document.querySelectorAll('.printChk').forEach(c=>c.checked=true)"
+          style="font-size:11.5px;padding:4px 10px;border:1px solid #d1d5db;border-radius:5px;background:#f9fafb;cursor:pointer;color:#374151">全選択</button>
+        <button onclick="document.querySelectorAll('.printChk').forEach(c=>c.checked=false)"
+          style="font-size:11.5px;padding:4px 10px;border:1px solid #d1d5db;border-radius:5px;background:#f9fafb;cursor:pointer;color:#374151">全解除</button>
+        <select onchange="document.querySelectorAll('.printChk').forEach(c=>c.checked=(this.value===''||employees.find(e=>e.id==c.value)?.store===this.value))"
+          style="font-size:11.5px;padding:4px 10px;border:1px solid #d1d5db;border-radius:5px;background:#f9fafb;cursor:pointer;color:#374151;margin-left:auto">
+          <option value="">店舗絞込</option>
+          <option value="本店">本店</option>
+          <option value="マルコ">マルコ</option>
+        </select>
+      </div>
+      <div style="overflow-y:auto;flex:1;border:1px solid #e5e7eb;border-radius:8px;padding:4px 0">
+        ${checkboxes}
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button onclick="printSelectedSalary(${year},${month})"
+          style="flex:1;background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;cursor:pointer;font-weight:700">🖨 印刷</button>
+        <button onclick="document.getElementById('printSelectorModal').remove()"
+          style="background:#e5e7eb;color:#374151;border:none;border-radius:8px;padding:11px 14px;font-size:14px;cursor:pointer">キャンセル</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.addEventListener('keydown', function escH(e) {
+    if (e.key === 'Escape') { modal.remove(); document.removeEventListener('keydown', escH); }
+  });
+}
+
+function printSelectedSalary(year, month) {
+  const selected = [...document.querySelectorAll('.printChk:checked')].map(c => parseInt(c.value));
+  document.getElementById('printSelectorModal').remove();
+  if (!selected.length) return;
+
+  const rows = selected.map(id => {
+    const emp = employees.find(e => e.id === id);
+    if (!emp) return '';
+    const s = calcSalaryWithAdj(emp, year, month);
+    const fmt = v => v ? `¥${v.toLocaleString()}` : '—';
+    return `<tr>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap;font-weight:600">${emp.name}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.basePay)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.otPay)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.midnightPay)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.holidayLegalPay)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.commute)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:700">${fmt(s.grossTotal)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.kenpo)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.kosei)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.shienkin)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.koyoHoken)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.incomeTax)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.juminzei)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right;color:#059669;font-weight:700">${fmt(s.netPay)}</td>
+    </tr>`;
+  }).join('');
+
+  // 選択スタッフの合計
+  const totals = selected.reduce((acc, id) => {
+    const emp = employees.find(e => e.id === id);
+    if (!emp) return acc;
+    const s = calcSalaryWithAdj(emp, year, month);
+    acc.gross  += s.grossTotal; acc.deduct += s.totalDeduction; acc.net += s.netPay;
+    acc.base   += s.basePay;    acc.ot     += s.otPay;
+    return acc;
+  }, {gross:0,deduct:0,net:0,base:0,ot:0});
+
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>給与計算書 ${year}年${month}月</title>
+  <style>
+    body{font-family:'Hiragino Sans','Yu Gothic',sans-serif;font-size:12px;margin:20px}
+    h2{color:#1a3a5c;margin-bottom:4px}
+    .sub{color:#6b7280;font-size:11px;margin-bottom:16px}
+    .summary{display:flex;gap:12px;margin-bottom:16px}
+    .sbox{border:1px solid #e5e7eb;border-radius:6px;padding:8px 14px;min-width:120px}
+    .sbox .lbl{font-size:10px;color:#6b7280}
+    .sbox .val{font-size:15px;font-weight:700;color:#1a3a5c}
+    .sbox.green .val{color:#059669}
+    table{width:100%;border-collapse:collapse;font-size:11px}
+    th{background:#1a3a5c;color:#fff;padding:6px 10px;text-align:center;white-space:nowrap}
+    tr:nth-child(even){background:#f9fafb}
+    .total-row td{background:#f0f4ff;font-weight:700;border-top:2px solid #1a3a5c}
+    @media print{body{margin:10px}}
+  </style></head><body>
+  <h2>💴 給与計算書 — ${year}年${month}月</h2>
+  <div class="sub">賃金計算期間：${year}年${month === 1 ? year-1 : year}年${month === 1 ? 12 : month-1}月21日〜${year}年${month}月20日　対象：${selected.length}名</div>
+  <div class="summary">
+    <div class="sbox"><div class="lbl">支給合計</div><div class="val">¥${totals.gross.toLocaleString()}</div></div>
+    <div class="sbox"><div class="lbl">控除合計</div><div class="val">¥${totals.deduct.toLocaleString()}</div></div>
+    <div class="sbox green"><div class="lbl">振込合計</div><div class="val">¥${totals.net.toLocaleString()}</div></div>
+    <div class="sbox"><div class="lbl">残業手当</div><div class="val">¥${totals.ot.toLocaleString()}</div></div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>氏名</th><th>基本給/時給計</th><th>残業(〜60h)</th><th>深夜</th><th>法定休日</th><th>交通費</th>
+      <th>支給合計</th><th>健保</th><th>厚年</th><th>子育支援</th><th>雇保</th><th>所得税</th><th>住民税</th><th>振込額</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr class="total-row">
+      <td style="padding:6px 10px">合　計</td>
+      <td style="padding:6px 10px;text-align:right">¥${totals.base.toLocaleString()}</td>
+      <td style="padding:6px 10px;text-align:right">¥${totals.ot.toLocaleString()}</td>
+      <td colspan="4" style="padding:6px 10px;text-align:right">¥${totals.gross.toLocaleString()}</td>
+      <td colspan="5" style="padding:6px 10px;text-align:right">¥${totals.deduct.toLocaleString()}</td>
+      <td style="padding:6px 10px;text-align:right;color:#059669">¥${totals.net.toLocaleString()}</td>
+    </tfoot>
+  </table>
+  </body></html>`);
+  w.document.close();
+  w.print();
 }
