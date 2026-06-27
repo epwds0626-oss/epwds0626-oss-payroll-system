@@ -7,7 +7,7 @@ let _subtotalState = null;
 
 function renderSalary(year, month) {
   subscribeAdj(year, month);
-  const results = activeEmployees().map(emp => ({ emp, sal: calcSalaryWithAdj(emp, year, month) }));
+  const results = activeEmployeesExpanded().map(emp => ({ emp, sal: calcSalaryWithAdj(emp, year, month) }));
   const totals  = results.reduce((acc, { sal }) => {
     acc.gross    += sal.grossTotal;
     acc.base     += sal.basePay;
@@ -121,7 +121,7 @@ function renderSalary(year, month) {
 
 function exportSalaryCSV(year, month) {
   const header = ['氏名','雇用区分','基本給/時給計','残業手当','深夜手当','休日手当','交通費','支給合計','健保','厚年','子育支援金','雇保','所得税','住民税','控除合計','振込額'];
-  const rows = activeEmployees().map(emp => {
+  const rows = activeEmployeesExpanded().map(emp => {
     const s = calcSalaryWithAdj(emp, year, month);
     return [emp.name, emp.type, s.basePay, s.otPay, s.midnightPay, s.holidayPay, s.commute, s.grossTotal, s.kenpo, s.kosei, s.shienkin||0, s.koyoHoken, s.incomeTax, s.juminzei, s.totalDeduction, s.netPay];
   });
@@ -131,7 +131,7 @@ function exportSalaryCSV(year, month) {
 
 // -------- 給与明細 --------
 function renderPayslip(year, month) {
-  const empOptions = activeEmployees().map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
+  const empOptions = activeEmployeesExpanded().map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
   return `
   <div class="section-header">
     <div class="section-title">🧾 給与明細書 ― ${year}年${month}月</div>
@@ -416,7 +416,7 @@ function printAllPayslips(year, month) {
     .slip{max-width:680px;margin:0 auto 40px;padding:20px;border:1px solid #ccc;page-break-after:always}
     @media print{.slip{break-after:page}}
   </style></head><body>`);
-  for (const emp of activeEmployees()) {
+  for (const emp of activeEmployeesExpanded()) {
     const sal = calcSalary(emp, year, month);
     w.document.write(`<div class="slip">${payslipHTML(emp, sal, year, month).replace(/class="card[^"]*"/g,'')}</div>`);
   }
@@ -433,7 +433,7 @@ function openSubtotalSelector(year, month) {
   const existing = document.getElementById('subtotalSelectorModal');
   if (existing) existing.remove();
 
-  const emps = activeEmployees();
+  const emps = activeEmployeesExpanded();
   const checkboxes = emps.map(emp => `
     <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px;cursor:pointer;transition:background .15s"
       onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background='transparent'">
@@ -641,7 +641,7 @@ function openPrintSelector(year, month) {
   const existing = document.getElementById('printSelectorModal');
   if (existing) existing.remove();
 
-  const emps = activeEmployees();
+  const emps = activeEmployeesExpanded();
   const checkboxes = emps.map(emp => `
     <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px;cursor:pointer;transition:background .15s"
       onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background='transparent'">
