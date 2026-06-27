@@ -501,6 +501,27 @@ function activeEmployees() {
   return employees.filter(e => e.status !== 'inactive' && e.status !== 'leave');
 }
 
+// -------- 両店スタッフ対応ヘルパー --------
+function isBothStoreId(empId) {
+  return String(empId).includes('_enya') || String(empId).includes('_marco');
+}
+function getBaseId(empId) {
+  return parseInt(String(empId).replace('_enya','').replace('_marco',''));
+}
+// 両店スタッフを本店・マルコの2行に展開した一覧を返す（有給以外の全ページで使用）
+function activeEmployeesExpanded() {
+  const list = [];
+  for (const e of activeEmployees()) {
+    if (e.store === '両店') {
+      list.push({ ...e, id: `${e.id}_enya`,  name: `${e.name}【本店】`,  _origId: e.id });
+      list.push({ ...e, id: `${e.id}_marco`, name: `${e.name}【マルコ】`, _origId: e.id });
+    } else {
+      list.push(e);
+    }
+  }
+  return list;
+}
+
 // -------- Firebase 読み込み・リアルタイム購読 --------
 
 // Firebase更新時にページ全体を再描画せず必要部分だけ更新する
@@ -763,7 +784,9 @@ function calcWeeklyOT(dailyList, year, month) {
 
 // 給与計算期間（前月21日〜当月20日）＋週マタギのため前後1週間を含む打刻を取得
 // punchOut から midnight/dailyOT をリアルタイム再計算（Firebase保存値の精度誤差を上書き）
+// 両店マージ済みレコード（_merged:true）はactualが既に合算済みなのでスキップ
 function recomputeRec(rec) {
+  if (rec._merged) return rec; // マージ済みは再計算しない
   if (!rec.punchIn || !rec.punchOut) return rec;
   const toMins = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
 
@@ -792,7 +815,6 @@ function getExtendedDailyList(empId, year, month) {
   const { startDate, endDate } = getPayPeriod(year, month);
 
   // 週マタギのため、給与期間の前後1週間（7日）だけを取得範囲とする
-  // 期間外の過去データを大量に入れても週超計算が変わらないようにする
   const start = new Date(startDate);
   const end   = new Date(endDate);
   const rangeStart = new Date(start); rangeStart.setDate(rangeStart.getDate() - 6);
@@ -803,23 +825,67 @@ function getExtendedDailyList(empId, year, month) {
   const next = month === 12 ? [year+1, 1] : [year, month+1];
   const monthsToScan = [prev, [year, month], next];
 
+  // 両店スタッフ判定：empIdが '_enya' or '_marco' 形式か
+  const bothStore = isBothStoreId(empId);
+  const baseId    = bothStore ? getBaseId(empId) : null;
+  // 両店の場合、もう片方のキーを求める
+  const partnerKey = bothStore
+    ? (String(empId).includes('_enya') ? `${baseId}_marco` : `${baseId}_enya`)
+    : null;
+
   for (const [y,m] of monthsToScan) {
     const ym = getYM(y,m);
     const empData = (attendance[ym] && attendance[ym][empId]) || {};
     for (const [date, rec] of Object.entries(empData)) {
-      // 取得範囲外のデータは無視
       const d = new Date(date);
       if (d < rangeStart || d > rangeEnd) continue;
 
-      const existing = list.findIndex(d=>d.date===date);
+      const existing = list.findIndex(r=>r.date===date);
       if (existing === -1) {
         list.push({ date, ...recomputeRec(rec) });
       } else if (rec.source === 'manual') {
-        // 手動編集は最優先で上書き
         list[existing] = { date, ...recomputeRec(rec) };
       } else if ((rec.source === 'csv' || rec.source === 'timecard') && list[existing].source !== 'manual') {
-        // csv/timecardは既存がmanualでなければ上書き
         list[existing] = { date, ...recomputeRec(rec) };
+      }
+    }
+
+    // 両店スタッフ：パートナー（もう片方の店）の同日データをマージ
+    if (bothStore && partnerKey) {
+      const partnerData = (attendance[ym] && attendance[ym][partnerKey]) || {};
+      for (const [date, partnerRec] of Object.entries(partnerData)) {
+        const d = new Date(date);
+        if (d < rangeStart || d > rangeEnd) continue;
+
+        const existing = list.findIndex(r=>r.date===date);
+        const pRec = recomputeRec(partnerRec);
+
+        if (existing === -1) {
+          // 自分側のデータがない日にパートナーのデータがある場合はそのまま追加
+          list.push({ date, ...pRec });
+        } else {
+          // 同日に両店のデータがある → 合算して1レコードに統合
+          const myRec = list[existing];
+          const mergedActualMins = Math.round((myRec.actual||0)*60) + Math.round((pRec.actual||0)*60);
+          const mergedMidnightMins = Math.round((myRec.midnight||0)*60) + Math.round((pRec.midnight||0)*60);
+          const mergedDailyOTMins = Math.max(0, mergedActualMins - 480);
+          const mergedMidnightOT = Math.min(mergedMidnightMins/60, mergedDailyOTMins/60);
+          list[existing] = {
+            date,
+            actual:     mergedActualMins / 60,
+            dailyOT:    mergedDailyOTMins / 60,
+            midnight:   mergedMidnightMins / 60,
+            midnightOT: mergedMidnightOT,
+            // 休憩は両店分を結合
+            breaks: [...(myRec.breaks||[]), ...(pRec.breaks||[])],
+            breakMins: (myRec.breakMins||0) + (pRec.breakMins||0),
+            // _enya側を主レコードとし、_marcoは合算済みとしてメモ
+            punchIn:  myRec.punchIn  || pRec.punchIn,
+            punchOut: myRec.punchOut || pRec.punchOut,
+            source: myRec.source === 'manual' || pRec.source === 'manual' ? 'manual' : 'timecard',
+            _merged: true, // デバッグ用フラグ
+          };
+        }
       }
     }
   }
@@ -918,15 +984,49 @@ function calcSalary(emp, year, month) {
     totalActual, workDays, paidDays, absentDays
   } = summary;
 
+  // ── 両店スタッフの場合の特別処理 ──────────────────────
+  // _enya側：両店合算のactual・残業を使い、残業代も全額計上する
+  // _marco側：その店での実労働時間分の基本給のみ。残業代はゼロ（_enya側で計上済み）
+  const isMarcoSide = String(emp.id).includes('_marco');
+  const isEnyaSide  = String(emp.id).includes('_enya');
+
+  // _marco側の「純粋な本人の労働時間」（合算前）を取得する
+  // getExtendedDailyListはマージ済みのactualを返すので、
+  // _marco自身のFirebaseデータから実際の労働時間を直接合算する
+  let marcoOnlyActual = 0;
+  let marcoOnlyWorkDays = 0;
+  if (isMarcoSide) {
+    const baseId = getBaseId(emp.id);
+    const prev = month === 1 ? [year-1, 12] : [year, month-1];
+    const next = month === 12 ? [year+1, 1] : [year, month+1];
+    const { startDate, endDate } = getPayPeriod(year, month);
+    for (const [y,m] of [prev, [year, month], next]) {
+      const ym = getYM(y,m);
+      const marcoData = (attendance[ym] && attendance[ym][emp.id]) || {};
+      for (const [date, rec] of Object.entries(marcoData)) {
+        if (date < startDate || date > endDate) continue;
+        const r = recomputeRec(rec);
+        marcoOnlyActual += r.actual || 0;
+        if (r.actual > 0) marcoOnlyWorkDays++;
+      }
+    }
+  }
+
   let basePay = 0, hourlyBase = 0;
 
   if (emp.payType === '月給') {
-    const MONTHLY_HOURS = emp.monthlyHours || 173.8; // 月平均所定労働時間（デフォルト173.8h）
+    const MONTHLY_HOURS = emp.monthlyHours || 173.8;
     hourlyBase = emp.baseSalary / MONTHLY_HOURS;
     basePay = emp.baseSalary - absentDays * 8 * hourlyBase;
   } else {
     hourlyBase = emp.hourlyWage;
-    basePay = totalActual * hourlyBase;
+    if (isMarcoSide) {
+      // _marco側：マルコでの実労働時間分のみ基本給計上
+      basePay = marcoOnlyActual * hourlyBase;
+    } else {
+      // 通常 or _enya側：totalActual（両店合算）で基本給計上
+      basePay = totalActual * hourlyBase;
+    }
   }
 
   const h = hourlyBase;
@@ -934,29 +1034,32 @@ function calcSalary(emp, year, month) {
   // 役職手当
   const positionAllowancePay = emp.positionAllowance || 0;
 
-  // ── 通勤手当（日額×出勤日数 or 月額固定）──────────
+  // ── 通勤手当 ──────────────────────────────────────────
+  const baseWorkDays = isMarcoSide ? marcoOnlyWorkDays : workDays;
   const actualCommute = emp.commuteType === 'daily'
-    ? (emp.commutePerDay || 0) * workDays
-    : (emp.commute || 0);
+    ? (emp.commutePerDay || 0) * baseWorkDays
+    : (isMarcoSide ? 0 : (emp.commute || 0)); // _marco側は通勤手当なし（_enya側で計上）
 
-  // 残業手当（月60h以内25%、60h超50%）
-  const ot60under = Math.min(monthOT, 60);
-  const ot60over  = Math.max(0, monthOT - 60);
+  // 残業手当（_marco側はゼロ：_enya側で両店合算済み残業代を全額計上）
+  const effectiveMonthOT      = isMarcoSide ? 0 : monthOT;
+  const effectiveMonthMidnight   = isMarcoSide ? 0 : monthMidnight;
+  const effectiveMonthMidnightOT = isMarcoSide ? 0 : monthMidnightOT;
+  const effectiveHolidayLegal    = isMarcoSide ? 0 : monthHolidayLegal;
+
+  const ot60under = Math.min(effectiveMonthOT, 60);
+  const ot60over  = Math.max(0, effectiveMonthOT - 60);
   const otPay     = ot60under * h * 0.25 + ot60over * h * 0.50;
 
-  // 深夜手当
-  const midnightOnly    = monthMidnight - monthMidnightOT;
+  const midnightOnly    = effectiveMonthMidnight - effectiveMonthMidnightOT;
   const midnightOnlyPay = midnightOnly * h * 0.25;
-  const midnightOT60u   = Math.min(monthMidnightOT, 60);
-  const midnightOT60o   = Math.max(0, monthMidnightOT - 60);
+  const midnightOT60u   = Math.min(effectiveMonthMidnightOT, 60);
+  const midnightOT60o   = Math.max(0, effectiveMonthMidnightOT - 60);
   const midnightOTPay   = midnightOT60u * h * 0.25 + midnightOT60o * h * 0.25;
   const midnightPay     = midnightOnlyPay + midnightOTPay;
 
-  // 法定休日手当
-  const holidayLegalPay = monthHolidayLegal * h * 0.35;
+  const holidayLegalPay = effectiveHolidayLegal * h * 0.35;
 
   // ── 職能給の計算 ──────────────────────────────────
-  // 職能給 = 目標総支給 - 基本給 - 通勤手当 - 役職手当 - 残業代合計
   let skillPay = 0, skillPayNote = '';
   if (emp.payType === '月給' && emp.targetGross > 0) {
     const otTotal = Math.round(otPay + midnightPay + holidayLegalPay);
@@ -970,7 +1073,7 @@ function calcSalary(emp, year, month) {
   // 社会保険
   let kenpo = 0, kosei = 0, shienkin = 0;
   if (emp.shakai === '加入') {
-    const s = calcShakai(grossTotal, emp.birthDate, emp.hyojunHoshu || 0); // 交通費込みで標準報酬算出
+    const s = calcShakai(grossTotal, emp.birthDate, emp.hyojunHoshu || 0);
     kenpo = s.kenpo; kosei = s.kosei; shienkin = s.shienkin;
   }
 
@@ -982,10 +1085,10 @@ function calcSalary(emp, year, month) {
   const taxable   = grossTotal - actualCommute - kenpo - kosei - shienkin - koyoHoken;
   const incomeTax = calcIncomeTax(taxable, emp.dependents, emp.tax);
 
-  const juminzei       = emp.juminzei || 0;
+  const juminzei        = emp.juminzei || 0;
   const chutaikyoAmount = (emp.chutaikyo === '加入') ? (emp.chutaikyoAmount || 0) : 0;
-  const totalDeduction = kenpo + kosei + shienkin + koyoHoken + incomeTax + juminzei + chutaikyoAmount;
-  const netPay         = Math.round(grossTotal - totalDeduction);
+  const totalDeduction  = kenpo + kosei + shienkin + koyoHoken + incomeTax + juminzei + chutaikyoAmount;
+  const netPay          = Math.round(grossTotal - totalDeduction);
 
   return {
     basePay:             Math.round(basePay),
@@ -999,18 +1102,25 @@ function calcSalary(emp, year, month) {
     holidayNonLegalPay:  0,
     holidayPay:          Math.round(holidayLegalPay),
     commute:    actualCommute,
-    commuteNote: emp.commuteType === 'daily' ? `${(emp.commutePerDay||0).toLocaleString()}円×${workDays}日` : '月額固定',
+    commuteNote: emp.commuteType === 'daily' ? `${(emp.commutePerDay||0).toLocaleString()}円×${baseWorkDays}日` : (isMarcoSide ? '（本店側で計上）' : '月額固定'),
     kaigo: isKaigoTarget(emp.birthDate),
     grossTotal, kenpo, kosei, shienkin, koyoHoken, incomeTax, juminzei, chutaikyoAmount,
     totalDeduction:      Math.round(totalDeduction),
     netPay,
-    monthOT, monthDailyOT, monthWeekOT,
-    monthMidnight, monthMidnightOT,
-    monthHolidayLegal, monthHolidayNonLegal,
-    monthHoliday: monthHolidayLegal + monthHolidayNonLegal,
-    totalActual, workDays, paidDays, absentDays,
+    monthOT:        effectiveMonthOT,
+    monthDailyOT:   isMarcoSide ? 0 : monthDailyOT,
+    monthWeekOT:    isMarcoSide ? 0 : monthWeekOT,
+    monthMidnight:  effectiveMonthMidnight,
+    monthMidnightOT: effectiveMonthMidnightOT,
+    monthHolidayLegal:    effectiveHolidayLegal,
+    monthHolidayNonLegal: isMarcoSide ? 0 : monthHolidayNonLegal,
+    monthHoliday:   isMarcoSide ? 0 : (monthHolidayLegal + monthHolidayNonLegal),
+    totalActual: isMarcoSide ? marcoOnlyActual : totalActual,
+    workDays: baseWorkDays,
+    paidDays, absentDays,
     hourlyBase:  Math.round(h),
     ot60under, ot60over,
+    _bothStoreSide: isEnyaSide ? 'enya' : isMarcoSide ? 'marco' : null,
   };
 }
 
