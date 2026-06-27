@@ -51,7 +51,17 @@ function renderSalary(year, month) {
   </div>
 
   <div class="card">
-    <div class="table-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;width:100%;max-width:100%"><table style="min-width:max-content">
+    <style>
+      #salaryTable th { padding: 4px 3px; font-size: 9.5px; white-space: nowrap; }
+      #salaryTable td { padding: 4px 3px; font-size: 10px; white-space: nowrap; }
+      #salaryTable td.tl { max-width: 60px; overflow: hidden; text-overflow: ellipsis; }
+      @media (min-width: 1024px) {
+        #salaryTable th { padding: 8px 10px; font-size: 12.5px; }
+        #salaryTable td { padding: 7px 10px; font-size: 12.5px; }
+        #salaryTable td.tl { max-width: none; }
+      }
+    </style>
+    <div class="table-wrap" style="width:100%"><table id="salaryTable" style="width:100%">
       <thead>
         <tr>
           <th rowspan="2" class="tl">氏名</th>
