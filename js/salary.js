@@ -131,7 +131,8 @@ function exportSalaryCSV(year, month) {
 
 // -------- 給与明細 --------
 function renderPayslip(year, month) {
-  const empOptions = activeEmployeesExpanded().map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
+  // 給与明細のセレクトは展開前（両店スタッフも1行）
+  const empOptions = activeEmployees().map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
   return `
   <div class="section-header">
     <div class="section-title">🧾 給与明細書 ― ${year}年${month}月</div>
@@ -152,8 +153,18 @@ function renderPayslipDetail(year, month) {
   const empId = parseInt(sel.value);
   const emp   = employees.find(e=>e.id===empId);
   if (!emp) return;
-  const sal = calcSalaryWithAdj(emp, year, month);
-  document.getElementById('payslipWrap').innerHTML = payslipHTML(emp, sal, year, month);
+
+  if (emp.store === '両店') {
+    // 両店スタッフ：_enya（残業込み合算）と_marco（基本給のみ）を合算して1枚
+    const empEnya  = { ...emp, id: `${emp.id}_enya`,  name: `${emp.name}【本店】` };
+    const empMarco = { ...emp, id: `${emp.id}_marco`, name: `${emp.name}【マルコ】` };
+    const salEnya  = calcSalaryWithAdj(empEnya,  year, month);
+    const salMarco = calcSalaryWithAdj(empMarco, year, month);
+    document.getElementById('payslipWrap').innerHTML = payslipHTMLBoth(emp, salEnya, salMarco, year, month);
+  } else {
+    const sal = calcSalaryWithAdj(emp, year, month);
+    document.getElementById('payslipWrap').innerHTML = payslipHTML(emp, sal, year, month);
+  }
 }
 
 function payslipHTML(emp, sal, year, month) {
@@ -225,6 +236,93 @@ function payslipHTML(emp, sal, year, month) {
 function payRow(label, amount) {
   if (!amount) return `<div style="display:flex;justify-content:space-between;padding:3px 0;color:#999"><span>${label}</span><span>—</span></div>`;
   return `<div style="display:flex;justify-content:space-between;padding:3px 0"><span>${label}</span><span>¥${amount.toLocaleString()}</span></div>`;
+}
+
+// 両店スタッフ用：1枚の明細に合算して表示
+function payslipHTMLBoth(emp, salE, salM, year, month) {
+  // 支給合算
+  const basePay            = salE.basePay + salM.basePay;
+  const otPay              = salE.otPay;   // 残業代は_enya側のみ
+  const midnightPay        = salE.midnightPay;
+  const holidayLegalPay    = salE.holidayLegalPay;
+  const commute            = salE.commute; // 通勤手当は_enya側のみ
+  const grossTotal         = salE.grossTotal + salM.grossTotal;
+  // 控除合算（社保・雇保・税は合算総支給から再計算済みのものを使う）
+  // _enya側に全控除が乗っているのでそのまま使用
+  const kenpo              = salE.kenpo;
+  const kosei              = salE.kosei;
+  const shienkin           = salE.shienkin;
+  const koyoHoken          = salE.koyoHoken;
+  const incomeTax          = salE.incomeTax;
+  const juminzei           = salE.juminzei;
+  const chutaikyoAmount    = salE.chutaikyoAmount || 0;
+  const totalDeduction     = salE.totalDeduction;
+  const netPay             = grossTotal - totalDeduction;
+
+  // 勤怠：_enya側が両店合算済み、_marco側はマルコのみ実労働時間
+  const totalActual        = salE.totalActual;   // 両店合算
+  const marcoActual        = salM.totalActual;   // マルコのみ
+  const enyaActual         = totalActual - marcoActual;
+  const workDays           = salE.workDays + salM.workDays;
+
+  const { startDate, endDate, payDateStr } = getPayPeriod(year, month);
+
+  return `
+  <div class="card" style="max-width:680px;font-size:13px" id="payslip_${emp.id}">
+    <div style="text-align:center;font-size:16px;font-weight:700;margin-bottom:4px">給　与　明　細　書</div>
+    <div style="text-align:center;color:var(--text-muted);margin-bottom:16px">${year}年${month}月分　計算期間：${startDate.replace(/-/g,'/')}〜${endDate.replace(/-/g,'/')}　支払日：${payDateStr.replace(/-/g,'/')}　｜　${OTD.company}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;font-size:12.5px">
+      <div><strong>氏　名：</strong>${emp.name}</div>
+      <div><strong>雇用区分：</strong>${emp.type}</div>
+      <div><strong>部　門：</strong>${emp.dept||'—'}</div>
+      <div><strong>給与形態：</strong>${emp.payType}（本店・マルコ兼務）</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">支給項目</div>
+        ${payRow('基本給', basePay)}
+        ${otPay>0?payRow(`残業手当（両店合算 ${hm(salE.monthOT)}）`, otPay):''}
+        ${midnightPay>0?payRow('深夜手当', midnightPay):''}
+        ${holidayLegalPay>0?payRow('法定休日手当', holidayLegalPay):''}
+        ${commute>0?payRow('交通費', commute):''}
+        <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
+          <span>支給合計</span><span>¥${grossTotal.toLocaleString()}</span>
+        </div>
+      </div>
+      <div>
+        <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">控除項目</div>
+        ${payRow(`健康保険料（${salE.kaigo?'介護込11.14%':'9.52%'}・茨城支部R8）`, kenpo)}
+        ${payRow('厚生年金保険料（18.30%）', kosei)}
+        ${shienkin>0?payRow('子ども・子育て支援金（0.23%）', shienkin):''}
+        ${payRow('雇用保険料（5‰）', koyoHoken)}
+        ${payRow('所得税', incomeTax)}
+        ${payRow('住民税', juminzei)}
+        ${chutaikyoAmount>0?payRow('中退共掛金', chutaikyoAmount):''}
+        <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
+          <span>控除合計</span><span>¥${totalDeduction.toLocaleString()}</span>
+        </div>
+      </div>
+    </div>
+    <div style="background:var(--primary);color:#fff;padding:10px 16px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:15px;font-weight:700">
+      <span>差引振込額</span><span>¥${netPay.toLocaleString()}</span>
+    </div>
+    <div style="margin-top:14px;background:#f8faff;padding:10px 14px;border-radius:8px;font-size:12px">
+      <strong>勤怠情報</strong>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px">
+        <div>出勤：${workDays}日</div>
+        <div>実働：${hm(totalActual)}</div>
+        <div>残業：${hm(salE.monthOT)}</div>
+        <div style="color:#888;font-size:11px">└日8h超：${hm(salE.monthDailyOT)}</div>
+        <div style="color:#888;font-size:11px">└週40h超：${hm(salE.monthWeekOT)}</div>
+        <div>深夜：${hm(salE.monthMidnight)}</div>
+        <div>有給：${salE.paidDays}日</div>
+        <div>欠勤：${salE.absentDays}日</div>
+      </div>
+      <div style="margin-top:8px;padding:6px 10px;background:#e8f0fe;border-radius:6px;font-size:11.5px;color:#3a5a9a">
+        内訳：本店勤務 ${hm(enyaActual)}　／　内マルコ勤務 ${hm(marcoActual)}
+      </div>
+    </div>
+  </div>`;
 }
 
 // 編集可能セル（給与計算一覧用）
@@ -416,9 +514,17 @@ function printAllPayslips(year, month) {
     .slip{max-width:680px;margin:0 auto 40px;padding:20px;border:1px solid #ccc;page-break-after:always}
     @media print{.slip{break-after:page}}
   </style></head><body>`);
-  for (const emp of activeEmployeesExpanded()) {
-    const sal = calcSalary(emp, year, month);
-    w.document.write(`<div class="slip">${payslipHTML(emp, sal, year, month).replace(/class="card[^"]*"/g,'')}</div>`);
+  for (const emp of activeEmployees()) {
+    if (emp.store === '両店') {
+      const empE = { ...emp, id: `${emp.id}_enya`,  name: `${emp.name}【本店】` };
+      const empM = { ...emp, id: `${emp.id}_marco`, name: `${emp.name}【マルコ】` };
+      const salE = calcSalary(empE, year, month);
+      const salM = calcSalary(empM, year, month);
+      w.document.write(`<div class="slip">${payslipHTMLBoth(emp, salE, salM, year, month).replace(/class="card[^"]*"/g,'')}</div>`);
+    } else {
+      const sal = calcSalary(emp, year, month);
+      w.document.write(`<div class="slip">${payslipHTML(emp, sal, year, month).replace(/class="card[^"]*"/g,'')}</div>`);
+    }
   }
   w.document.write('</body></html>');
   w.document.close();
