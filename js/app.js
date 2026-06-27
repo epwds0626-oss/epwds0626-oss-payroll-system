@@ -594,10 +594,11 @@ function saveEmployee(id, isNew) {
     emergencyPhone: get('ef_emergencyPhone')?.value||'',
     paymentMethod: get('ef_paymentMethod')?.value||'振込',
     bankInfo: get('ef_bankInfo')?.value||'',
-    // ステータス・退職情報を引き継ぐ
+    // ステータス・退職情報・並び順を引き継ぐ
     status:    existing.status    || 'active',
     leaveDate: existing.leaveDate || '',
     leaveNote: existing.leaveNote || '',
+    order:     existing.order     !== undefined ? existing.order : (id * 10),
   };
   if (!emp.name) { showToast('氏名を入力してください','error'); return; }
 
