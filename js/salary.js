@@ -51,7 +51,7 @@ function renderSalary(year, month) {
   </div>
 
   <div class="card">
-    <div class="table-wrap"><table>
+    <div class="table-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;width:100%;max-width:100%"><table style="min-width:max-content">
       <thead>
         <tr>
           <th rowspan="2" class="tl">氏名</th>
@@ -703,15 +703,31 @@ function printSelectedSalary(year, month) {
     </tr>`;
   }).join('');
 
-  // 選択スタッフの合計
+  // 選択スタッフの合計（全項目）
   const totals = selected.reduce((acc, id) => {
     const emp = employees.find(e => e.id === id);
     if (!emp) return acc;
     const s = calcSalaryWithAdj(emp, year, month);
-    acc.gross  += s.grossTotal; acc.deduct += s.totalDeduction; acc.net += s.netPay;
-    acc.base   += s.basePay;    acc.ot     += s.otPay;
+    acc.base   += s.basePay;
+    acc.ot     += s.otPay;
+    acc.mid    += s.midnightPay;
+    acc.hol    += s.holidayLegalPay || 0;
+    acc.com    += s.commute;
+    acc.gross  += s.grossTotal;
+    acc.kenpo  += s.kenpo;
+    acc.kosei  += s.kosei;
+    acc.shien  += s.shienkin || 0;
+    acc.koyo   += s.koyoHoken;
+    acc.income += s.incomeTax;
+    acc.jumin  += s.juminzei;
+    acc.deduct += s.totalDeduction;
+    acc.net    += s.netPay;
     return acc;
-  }, {gross:0,deduct:0,net:0,base:0,ot:0});
+  }, {base:0,ot:0,mid:0,hol:0,com:0,gross:0,kenpo:0,kosei:0,shien:0,koyo:0,income:0,jumin:0,deduct:0,net:0});
+
+  const fmt2 = v => v ? `¥${v.toLocaleString()}` : '—';
+  const prevYear  = month === 1 ? year - 1 : year;
+  const prevMonth = month === 1 ? 12 : month - 1;
 
   const w = window.open('', '_blank');
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
@@ -720,19 +736,22 @@ function printSelectedSalary(year, month) {
     body{font-family:'Hiragino Sans','Yu Gothic',sans-serif;font-size:12px;margin:20px}
     h2{color:#1a3a5c;margin-bottom:4px}
     .sub{color:#6b7280;font-size:11px;margin-bottom:16px}
-    .summary{display:flex;gap:12px;margin-bottom:16px}
+    .summary{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
     .sbox{border:1px solid #e5e7eb;border-radius:6px;padding:8px 14px;min-width:120px}
     .sbox .lbl{font-size:10px;color:#6b7280}
     .sbox .val{font-size:15px;font-weight:700;color:#1a3a5c}
     .sbox.green .val{color:#059669}
     table{width:100%;border-collapse:collapse;font-size:11px}
-    th{background:#1a3a5c;color:#fff;padding:6px 10px;text-align:center;white-space:nowrap}
+    th{background:#1a3a5c;color:#fff;padding:6px 8px;text-align:center;white-space:nowrap}
+    td{padding:5px 8px;text-align:right;border-bottom:1px solid #e5e7eb}
+    td:first-child{text-align:left;font-weight:600}
     tr:nth-child(even){background:#f9fafb}
     .total-row td{background:#f0f4ff;font-weight:700;border-top:2px solid #1a3a5c}
-    @media print{body{margin:10px}}
+    .noprint{margin-top:16px}
+    @media print{.noprint{display:none}body{margin:10px}}
   </style></head><body>
   <h2>💴 給与計算書 — ${year}年${month}月</h2>
-  <div class="sub">賃金計算期間：${year}年${month === 1 ? year-1 : year}年${month === 1 ? 12 : month-1}月21日〜${year}年${month}月20日　対象：${selected.length}名</div>
+  <div class="sub">賃金計算期間：${prevYear}年${prevMonth}月21日〜${year}年${month}月20日　対象：${selected.length}名</div>
   <div class="summary">
     <div class="sbox"><div class="lbl">支給合計</div><div class="val">¥${totals.gross.toLocaleString()}</div></div>
     <div class="sbox"><div class="lbl">控除合計</div><div class="val">¥${totals.deduct.toLocaleString()}</div></div>
@@ -746,15 +765,26 @@ function printSelectedSalary(year, month) {
     </tr></thead>
     <tbody>${rows}</tbody>
     <tfoot><tr class="total-row">
-      <td style="padding:6px 10px">合　計</td>
-      <td style="padding:6px 10px;text-align:right">¥${totals.base.toLocaleString()}</td>
-      <td style="padding:6px 10px;text-align:right">¥${totals.ot.toLocaleString()}</td>
-      <td colspan="4" style="padding:6px 10px;text-align:right">¥${totals.gross.toLocaleString()}</td>
-      <td colspan="5" style="padding:6px 10px;text-align:right">¥${totals.deduct.toLocaleString()}</td>
-      <td style="padding:6px 10px;text-align:right;color:#059669">¥${totals.net.toLocaleString()}</td>
-    </tfoot>
+      <td>合　計</td>
+      <td>${fmt2(totals.base)}</td>
+      <td>${fmt2(totals.ot)}</td>
+      <td>${fmt2(totals.mid)}</td>
+      <td>${fmt2(totals.hol)}</td>
+      <td>${fmt2(totals.com)}</td>
+      <td>¥${totals.gross.toLocaleString()}</td>
+      <td>${fmt2(totals.kenpo)}</td>
+      <td>${fmt2(totals.kosei)}</td>
+      <td>${fmt2(totals.shien)}</td>
+      <td>${fmt2(totals.koyo)}</td>
+      <td>${fmt2(totals.income)}</td>
+      <td>${fmt2(totals.jumin)}</td>
+      <td style="color:#059669">¥${totals.net.toLocaleString()}</td>
+    </tr></tfoot>
   </table>
+  <div class="noprint" style="margin-top:20px">
+    <button onclick="window.print()" style="background:#1a3a5c;color:#fff;border:none;border-radius:7px;padding:8px 20px;font-size:13px;cursor:pointer;margin-right:8px">🖨 印刷</button>
+    <button onclick="window.close()" style="background:#e5e7eb;color:#374151;border:none;border-radius:7px;padding:8px 20px;font-size:13px;cursor:pointer">✕ 閉じる</button>
+  </div>
   </body></html>`);
   w.document.close();
-  w.print();
 }
