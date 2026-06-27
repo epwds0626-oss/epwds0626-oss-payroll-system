@@ -52,16 +52,20 @@ function renderSalary(year, month) {
 
   <div class="card">
     <style>
-      #salaryTable th { padding: 4px 3px; font-size: 9.5px; white-space: nowrap; }
-      #salaryTable td { padding: 4px 3px; font-size: 10px; white-space: nowrap; }
-      #salaryTable td.tl { max-width: 60px; overflow: hidden; text-overflow: ellipsis; }
-      @media (min-width: 1024px) {
-        #salaryTable th { padding: 8px 10px; font-size: 12.5px; }
-        #salaryTable td { padding: 7px 10px; font-size: 12.5px; }
-        #salaryTable td.tl { max-width: none; }
+      #salaryTable { width:100%; border-collapse:collapse; font-size:10px; }
+      #salaryTable th { padding:3px 2px; white-space:nowrap; font-size:9px; }
+      #salaryTable td { padding:3px 2px; white-space:nowrap; font-size:9px; }
+      #salaryTable td.tl { max-width:52px; overflow:hidden; text-overflow:ellipsis; font-size:9px; }
+      .col-hide { display:none; }
+      @media (min-width:1200px) {
+        #salaryTable { font-size:12.5px; }
+        #salaryTable th { padding:8px 10px; font-size:12.5px; }
+        #salaryTable td { padding:7px 10px; font-size:12.5px; }
+        #salaryTable td.tl { max-width:none; }
+        .col-hide { display:table-cell; }
       }
     </style>
-    <div class="table-wrap" style="width:100%"><table id="salaryTable" style="width:100%">
+    <div class="table-wrap" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch"><table id="salaryTable">
       <thead>
         <tr>
           <th rowspan="2" class="tl">氏名</th>
@@ -70,8 +74,8 @@ function renderSalary(year, month) {
           <th rowspan="2">差引<br>振込額</th>
         </tr>
         <tr>
-          <th>基本給<br>/時給計</th><th>残業<br>(〜60h)</th><th>残業<br>(60h超)</th>
-          <th>深夜</th><th>法定休日<br>35%</th><th>法定外休日<br>(週OT分)</th><th>交通費</th>
+          <th>基本給<br>/時給計</th><th>残業<br>(〜60h)</th><th class="col-hide">残業<br>(60h超)</th>
+          <th>深夜</th><th class="col-hide">法定休日<br>35%</th><th class="col-hide">法定外休日<br>(週OT分)</th><th>交通費</th>
           <th>健保</th><th>厚年</th><th>子育支援金</th>
           <th>雇保</th><th>所得税</th><th>住民税</th>
         </tr>
@@ -84,10 +88,10 @@ function renderSalary(year, month) {
         <td class="tl" style="cursor:pointer;color:#1a3a5c;font-weight:700;text-decoration:underline dotted" title="クリックして全項目編集" onclick="openEmpAdjDialog(${emp.id},${year},${month})">${emp.name}</td>
         ${adjCell(emp.id,year,month,'basePay',sal.basePay)}
         ${adjCell(emp.id,year,month,'otPay',sal.otPay)}
-        <td>—</td>
+        <td class="col-hide">—</td>
         ${adjCell(emp.id,year,month,'midnightPay',sal.midnightPay)}
-        ${adjCell(emp.id,year,month,'holidayLegalPay',sal.holidayLegalPay)}
-        <td>—</td>
+        ${adjCellHide(emp.id,year,month,'holidayLegalPay',sal.holidayLegalPay)}
+        <td class="col-hide">—</td>
         ${adjCell(emp.id,year,month,'commute',sal.commute)}
         ${adjCell(emp.id,year,month,'kenpo',sal.kenpo)}
         ${adjCell(emp.id,year,month,'kosei',sal.kosei)}
@@ -101,10 +105,10 @@ function renderSalary(year, month) {
       <tfoot><tr class="total-row">
         <td class="tl">合　計</td>
         <td>¥${totals.base.toLocaleString()}</td>
-        <td colspan="2">¥${totals.otPay.toLocaleString()}</td>
+        <td class="col-hide">—</td><td>¥${totals.otPay.toLocaleString()}</td>
         <td>¥${totals.midnight.toLocaleString()}</td>
-        <td>¥${totals.holiday.toLocaleString()}</td>
-        <td>—</td>
+        <td class="col-hide">¥${totals.holiday.toLocaleString()}</td>
+        <td class="col-hide">—</td>
         <td>¥${totals.commute.toLocaleString()}</td>
         <td>¥${totals.kenpo.toLocaleString()}</td>
         <td>¥${totals.kosei.toLocaleString()}</td>
@@ -228,6 +232,14 @@ function payRow(label, amount) {
 }
 
 // 編集可能セル（給与計算一覧用）
+function adjCellHide(empId, year, month, field, value) {
+  const adj = getAdj(year, month, empId);
+  const isAdj = adj[field] !== undefined;
+  const disp = value > 0 ? `¥${value.toLocaleString()}` : '—';
+  const style = isAdj ? 'color:#d97706;font-weight:700;cursor:pointer' : 'cursor:pointer';
+  return `<td class="col-hide" style="${style}" title="クリックして編集"
+    onclick="openAdjInput(${empId},${year},${month},'${field}',${value})">${disp}</td>`;
+}
 function adjCell(empId, year, month, field, value) {
   const adj = getAdj(year, month, empId);
   const isAdj = adj[field] !== undefined;
