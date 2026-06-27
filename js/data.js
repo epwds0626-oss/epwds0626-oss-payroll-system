@@ -561,8 +561,10 @@ function initFirebaseData() {
     const val = snap.val();
     if (val) {
       employees = Array.isArray(val) ? val.filter(Boolean) : Object.values(val);
-      // order フィールドがなければ id で補完してから order でソート
-      employees.forEach((e, i) => { if (e.order === undefined) e.order = e.id * 10; });
+      // まずidでソートしてorderを付与（orderがない場合のみ）
+      employees.sort((a, b) => a.id - b.id);
+      employees.forEach((e, i) => { if (e.order === undefined) e.order = i * 10; });
+      // orderでソート
       employees.sort((a, b) => (a.order ?? a.id) - (b.order ?? b.id));
     } else {
       const empObj = {};
