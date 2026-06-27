@@ -179,7 +179,7 @@ function renderDashboard(year, month) {
           </tr>
         </thead>
         <tbody>
-          ${activeEmployees().map(emp => {
+          ${activeEmployeesExpanded().map(emp => {
             const s = getMonthSummary(emp.id, year, month);
             const sal = calcSalary(emp, year, month);
             const r36 = check36(emp.id, year, month);
