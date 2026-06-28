@@ -165,11 +165,11 @@ function printAttendanceRecord(year, month) {
     賃金計算期間：${startDate.replace(/-/g,'/')} 〜 ${endDate.replace(/-/g,'/')} ／ ${OTD.company} ／ ${OTD.address}
   </div>`;
 
-  for (const emp of activeEmployeesExpanded()) {
+  for (const emp of activeEmployees()) {
     const extended = getExtendedDailyList(emp.id, year, month);
     const empMap = {};
     for (const d of extended) empMap[d.date] = d;
-    const summary = getMonthSummary(emp.id, year, month);
+    const summary = getMonthSummary(emp.store === '両店' ? `${emp.id}_enya` : emp.id, year, month);
 
     html += `<h3>${emp.name}（${emp.type} ／ ${emp.store||''}）</h3>
     <table>
@@ -256,9 +256,9 @@ function printWageLedger(year, month) {
 
   let totals = { workDays:0, actual:0, ot:0, mid:0, hol:0, base:0, otP:0, midP:0, holP:0, comm:0, kenpo:0, kosei:0, koyo:0, income:0, jumin:0, net:0 };
 
-  for (const emp of activeEmployeesExpanded()) {
-    const s   = getMonthSummary(emp.id, year, month);
-    const sal = calcSalary(emp, year, month);
+  for (const emp of activeEmployees()) {
+    const s   = getMonthSummary(emp.store === '両店' ? `${emp.id}_enya` : emp.id, year, month);
+    const sal = calcSalaryBoth(emp, year, month);
     totals.workDays+=s.workDays; totals.actual+=s.totalActual; totals.ot+=s.monthOT;
     totals.mid+=s.monthMidnight; totals.hol+=s.monthHoliday;
     totals.base+=sal.basePay; totals.otP+=sal.otPay; totals.midP+=sal.midnightPay;
@@ -322,7 +322,7 @@ function printPaidLeaveRecord(year) {
   <h2>年次有給休暇管理簿</h2>
   <div style="text-align:center;margin-bottom:12px">${year}年度（${year}年4月1日〜${year+1}年3月31日）／ ${OTD.company}</div>`;
 
-  for (const emp of activeEmployeesExpanded()) {
+  for (const emp of activeEmployees()) {
     const pl    = getPaidLeaveBalance(emp.id);
     const used5 = (pl.used||[])
       .filter(u=>{ const uy=parseInt(u.date.slice(0,4)); const uyear=u.date.slice(5,7)>='04'?uy:uy-1; return uyear===year; })
@@ -360,9 +360,9 @@ function printPaidLeaveRecord(year) {
 // -------- 36協定記入補助シート --------
 function print36Notice(year) {
   const a36 = article36[year]||{limit36:45,specialLimit:80,yearLimit:720};
-  const summaries = activeEmployeesExpanded().map(emp=>{
+  const summaries = activeEmployees().map(emp=>{
     let yearlyOT=0;
-    for(let m=1;m<=12;m++) yearlyOT+=getMonthSummary(emp.id,year,m).monthOT;
+    const eid = emp.store === '両店' ? `${emp.id}_enya` : emp.id; for(let m=1;m<=12;m++) yearlyOT+=getMonthSummary(eid,year,m).monthOT;
     return { emp, yearlyOT: Math.round(yearlyOT*60)/60 };
   });
 
@@ -429,8 +429,8 @@ function printOTReport(year) {
   </tr></thead><tbody>`;
 
   const a36 = article36[year]||{limit36:45,specialLimit:80,yearLimit:720};
-  for (const emp of activeEmployeesExpanded()) {
-    const ots = MONTHS.map((_,i)=>getMonthSummary(emp.id,year,i+1).monthOT);
+  for (const emp of activeEmployees()) {
+    const _eid = emp.store === '両店' ? `${emp.id}_enya` : emp.id; const ots = MONTHS.map((_,i)=>getMonthSummary(_eid,year,i+1).monthOT);
     const yearly = ots.reduce((s,o)=>s+o,0);
     const max    = Math.max(...ots);
     const rowCls = yearly>a36.yearLimit?'danger':max>a36.specialLimit?'warn':'';
