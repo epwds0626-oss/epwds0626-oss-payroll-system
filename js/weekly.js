@@ -114,14 +114,10 @@ function renderWeekDetail(year, month) {
     const wkMidnight = inPeriod.reduce((s,d)=>s+Math.round((d.midnight||0)*60),0)/60;
     const wkHoliday  = inPeriod.reduce((s,d)=>s+Math.round((d.holiday||0)*60),0)/60;
 
-    const daysThisMonth = days.filter(d=>{
-      const [y,m]=d.date.split('-').map(Number);
-      return y===year&&m===month;
-    }).length;
-    const isCrossMonth = days.some(d=>{
-      const [y,m]=d.date.split('-').map(Number);
-      return !(y===year&&m===month);
-    });
+    // 月マタギ：週が給与計算期間（前月21日〜当月20日）の境界をまたぐ場合のみ
+    const { startDate, endDate } = getPayPeriod(year, month);
+    const isCrossMonth = days.some(d => d.date < startDate || d.date > endDate) &&
+                         days.some(d => d.date >= startDate && d.date <= endDate);
 
     html += `
     <div style="margin-bottom:16px">
@@ -141,7 +137,7 @@ function renderWeekDetail(year, month) {
           return `<tr ${!inMonth?'style="opacity:0.5"':''}>
             <td>${d.date.replace(/-/g,'/')}</td>
             <td style="color:${dow===0?'#c0392b':dow===6?'#2980b9':'inherit'}">${DOW[dow]}</td>
-            <td>${inMonth?'✓':'前後月'}</td>
+            <td>${inMonth?'✓':d.date < startDate ? '前月' : '翌月'}</td>
             <td>${hm(d.actual||0)}</td>
             <td>${hm(d.midnight||0)}</td>
             <td>${d.holiday?'●':''}</td>
