@@ -789,11 +789,20 @@ function calcWeeklyOT(dailyList, year, month) {
     // 週40h超残業：週全日の合計で判定（法的に正しい）
     const wkWeekOTAllMins = Math.max(0, allActualMins - 40*60 - allDailyOTMins);
 
-    // 月マタギ週の場合、週超残業を当月分の実働比率で按分
-    const isCross = wkData.days.some(d => d.date < startDate || d.date > endDate) &&
-                    wkData.days.some(d => d.date >= startDate && d.date <= endDate);
-    const ratio = (isCross && allActualMins > 0) ? wkActualMins / allActualMins : 1;
-    const wkWeekOTMins = Math.round(wkWeekOTAllMins * ratio);
+    // 月マタギの種別判定
+    const hasPrePeriod  = wkData.days.some(d => d.date < startDate); // 前月分が混入（期首マタギ）
+    const hasPostPeriod = wkData.days.some(d => d.date > endDate);   // 翌月分が混入（期末マタギ）
+    const isCross = (hasPrePeriod || hasPostPeriod) &&
+                     wkData.days.some(d => d.date >= startDate && d.date <= endDate);
+
+    // 期末マタギ（翌月にはみ出す週）は翌月の給与計算で処理 → 当月はゼロ
+    // 期首マタギ（前月分が混入）は当月分の実働比率で按分
+    let wkWeekOTMins = 0;
+    if (!hasPostPeriod) {
+      // 期末マタギでない → 全額 or 期首按分
+      const ratio = (isCross && allActualMins > 0) ? wkActualMins / allActualMins : 1;
+      wkWeekOTMins = Math.round(wkWeekOTAllMins * ratio);
+    }
     const wkOT = wkDailyOT + wkWeekOTMins / 60;
     monthOT              += (wkDailyOTMins + wkWeekOTMins) / 60;
     monthDailyOT         += wkDailyOTMins         / 60;
