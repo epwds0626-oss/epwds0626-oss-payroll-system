@@ -755,13 +755,22 @@ function calcWeeklyOT(dailyList, year, month) {
     endDt.setDate(endDt.getDate() + 6);
     const wkEnd = endDt.toISOString().slice(0,10);
 
+    const { startDate, endDate } = getPayPeriod(year, month);
+
+    // 週全日の実働合計（月マタギでも全部合算 → 法的に正しい週40h判定）
+    let allActualMins=0, allDailyOTMins=0;
+    for (const d of wkData.days) {
+      allActualMins  += Math.round((d.actual  ||0) * 60);
+      allDailyOTMins += Math.round((d.dailyOT ||0) * 60);
+    }
+
+    // 当月期間内の日だけ（深夜・休日・表示用実働は当月分のみ）
     let wkActualMins=0, wkDailyOTMins=0, wkMidnightMins=0, wkMidnightOTMins=0;
     let wkHolidayLegalMins=0, wkHolidayNonLegalMins=0;
 
     for (const d of wkData.days) {
-      // 週マタギ計算でも給与期間内の日だけを集計（期間外データの影響を排除）
-      if (!isInPayPeriod(d.date, year, month)) continue;
-      wkActualMins          += Math.round((d.actual       ||0) * 60); // 分単位精度
+      if (d.date < startDate || d.date > endDate) continue;
+      wkActualMins          += Math.round((d.actual       ||0) * 60);
       wkDailyOTMins         += Math.round((d.dailyOT      ||0) * 60);
       wkMidnightMins        += Math.round((d.midnight     ||0) * 60);
       wkMidnightOTMins      += Math.round((d.midnightOT   ||0) * 60);
@@ -777,12 +786,15 @@ function calcWeeklyOT(dailyList, year, month) {
     const wkHolidayLegal    = wkHolidayLegalMins    / 60;
     const wkHolidayNonLegal = wkHolidayNonLegalMins / 60;
 
-    // 週40h超残業：日8h超分を除いた純週残業
-    const wkWeekOT = Math.max(0, wkActual - 40 - wkDailyOT);
-    const wkOT = wkDailyOT + wkWeekOT;
+    // 週40h超残業：週全日の合計で判定（法的に正しい）
+    const wkWeekOTAllMins = Math.max(0, allActualMins - 40*60 - allDailyOTMins);
 
-    // 期間内の日だけで集計済みなのでratioは使わず直接加算
-    const wkWeekOTMins = Math.max(0, wkActualMins - 40*60 - wkDailyOTMins);
+    // 月マタギ週の場合、週超残業を当月分の実働比率で按分
+    const isCross = wkData.days.some(d => d.date < startDate || d.date > endDate) &&
+                    wkData.days.some(d => d.date >= startDate && d.date <= endDate);
+    const ratio = (isCross && allActualMins > 0) ? wkActualMins / allActualMins : 1;
+    const wkWeekOTMins = Math.round(wkWeekOTAllMins * ratio);
+    const wkOT = wkDailyOT + wkWeekOTMins / 60;
     monthOT              += (wkDailyOTMins + wkWeekOTMins) / 60;
     monthDailyOT         += wkDailyOTMins         / 60;
     monthWeekOT          += wkWeekOTMins           / 60;
