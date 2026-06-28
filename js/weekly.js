@@ -80,8 +80,10 @@ function renderWeekly(year, month) {
 function renderWeekDetail(year, month) {
   const sel = document.getElementById('weekEmpSel');
   if (!sel) return;
-  const empId = parseInt(sel.value);
-  const emp   = employees.find(e=>e.id===empId);
+  const rawId = sel.value;
+  const isBothId = rawId.includes('_enya') || rawId.includes('_marco');
+  const empId = isBothId ? rawId : parseInt(rawId);
+  const emp   = activeEmployeesExpanded().find(e => String(e.id) === String(empId));
   if (!emp) return;
 
   const extended = getExtendedDailyList(empId, year, month);
