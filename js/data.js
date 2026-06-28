@@ -1128,6 +1128,16 @@ function calcSalary(emp, year, month) {
   const ot60over  = Math.max(0, effectiveMonthOT - 60);
   const otPay     = ot60under * h * 0.25 + ot60over * h * 0.50;
 
+  // 残業内訳（明細表示用）
+  // 日8h超・週40h超を60h枠に按分して計算
+  const effectiveDailyOT = isMarcoSide ? 0 : monthDailyOT;
+  const effectiveWeekOT  = isMarcoSide ? 0 : monthWeekOT;
+  const dailyOT60under = Math.min(effectiveDailyOT, ot60under);
+  const weekOT60under  = Math.min(effectiveWeekOT, Math.max(0, ot60under - dailyOT60under));
+  const dailyOTPay  = Math.round(dailyOT60under * h * 0.25);
+  const weekOTPay   = Math.round(weekOT60under  * h * 0.25);
+  const ot60overPay = Math.round(ot60over * h * 0.50);
+
   const midnightOnly    = effectiveMonthMidnight - effectiveMonthMidnightOT;
   const midnightOnlyPay = midnightOnly * h * 0.25;
   const midnightOT60u   = Math.min(effectiveMonthMidnightOT, 60);
@@ -1198,6 +1208,7 @@ function calcSalary(emp, year, month) {
     paidDays, absentDays,
     hourlyBase:  Math.round(h),
     ot60under, ot60over,
+    dailyOTPay, weekOTPay, ot60overPay,
     _bothStoreSide: isEnyaSide ? 'enya' : isMarcoSide ? 'marco' : null,
   };
 }
