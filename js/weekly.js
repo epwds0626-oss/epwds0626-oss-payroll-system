@@ -77,6 +77,11 @@ function renderWeekly(year, month) {
   </div>`;
 }
 
+function isCrossMonthCheck(days, startDate, endDate) {
+  return days.some(d => d.date < startDate || d.date > endDate) &&
+         days.some(d => d.date >= startDate && d.date <= endDate);
+}
+
 function renderWeekDetail(year, month) {
   const sel = document.getElementById('weekEmpSel');
   if (!sel) return;
@@ -106,25 +111,39 @@ function renderWeekDetail(year, month) {
     const days   = byWeek[wkStart];
     const endDt  = new Date(wkStart); endDt.setDate(endDt.getDate()+6);
     const wkEnd  = endDt.toISOString().slice(0,10);
-    // 給与期間内の日だけで計算（期間外の日は週超計算に影響させない）
-    const inPeriod   = days.filter(d => isInPayPeriod(d.date, year, month));
-    const wkActual   = inPeriod.reduce((s,d)=>s+Math.round((d.actual||0)*60),0)/60;
+    // 週全日の合計（月マタギでも全部合算 → 法的に正しい週40h判定）
+    const allActualMins  = days.reduce((s,d)=>s+Math.round((d.actual||0)*60),0);
+    const allDailyOTMins = days.reduce((s,d)=>s+Math.round((d.dailyOT||0)*60),0);
+    const wkActualAll    = allActualMins / 60;
+    const wkOTAll        = Math.max(0, wkActualAll - 40 - allDailyOTMins/60); // 週全体の週超残業
+
+    // 給与期間内の日だけ（表示・深夜・休日は当月分のみ）
+    const { startDate, endDate } = getPayPeriod(year, month);
+    const inPeriod   = days.filter(d => d.date >= startDate && d.date <= endDate);
+    const inPeriodMins = inPeriod.reduce((s,d)=>s+Math.round((d.actual||0)*60),0);
+
+    // 当月表示用の実働（当月期間分のみ）
+    const wkActual   = inPeriodMins / 60;
+
+    // 週超残業の当月按分：週全体の実働に占める当月分の割合で按分
+    // 月マタギでない週はそのまま全額
+    const wkOT = (allActualMins > 0 && isCrossMonthCheck(days, startDate, endDate))
+      ? Math.round(wkOTAll * (inPeriodMins / allActualMins) * 60) / 60
+      : wkOTAll;
+
     const wkDailyOT  = inPeriod.reduce((s,d)=>s+Math.round((d.dailyOT||0)*60),0)/60;
-    const wkOT       = Math.max(0, wkActual - 40 - wkDailyOT); // 日超分を除いた純週超残業
     const wkMidnight = inPeriod.reduce((s,d)=>s+Math.round((d.midnight||0)*60),0)/60;
     const wkHoliday  = inPeriod.reduce((s,d)=>s+Math.round((d.holiday||0)*60),0)/60;
 
-    // 月マタギ：週が給与計算期間（前月21日〜当月20日）の境界をまたぐ場合のみ
-    const { startDate, endDate } = getPayPeriod(year, month);
-    const isCrossMonth = days.some(d => d.date < startDate || d.date > endDate) &&
-                         days.some(d => d.date >= startDate && d.date <= endDate);
+    // 月マタギ判定（先に計算しておく）
+    const isCrossMonth = isCrossMonthCheck(days, startDate, endDate);
 
     html += `
     <div style="margin-bottom:16px">
       <div style="font-weight:700;color:var(--primary);margin-bottom:6px;display:flex;align-items:center;gap:8px">
         📅 ${wkStart.replace(/-/g,'/')} 〜 ${wkEnd.replace(/-/g,'/')}
         ${isCrossMonth?'<span class="badge badge-yellow">月マタギ週</span>':''}
-        <span style="margin-left:auto">週実働：${hm(wkActual)} ／ 残業：<strong style="color:${wkOT>0?'var(--danger)':'inherit'}">${hm(wkOT)}</strong></span>
+        <span style="margin-left:auto">週実働：${hm(wkActualAll)}${isCrossMonth?` <span style="font-size:11px;color:#888">（当月${hm(wkActual)}）</span>`:''} ／ 残業：<strong style="color:${wkOT>0?'var(--danger)':'inherit'}">${hm(wkOT)}</strong></span>
       </div>
       <div class="table-wrap"><table>
         <thead><tr><th>日付</th><th>曜日</th><th>当月</th><th>実働(h)</th><th>深夜(h)</th><th>休日</th><th>備考</th></tr></thead>
