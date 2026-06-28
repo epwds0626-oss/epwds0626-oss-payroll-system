@@ -268,8 +268,11 @@ function printWageLedger(year, month) {
 
     html += `<tr>
       <td class="tl">${emp.name}</td><td>—</td><td>${emp.type}</td>
-      <td>${s.workDays}</td><td>${s.totalActual}</td><td>${s.monthOT}</td>
-      <td>${s.monthMidnight}</td><td>${s.monthHoliday}</td>
+      <td>${s.workDays}</td>
+      <td>${hm(Math.round(s.totalActual*60)/60)}</td>
+      <td>${s.monthOT>0?hm(Math.round(s.monthOT*60)/60):'—'}</td>
+      <td>${s.monthMidnight>0?hm(Math.round(s.monthMidnight*60)/60):'—'}</td>
+      <td>${s.monthHoliday>0?hm(Math.round(s.monthHoliday*60)/60):'—'}</td>
       <td>${sal.basePay.toLocaleString()}</td>
       <td>${sal.otPay>0?sal.otPay.toLocaleString():'—'}</td>
       <td>${sal.midnightPay>0?sal.midnightPay.toLocaleString():'—'}</td>
