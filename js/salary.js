@@ -360,7 +360,8 @@ function openEmpAdjDialog(empId, year, month) {
   const existing = document.getElementById('adjModal');
   if (existing) existing.remove();
 
-  const emp = employees.find(e => e.id === empId);
+  // 両店スタッフは '10_enya' 形式のIDで渡る → activeEmployeesExpandedから取得
+  const emp = activeEmployeesExpanded().find(e => String(e.id) === String(empId));
   if (!emp) return;
   const sal = calcSalaryWithAdj(emp, year, month);
   const adj = getAdj(year, month, empId);
@@ -598,13 +599,32 @@ function openSubtotalSelector(year, month) {
 function filterSubtotalByStore() {
   const store = document.getElementById('storeFilter').value;
   document.querySelectorAll('.subtotalChk').forEach(c => {
-    const emp = employees.find(e => e.id == c.value);
-    c.checked = !store || (emp && emp.store === store);
+    const v = c.value;
+    // 両店スタッフは value が '10_enya' / '10_marco' 形式
+    const isBothEnya  = v.includes('_enya');
+    const isBothMarco = v.includes('_marco');
+    if (!store) {
+      c.checked = true;
+    } else if (store === '本店') {
+      // 本店スタッフ or 両店の本店側
+      const emp = employees.find(e => String(e.id) === v);
+      c.checked = isBothEnya || (emp && emp.store === '本店');
+    } else if (store === 'マルコ') {
+      const emp = employees.find(e => String(e.id) === v);
+      c.checked = isBothMarco || (emp && emp.store === 'マルコ');
+    } else {
+      const emp = employees.find(e => String(e.id) === v);
+      c.checked = emp && emp.store === store;
+    }
   });
 }
 
 function applySubtotal(year, month) {
-  const selected = [...document.querySelectorAll('.subtotalChk:checked')].map(c => parseInt(c.value));
+  // value は '10_enya' 形式の文字列 or 数値文字列 → そのまま文字列で保持
+  const selected = [...document.querySelectorAll('.subtotalChk:checked')].map(c => {
+    const v = c.value;
+    return v.includes('_') ? v : parseInt(v);
+  });
   document.getElementById('subtotalSelectorModal').remove();
   if (!selected.length) { clearSubtotal(); return; }
   _subtotalState = { year, month, empIds: selected };
@@ -617,7 +637,7 @@ function _renderSubtotalBar(year, month, empIds) {
   if (existing) existing.remove();
 
   const sel = empIds.map(id => {
-    const emp = employees.find(e => e.id === id);
+    const emp = activeEmployeesExpanded().find(e => String(e.id) === String(id));
     return emp ? { emp, sal: calcSalaryWithAdj(emp, year, month) } : null;
   }).filter(Boolean);
   if (!sel.length) return;
@@ -775,7 +795,7 @@ function openPrintSelector(year, month) {
           style="font-size:11.5px;padding:4px 10px;border:1px solid #d1d5db;border-radius:5px;background:#f9fafb;cursor:pointer;color:#374151">全選択</button>
         <button onclick="document.querySelectorAll('.printChk').forEach(c=>c.checked=false)"
           style="font-size:11.5px;padding:4px 10px;border:1px solid #d1d5db;border-radius:5px;background:#f9fafb;cursor:pointer;color:#374151">全解除</button>
-        <select onchange="document.querySelectorAll('.printChk').forEach(c=>c.checked=(this.value===''||employees.find(e=>e.id==c.value)?.store===this.value))"
+        <select onchange="filterPrintByStore(this.value)"
           style="font-size:11.5px;padding:4px 10px;border:1px solid #d1d5db;border-radius:5px;background:#f9fafb;cursor:pointer;color:#374151;margin-left:auto">
           <option value="">店舗絞込</option>
           <option value="本店">本店</option>
@@ -799,13 +819,37 @@ function openPrintSelector(year, month) {
   });
 }
 
+function filterPrintByStore(store) {
+  document.querySelectorAll('.printChk').forEach(c => {
+    const v = c.value;
+    const isBothEnya  = v.includes('_enya');
+    const isBothMarco = v.includes('_marco');
+    if (!store) {
+      c.checked = true;
+    } else if (store === '本店') {
+      const emp = employees.find(e => String(e.id) === v);
+      c.checked = isBothEnya || (emp && emp.store === '本店');
+    } else if (store === 'マルコ') {
+      const emp = employees.find(e => String(e.id) === v);
+      c.checked = isBothMarco || (emp && emp.store === 'マルコ');
+    } else {
+      const emp = employees.find(e => String(e.id) === v);
+      c.checked = emp && emp.store === store;
+    }
+  });
+}
+
 function printSelectedSalary(year, month) {
-  const selected = [...document.querySelectorAll('.printChk:checked')].map(c => parseInt(c.value));
+  // value は '10_enya' 形式の文字列 or 数値文字列 → そのまま保持
+  const selected = [...document.querySelectorAll('.printChk:checked')].map(c => {
+    const v = c.value;
+    return v.includes('_') ? v : parseInt(v);
+  });
   document.getElementById('printSelectorModal').remove();
   if (!selected.length) return;
 
   const rows = selected.map(id => {
-    const emp = employees.find(e => e.id === id);
+    const emp = activeEmployeesExpanded().find(e => String(e.id) === String(id));
     if (!emp) return '';
     const s = calcSalaryWithAdj(emp, year, month);
     const fmt = v => v ? `¥${v.toLocaleString()}` : '—';
@@ -827,9 +871,9 @@ function printSelectedSalary(year, month) {
     </tr>`;
   }).join('');
 
-  // 選択スタッフの合計（全項目）
+  // 選択スタッフの合計
   const totals = selected.reduce((acc, id) => {
-    const emp = employees.find(e => e.id === id);
+    const emp = activeEmployeesExpanded().find(e => String(e.id) === String(id));
     if (!emp) return acc;
     const s = calcSalaryWithAdj(emp, year, month);
     acc.base   += s.basePay;
