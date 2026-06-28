@@ -997,9 +997,18 @@ function getMonthSummary(empId, year, month) {
     sumHolidayLegalMins    += Math.round((d.holidayLegal    ||0) * 60);
     sumHolidayNonLegalMins += Math.round((d.holidayNonLegal ||0) * 60);
     if (d.actual > 0) workDays++;
-    if (d.paidLeave) paidDays++;
+    if (d.paidLeave) paidDays++; // 勤怠入力のチェック（後方互換）
     if (d.absent) absentDays++;
     if (d.late > 0) lateDays++;
+  }
+
+  // 有給管理簿の取得記録を優先してpaidDaysを上書き
+  // paidLeave[empId].used の日付が給与期間内にあればカウント
+  const baseEmpId = isBothStoreId(empId) ? getBaseId(empId) : empId;
+  const plRecord = paidLeave[baseEmpId] || paidLeave[String(baseEmpId)] || {};
+  const usedInPeriod = (plRecord.used || []).filter(u => u.date >= startDate && u.date <= endDate);
+  if (usedInPeriod.length > 0) {
+    paidDays = usedInPeriod.reduce((s, u) => s + (u.days || 1), 0);
   }
 
   const totalActual      = sumActualMins          / 60;
@@ -1094,7 +1103,8 @@ function calcSalary(emp, year, month) {
 
   if (emp.payType === '月給') {
     const MONTHLY_HOURS = emp.monthlyHours || 173.8;
-    hourlyBase = emp.baseSalary / MONTHLY_HOURS;
+    // 残業計算用時給：hourlyWageが設定されていればそれを優先、なければbaseSalary÷月平均時間
+    hourlyBase = emp.hourlyWage > 0 ? emp.hourlyWage : emp.baseSalary / MONTHLY_HOURS;
     basePay = emp.baseSalary - absentDays * 8 * hourlyBase;
   } else {
     hourlyBase = emp.hourlyWage;
