@@ -1290,3 +1290,114 @@ function check36(empId, year, month) {
 
   return { monthlyOT, yearlyOT, alerts };
 }
+
+// ============================================================
+// 賞与（インセンティブ）計算
+// ============================================================
+
+// 賞与に対する源泉徴収税額の算出率の表（令和8年度）
+// [前月社保控除後給与の下限, 上限, 扶養0人率, 1人率, 2人率, 3人率, 4人率, 5人率, 6人率, 乙欄率]
+const BONUS_TAX_TABLE = [
+  [0,      68000,  0,      0,      0,      0,      0,      0,      0,      0.03063],
+  [68000,  79000,  2.042,  0,      0,      0,      0,      0,      0,      0.04084],
+  [79000,  252000, 10.21,  2.042,  0,      0,      0,      0,      0,      0.07635],
+  [252000, 300000, 10.21,  10.21,  2.042,  0,      0,      0,      0,      0.07635],
+  [300000, 334000, 20.42,  10.21,  10.21,  2.042,  0,      0,      0,      0.10210],
+  [334000, 363000, 20.42,  20.42,  10.21,  10.21,  2.042,  0,      0,      0.10210],
+  [363000, 394000, 20.42,  20.42,  20.42,  10.21,  10.21,  2.042,  0,      0.10210],
+  [394000, 425000, 20.42,  20.42,  20.42,  20.42,  10.21,  10.21,  2.042,  0.10210],
+  [425000, 520000, 30.63,  20.42,  20.42,  20.42,  20.42,  10.21,  10.21,  0.15315],
+  [520000, 617000, 30.63,  30.63,  20.42,  20.42,  20.42,  20.42,  10.21,  0.15315],
+  [617000, 714000, 30.63,  30.63,  30.63,  20.42,  20.42,  20.42,  20.42,  0.15315],
+  [714000, 834000, 40.84,  30.63,  30.63,  30.63,  20.42,  20.42,  20.42,  0.20420],
+  [834000, 1000000,40.84,  40.84,  30.63,  30.63,  30.63,  20.42,  20.42,  0.20420],
+  [1000000,1167000,40.84,  40.84,  40.84,  30.63,  30.63,  30.63,  20.42,  0.20420],
+  [1167000,1334000,40.84,  40.84,  40.84,  40.84,  30.63,  30.63,  30.63,  0.20420],
+  [1334000,1500000,50.420, 40.84,  40.84,  40.84,  40.84,  30.63,  30.63,  0.30630],
+  [1500000,Infinity,50.420,50.420, 40.84,  40.84,  40.84,  40.84,  30.63,  0.30630],
+];
+
+/**
+ * 賞与源泉徴収税額を計算する
+ * @param {number} bonusAmount - 賞与額（社保控除前）
+ * @param {number} prevMonthNetShakai - 前月の社保控除後給与（=課税支給額-通勤費）
+ * @param {number} dependents - 扶養親族等の数
+ * @param {string} taxType - '甲' or '乙'
+ * @returns {number} 源泉徴収税額
+ */
+function calcBonusTax(bonusAmount, prevMonthNetShakai, dependents = 0, taxType = '甲') {
+  if (bonusAmount <= 0) return 0;
+  const dep = Math.min(Math.max(parseInt(dependents) || 0, 0), 6);
+
+  let rate = 0;
+  for (const row of BONUS_TAX_TABLE) {
+    if (prevMonthNetShakai >= row[0] && prevMonthNetShakai < row[1]) {
+      if (taxType === '乙') {
+        rate = row[8];
+      } else {
+        rate = row[2 + dep] / 100;
+      }
+      break;
+    }
+  }
+
+  // 前月給与が0（新入社員等）の場合は月換算法
+  if (prevMonthNetShakai === 0) {
+    const monthly = bonusAmount / 6;
+    const annualIncome = monthly * 12;
+    if (annualIncome <= 0) return 0;
+    const monthlyTax = calcIncomeTax(monthly, dependents, taxType);
+    return Math.round(monthlyTax * 6);
+  }
+
+  return Math.round(bonusAmount * rate);
+}
+
+/**
+ * 賞与の全控除を計算して返す
+ * @param {object} emp - 従業員オブジェクト
+ * @param {number} bonusAmount - 賞与支給額（入力値）
+ * @param {number} prevMonthGross - 前月総支給額（社保計算用）
+ * @param {number} prevMonthNetShakai - 前月社保控除後給与（税率参照用）
+ * @returns {object} 計算結果
+ */
+function calcBonusDeductions(emp, bonusAmount, prevMonthGross = 0, prevMonthNetShakai = 0) {
+  if (bonusAmount <= 0) return { kenpo:0, kosei:0, shienkin:0, koyoHoken:0, incomeTax:0, totalDeduction:0, netPay:0 };
+
+  // 社会保険（賞与標準額：千円未満切捨て）
+  let kenpo = 0, kosei = 0, shienkin = 0;
+  if (emp.shakai === '加入') {
+    const hyojun = Math.floor(bonusAmount / 1000) * 1000;
+    const s = calcShakai(hyojun, emp.birthDate, emp.hyojunHoshu || 0);
+    kenpo = s.kenpo; kosei = s.kosei; shienkin = s.shienkin;
+  }
+
+  // 雇用保険
+  let koyoHoken = 0;
+  if (emp.koyo === '加入') koyoHoken = Math.round(bonusAmount * KOYO_RATE);
+
+  // 賞与所得税（社保控除後の賞与額に税率を乗じる）
+  const bonusAfterShakai = bonusAmount - kenpo - kosei - shienkin - koyoHoken;
+  const incomeTax = calcBonusTax(bonusAfterShakai, prevMonthNetShakai, emp.dependents, emp.tax);
+
+  const totalDeduction = kenpo + kosei + shienkin + koyoHoken + incomeTax;
+  const netPay = bonusAmount - totalDeduction;
+
+  return { kenpo, kosei, shienkin, koyoHoken, incomeTax, totalDeduction, netPay };
+}
+
+/**
+ * 前月の給与データから社保控除後給与を取得する
+ */
+function getPrevMonthNetShakai(empId, year, month) {
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear  = month === 1 ? year - 1 : year;
+  try {
+    const sal = calcSalaryWithAdj(empId, prevYear, prevMonth);
+    if (!sal) return 0;
+    // 社保控除後 = 課税総支給 - 社保（通勤費除いた支給額から）
+    return Math.max(0, sal.grossTotal - (sal.commute||0) - (sal.kenpo||0) - (sal.kosei||0) - (sal.shienkin||0));
+  } catch(e) {
+    return 0;
+  }
+}
