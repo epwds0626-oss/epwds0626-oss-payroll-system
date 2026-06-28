@@ -126,8 +126,12 @@ function renderWeekDetail(year, month) {
     const wkActual   = inPeriodMins / 60;
 
     // 月マタギ種別判定
-    const hasPostPeriod = days.some(d => d.date > endDate);   // 期末マタギ（翌月にはみ出す）
+    const hasPostPeriod = days.some(d => d.date > endDate);
     const isCrossMonth  = isCrossMonthCheck(days, startDate, endDate);
+
+    const wkDailyOT  = inPeriod.reduce((s,d)=>s+Math.round((d.dailyOT||0)*60),0)/60;
+    const wkMidnight = inPeriod.reduce((s,d)=>s+Math.round((d.midnight||0)*60),0)/60;
+    const wkHoliday  = inPeriod.reduce((s,d)=>s+Math.round((d.holiday||0)*60),0)/60;
 
     // 期末マタギは翌月で計算 → 当月はゼロ
     // 期首マタギは当月分の実働比率で按分
