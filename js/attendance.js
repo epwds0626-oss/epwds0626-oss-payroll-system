@@ -54,7 +54,13 @@ function renderPunchTimeline(rec) {
 // ── 打刻編集ダイアログ ────────────────────────────────────
 function openPunchEditor(empId, dateStr, dy, dm) {
   const ym  = `${dy}-${String(dm).padStart(2,'0')}`;
-  const rec = ((attendance[ym]||{})[empId]||{})[dateStr] || {};
+  // 両店スタッフの場合、新キー（_enya/_marco）にデータがなければ旧キー（数値）を参照
+  let rec = ((attendance[ym]||{})[empId]||{})[dateStr];
+  if (!rec && (String(empId).includes('_enya') || String(empId).includes('_marco'))) {
+    const baseId = parseInt(String(empId).replace('_enya','').replace('_marco',''));
+    rec = ((attendance[ym]||{})[baseId]||{})[dateStr] || ((attendance[ym]||{})[String(baseId)]||{})[dateStr];
+  }
+  rec = rec || {};
   const br  = rec.breaks || [{},{},{}];
   while (br.length < 3) br.push({});
 
@@ -93,7 +99,7 @@ function openPunchEditor(empId, dateStr, dy, dm) {
         ※ 実働・残業・深夜時間は保存後に自動計算されます
       </div>
       <div style="display:flex;gap:8px">
-        <button onclick="savePunchEditor(${empId},'${dateStr}',${dy},${dm})"
+        <button onclick="savePunchEditor('${empId}','${dateStr}',${dy},${dm})"
           style="flex:1;background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;cursor:pointer;font-weight:700">保存</button>
         <button onclick="document.getElementById('punchEditorModal').remove()"
           style="background:#eee;color:#666;border:none;border-radius:8px;padding:10px 14px;font-size:14px;cursor:pointer">✕</button>
@@ -131,6 +137,18 @@ function savePunchEditor(empId, dateStr, dy, dm) {
   const ym  = `${dy}-${String(dm).padStart(2,'0')}`;
   if (!attendance[ym]) attendance[ym] = {};
   if (!attendance[ym][empId]) attendance[ym][empId] = {};
+  // 旧キー（数値）にデータがある場合は削除して新キーに移行
+  if (String(empId).includes('_enya') || String(empId).includes('_marco')) {
+    const baseId = parseInt(String(empId).replace('_enya','').replace('_marco',''));
+    const oldRec = ((attendance[ym]||{})[baseId]||{})[dateStr] || ((attendance[ym]||{})[String(baseId)]||{})[dateStr];
+    if (oldRec) {
+      // 旧キーを削除してFirebaseからも消す
+      if (attendance[ym][baseId]) delete attendance[ym][baseId][dateStr];
+      if (attendance[ym][String(baseId)]) delete attendance[ym][String(baseId)][dateStr];
+      db.ref(`payroll/attendance/${ym}/${baseId}/${dateStr}`).remove();
+      db.ref(`payroll/attendance/${ym}/${String(baseId)}/${dateStr}`).remove();
+    }
+  }
   const existing = attendance[ym][empId][dateStr] || {};
   const updated  = {
     ...existing,
@@ -304,46 +322,46 @@ function renderAttendanceTable(year, month) {
     html += `<tr style="${rowBg}">
       <td>${parseInt(mm)}/${parseInt(dd)}</td>
       <td style="font-weight:${isLegal||isNonLegal?'700':'400'};color:${dowColor||'inherit'}">${DOW_NAMES[dow]}${isLegal?' 🔴':isNonLegal?' 🟠':''}</td>
-      <td onclick="attToggleEdit(this,'${dateStr}','actual',${empId},${dy},${dm})" style="cursor:pointer;min-width:64px;text-align:center">
+      <td onclick="attToggleEdit(this,'${dateStr}','actual','${empId}',${dy},${dm})" style="cursor:pointer;min-width:64px;text-align:center">
         ${rec.actual?`<span style="font-size:12px;color:#1a5fa0;font-weight:700">${hm(rec.actual)}</span>`:'<span style="color:#ccc;font-size:12px">—</span>'}
         <input type="number" min="0" max="24" step="0.01" style="display:none;width:62px;font-size:12px"
         value="${rec.actual||''}"
-        onchange="setAttFull(${empId},'${dateStr}','actual',this.value,${dy},${dm})"
-        onblur="attToggleEdit(this.parentNode,'${dateStr}','actual',${empId},${dy},${dm})"></td>
-      <td style="background:#fff5f5;cursor:pointer;min-width:64px;text-align:center" onclick="attToggleEdit(this,'${dateStr}','dailyOT',${empId},${dy},${dm})">
+        onchange="setAttFull('${empId}','${dateStr}','actual',this.value,${dy},${dm})"
+        onblur="attToggleEdit(this.parentNode,'${dateStr}','actual','${empId}',${dy},${dm})"></td>
+      <td style="background:#fff5f5;cursor:pointer;min-width:64px;text-align:center" onclick="attToggleEdit(this,'${dateStr}','dailyOT','${empId}',${dy},${dm})">
         ${rec.dailyOT?`<span style="font-size:12px;color:#c0392b;font-weight:700">${hm(rec.dailyOT)}</span>`:'<span style="color:#ccc;font-size:12px">—</span>'}
         <input type="number" min="0" max="16" step="0.01" style="display:none;width:62px;font-size:12px"
         title="日8h超の残業時間のみ"
         value="${rec.dailyOT||''}"
-        onchange="setAttFull(${empId},'${dateStr}','dailyOT',this.value,${dy},${dm})"
-        onblur="attToggleEdit(this.parentNode,'${dateStr}','dailyOT',${empId},${dy},${dm})"></td>
-      <td style="background:#f0f5ff;cursor:pointer;min-width:64px;text-align:center" onclick="attToggleEdit(this,'${dateStr}','midnight',${empId},${dy},${dm})">
+        onchange="setAttFull('${empId}','${dateStr}','dailyOT',this.value,${dy},${dm})"
+        onblur="attToggleEdit(this.parentNode,'${dateStr}','dailyOT','${empId}',${dy},${dm})"></td>
+      <td style="background:#f0f5ff;cursor:pointer;min-width:64px;text-align:center" onclick="attToggleEdit(this,'${dateStr}','midnight','${empId}',${dy},${dm})">
         ${rec.midnight?`<span style="font-size:12px;color:#2980b9;font-weight:700">${hm(rec.midnight)}</span>`:'<span style="color:#ccc;font-size:12px">—</span>'}
         <input type="number" min="0" max="8" step="0.01" style="display:none;width:62px;font-size:12px"
         title="22時〜5時の労働時間合計"
         value="${rec.midnight||''}"
-        onchange="setAttFull(${empId},'${dateStr}','midnight',this.value,${dy},${dm})"
-        onblur="attToggleEdit(this.parentNode,'${dateStr}','midnight',${empId},${dy},${dm})"></td>
-      <td style="background:#f5f0ff;cursor:pointer;min-width:64px;text-align:center" onclick="attToggleEdit(this,'${dateStr}','midnightOT',${empId},${dy},${dm})">
+        onchange="setAttFull('${empId}','${dateStr}','midnight',this.value,${dy},${dm})"
+        onblur="attToggleEdit(this.parentNode,'${dateStr}','midnight','${empId}',${dy},${dm})"></td>
+      <td style="background:#f5f0ff;cursor:pointer;min-width:64px;text-align:center" onclick="attToggleEdit(this,'${dateStr}','midnightOT','${empId}',${dy},${dm})">
         ${rec.midnightOT?`<span style="font-size:12px;color:#8e44ad;font-weight:700">${hm(rec.midnightOT)}</span>`:'<span style="color:#ccc;font-size:12px">—</span>'}
         <input type="number" min="0" max="8" step="0.01" style="display:none;width:62px;font-size:12px"
         title="22時以降かつ残業の時間"
         value="${rec.midnightOT||''}"
-        onchange="setAttFull(${empId},'${dateStr}','midnightOT',this.value,${dy},${dm})"
-        onblur="attToggleEdit(this.parentNode,'${dateStr}','midnightOT',${empId},${dy},${dm})"></td>
+        onchange="setAttFull('${empId}','${dateStr}','midnightOT',this.value,${dy},${dm})"
+        onblur="attToggleEdit(this.parentNode,'${dateStr}','midnightOT','${empId}',${dy},${dm})"></td>
       <td style="background:${isLegal?'#ffe8e8':''}">
         <input type="checkbox" ${rec.holidayLegal?'checked':''}
         title="法定休日（木曜）出勤 → 35%割増"
-        onchange="setAttFull(${empId},'${dateStr}','holidayLegal',this.checked?1:0,${dy},${dm})"></td>
+        onchange="setAttFull('${empId}','${dateStr}','holidayLegal',this.checked?1:0,${dy},${dm})"></td>
       <td style="background:${isNonLegal?'#fff0e0':''}">
         <input type="checkbox" ${rec.holidayNonLegal||(rec.holiday&&!rec.holidayLegal)?'checked':''}
         title="法定外休日（水曜）出勤 → 週40h超のみ25%"
-        onchange="setAttFull(${empId},'${dateStr}','holidayNonLegal',this.checked?1:0,${dy},${dm})"></td>
+        onchange="setAttFull('${empId}','${dateStr}','holidayNonLegal',this.checked?1:0,${dy},${dm})"></td>
       <td><input type="checkbox" ${rec.paidLeave?'checked':''}
-        onchange="setAttFull(${empId},'${dateStr}','paidLeave',this.checked?1:0,${dy},${dm})"></td>
+        onchange="setAttFull('${empId}','${dateStr}','paidLeave',this.checked?1:0,${dy},${dm})"></td>
       <td><input type="checkbox" ${rec.absent?'checked':''}
-        onchange="setAttFull(${empId},'${dateStr}','absent',this.checked?1:0,${dy},${dm})"></td>
-      <td style="font-size:11px;line-height:1.7;cursor:pointer;min-width:160px" onclick="openPunchEditor(${empId},'${dateStr}',${dy},${dm})" title="クリックして打刻・勤怠を編集">
+        onchange="setAttFull('${empId}','${dateStr}','absent',this.checked?1:0,${dy},${dm})"></td>
+      <td style="font-size:11px;line-height:1.7;cursor:pointer;min-width:160px" onclick="openPunchEditor('${empId}','${dateStr}',${dy},${dm})" title="クリックして打刻・勤怠を編集">
         ${renderPunchTimeline(rec)}
       </td>
     </tr>`;
