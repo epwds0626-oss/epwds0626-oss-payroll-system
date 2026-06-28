@@ -77,6 +77,7 @@ function renderPage(page) {
     case 'paid_leave':  container.innerHTML = renderPaidLeave();       break;
     case 'article36':   container.innerHTML = renderArticle36(y,m);   break;
     case 'labor_report':container.innerHTML = renderLaborReport(y,m); break;
+    case 'bonus':       container.innerHTML = renderBonus(y,m);        break;
     default: container.innerHTML = '<p>準備中</p>';
   }
   attachPageEvents(page);
