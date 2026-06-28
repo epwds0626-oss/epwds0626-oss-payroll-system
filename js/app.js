@@ -109,7 +109,7 @@ function renderDashboard(year, month) {
   // 月次給与合計
   let totalNet = 0, totalGross = 0;
   for (const emp of employees) {
-    const r = calcSalary(emp, year, month);
+    const r = calcSalaryBoth(emp, year, month);
     totalNet   += r.netPay;
     totalGross += r.grossTotal;
   }
@@ -179,10 +179,10 @@ function renderDashboard(year, month) {
           </tr>
         </thead>
         <tbody>
-          ${activeEmployeesExpanded().map(emp => {
-            const s = getMonthSummary(emp.id, year, month);
-            const sal = calcSalary(emp, year, month);
-            const r36 = check36(emp.id, year, month);
+          ${activeEmployees().map(emp => {
+            const s = getMonthSummary(emp.store === '両店' ? `${emp.id}_enya` : emp.id, year, month);
+            const sal = calcSalaryBoth(emp, year, month);
+            const r36 = check36(emp.store === '両店' ? `${emp.id}_enya` : emp.id, year, month);
             const badge = r36.alerts.some(a=>a.level==='danger') 
               ? '<span class="badge badge-red">超過</span>'
               : r36.alerts.some(a=>a.level==='warn')
