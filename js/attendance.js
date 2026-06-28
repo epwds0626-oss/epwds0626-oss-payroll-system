@@ -33,6 +33,7 @@ function attToggleEdit(td, dateStr, field, empId, dy, dm) {
 function renderPunchTimeline(rec) {
   if (!rec || (!rec.punchIn && !rec.actual)) return '<span style="color:#ccc">—</span>';
   const lines = [];
+  if (rec._legacy) lines.push(`<span style="color:#e67e22;font-size:10px">⚠ 店舗区分前データ</span>`);
   if (rec.punchIn)  lines.push(`<span style="color:#1a3a5c">▶ ${rec.punchIn}</span>`);
   // 休憩ブロック
   if (rec.breaks && rec.breaks.length) {
@@ -149,8 +150,7 @@ function savePunchEditor(empId, dateStr, dy, dm) {
       const y = parseInt(document.getElementById('targetYear')?.value || dy);
       const m = parseInt(document.getElementById('targetMonth')?.value || dm);
       const sel = document.getElementById('attEmpSel');
-      const currentEmpId = sel ? parseInt(sel.value) : empId;
-      // 選択を保持したまま再描画
+      const currentEmpId = sel ? sel.value : String(empId);
       if (sel) sel.value = currentEmpId;
       renderAttendanceTable(y, m);
     });
@@ -246,13 +246,17 @@ function renderAttendanceTable(year, month) {
   const sel = document.getElementById('attEmpSel');
   if (!sel) return;
   const savedEmpId = sel.value;
-  let empId = parseInt(sel.value);
-  let emp = employees.find(e=>e.id===empId);
+  // 両店スタッフは '10_enya' / '10_marco' 形式の文字列IDになる
+  const rawId = sel.value;
+  const isBothId = rawId.includes('_enya') || rawId.includes('_marco');
+  let empId = isBothId ? rawId : parseInt(rawId);
+  // emp本体は展開済みリストから取得（両店スタッフも正しく取れる）
+  let emp = activeEmployeesExpanded().find(e => String(e.id) === String(empId));
   if (!emp) {
     const fallback = activeEmployeesExpanded()[0];
     if (!fallback) return;
     emp = fallback; empId = fallback.id;
-    if (sel) sel.value = empId;
+    if (sel) sel.value = String(empId);
   }
 
   const { startDate, endDate } = getPayPeriod(year, month);
