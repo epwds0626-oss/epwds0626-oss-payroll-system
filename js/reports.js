@@ -245,16 +245,16 @@ function printWageLedger(year, month) {
       <th rowspan="2">実労働<br>時間</th><th rowspan="2">時間外<br>労働時間</th>
       <th rowspan="2">深夜<br>時間</th><th rowspan="2">休日<br>時間</th>
       <th colspan="5">支給額</th>
-      <th colspan="5">控除額</th>
+      <th colspan="6">控除額</th>
       <th rowspan="2">差引<br>支給額</th>
     </tr>
     <tr>
       <th>基本給</th><th>残業</th><th>深夜</th><th>休日</th><th>交通費</th>
-      <th>健保</th><th>厚年</th><th>雇保</th><th>所得税</th><th>住民税</th>
+      <th>健保</th><th>厚年</th><th>子育<br>支援金</th><th>雇保</th><th>所得税</th><th>住民税</th>
     </tr>
   </thead><tbody>`;
 
-  let totals = { workDays:0, actual:0, ot:0, mid:0, hol:0, base:0, otP:0, midP:0, holP:0, comm:0, kenpo:0, kosei:0, koyo:0, income:0, jumin:0, net:0 };
+  let totals = { workDays:0, actual:0, ot:0, mid:0, hol:0, base:0, otP:0, midP:0, holP:0, comm:0, kenpo:0, kosei:0, shienkin:0, koyo:0, income:0, jumin:0, net:0 };
 
   for (const emp of activeEmployees()) {
     const s   = getMonthSummary(emp.store === '両店' ? `${emp.id}_enya` : emp.id, year, month);
@@ -263,7 +263,8 @@ function printWageLedger(year, month) {
     totals.mid+=s.monthMidnight; totals.hol+=s.monthHoliday;
     totals.base+=sal.basePay; totals.otP+=sal.otPay; totals.midP+=sal.midnightPay;
     totals.holP+=sal.holidayPay; totals.comm+=sal.commute;
-    totals.kenpo+=sal.kenpo; totals.kosei+=sal.kosei; totals.koyo+=sal.koyoHoken;
+    totals.kenpo+=sal.kenpo; totals.kosei+=sal.kosei; totals.shienkin+=(sal.shienkin||0);
+    totals.koyo+=sal.koyoHoken;
     totals.income+=sal.incomeTax; totals.jumin+=sal.juminzei; totals.net+=sal.netPay;
 
     html += `<tr>
@@ -280,6 +281,7 @@ function printWageLedger(year, month) {
       <td>${sal.commute.toLocaleString()}</td>
       <td>${sal.kenpo>0?sal.kenpo.toLocaleString():'—'}</td>
       <td>${sal.kosei>0?sal.kosei.toLocaleString():'—'}</td>
+      <td>${sal.shienkin>0?sal.shienkin.toLocaleString():'—'}</td>
       <td>${sal.koyoHoken>0?sal.koyoHoken.toLocaleString():'—'}</td>
       <td>${sal.incomeTax>0?sal.incomeTax.toLocaleString():'—'}</td>
       <td>${sal.juminzei>0?sal.juminzei.toLocaleString():'—'}</td>
@@ -296,6 +298,7 @@ function printWageLedger(year, month) {
     <td>${totals.midP.toLocaleString()}</td><td>${totals.holP.toLocaleString()}</td>
     <td>${totals.comm.toLocaleString()}</td>
     <td>${totals.kenpo.toLocaleString()}</td><td>${totals.kosei.toLocaleString()}</td>
+    <td>${totals.shienkin.toLocaleString()}</td>
     <td>${totals.koyo.toLocaleString()}</td><td>${totals.income.toLocaleString()}</td>
     <td>${totals.jumin.toLocaleString()}</td>
     <td>${totals.net.toLocaleString()}</td>
