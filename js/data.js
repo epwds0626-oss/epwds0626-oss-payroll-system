@@ -825,6 +825,8 @@ function calcWeeklyOT(dailyList, year, month) {
 function recomputeRec(rec) {
   if (rec._merged) return rec; // マージ済みは再計算しない
   if (!rec.punchIn || !rec.punchOut) return rec;
+  // punchIn === punchOut（00:00/00:00など）は無効データとして返す
+  if (rec.punchIn === rec.punchOut) return { ...rec, actual: 0, midnight: 0, dailyOT: 0, midnightOT: 0 };
   const toMins = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
 
   // actual を punchIn/punchOut/breaks から再計算（休憩変更を反映）
