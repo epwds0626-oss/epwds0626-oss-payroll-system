@@ -184,10 +184,18 @@ function payslipHTML(emp, sal, year, month) {
         ${adjRow(emp.id,year,month,'basePay','基本給',sal.basePay)}
         ${sal.skillPay>0?adjRow(emp.id,year,month,'skillPay','職能給',sal.skillPay):''}
         ${sal.positionAllowancePay>0?adjRow(emp.id,year,month,'positionAllowancePay','役職手当',sal.positionAllowancePay):''}
-        ${sal.ot60under>0?payRow(`残業手当（〜60h 25%）　${hm(sal.ot60under)}×¥${sal.hourlyBase.toLocaleString()}×25%`, Math.round(sal.ot60under * sal.hourlyBase * 0.25)):''}
-        ${sal.ot60over>0?payRow(`残業手当（60h超 50%）　${hm(sal.ot60over)}×¥${sal.hourlyBase.toLocaleString()}×50%`, Math.round(sal.ot60over * sal.hourlyBase * 0.50)):''}
+        ${sal.ot60under>0?`
+        <div style="display:flex;justify-content:space-between;padding:3px 0">
+          <span>残業手当（〜60h 25%）</span><span>¥${Math.round(sal.ot60under * sal.hourlyBase * 0.25).toLocaleString()}</span>
+        </div>
+        <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${hm(sal.ot60under)}×¥${sal.hourlyBase.toLocaleString()}×25%</div>`:''}
+        ${sal.ot60over>0?`
+        <div style="display:flex;justify-content:space-between;padding:3px 0">
+          <span>残業手当（60h超 50%）</span><span>¥${Math.round(sal.ot60over * sal.hourlyBase * 0.50).toLocaleString()}</span>
+        </div>
+        <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${hm(sal.ot60over)}×¥${sal.hourlyBase.toLocaleString()}×50%</div>`:''}
         ${sal.monthOT===0?payRow('残業手当',''):''}
-        ${sal.monthOT>0?`<div style="display:flex;justify-content:space-between;padding:2px 0;color:#888;font-size:11px"><span>└ 内訳：日8h超 ${hm(sal.monthDailyOT)} ／ 週40h超 ${hm(sal.monthWeekOT)}</span><span></span></div>`:''}
+        ${sal.monthOT>0?`<div style="padding:1px 0 4px 12px;font-size:11px;color:#aaa">└ 内訳：日8h超 ${hm(sal.monthDailyOT)} ／ 週40h超 ${hm(sal.monthWeekOT)}</div>`:''}
         ${adjRow(emp.id,year,month,'midnightPay','深夜手当（22時〜 25%）',sal.midnightOnlyPay)}
         ${sal.midnightOTPay>0?payRow('深夜残業 追加割増（+25%）', sal.midnightOTPay):''}
         ${adjRow(emp.id,year,month,'holidayLegalPay','法定休日手当（木曜 35%）',sal.holidayLegalPay)}
@@ -202,7 +210,7 @@ function payslipHTML(emp, sal, year, month) {
         ${adjRow(emp.id,year,month,'kenpo',`健康保険料（${sal.kaigo?'介護込11.14%':'9.52%'}・茨城支部R8）`,sal.kenpo)}
         ${adjRow(emp.id,year,month,'kosei','厚生年金保険料（18.30%）',sal.kosei)}
         ${sal.shienkin>0?adjRow(emp.id,year,month,'shienkin','子ども・子育て支援金（0.23%）',sal.shienkin):''}
-        ${adjRow(emp.id,year,month,'koyoHoken','雇用保険料（5‰）',sal.koyoHoken)}
+        ${adjRow(emp.id,year,month,'koyoHoken','雇用保険料（5%）',sal.koyoHoken)}
         ${adjRow(emp.id,year,month,'incomeTax','所得税',sal.incomeTax)}
         ${adjRow(emp.id,year,month,'juminzei','住民税',sal.juminzei)}
         ${sal.chutaikyoAmount>0?adjRow(emp.id,year,month,'chutaikyoAmount','中退共掛金',sal.chutaikyoAmount):''}
@@ -283,10 +291,18 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">支給項目</div>
         ${payRow('基本給', basePay)}
-        ${salE.ot60under>0?payRow(`残業手当（〜60h 25%）　${hm(salE.ot60under)}×¥${salE.hourlyBase.toLocaleString()}×25%`, Math.round(salE.ot60under * salE.hourlyBase * 0.25)):''}
-        ${salE.ot60over>0?payRow(`残業手当（60h超 50%）　${hm(salE.ot60over)}×¥${salE.hourlyBase.toLocaleString()}×50%`, Math.round(salE.ot60over * salE.hourlyBase * 0.50)):''}
+        ${salE.ot60under>0?`
+        <div style="display:flex;justify-content:space-between;padding:3px 0">
+          <span>残業手当（〜60h 25%）</span><span>¥${Math.round(salE.ot60under * salE.hourlyBase * 0.25).toLocaleString()}</span>
+        </div>
+        <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${hm(salE.ot60under)}×¥${salE.hourlyBase.toLocaleString()}×25%</div>`:''}
+        ${salE.ot60over>0?`
+        <div style="display:flex;justify-content:space-between;padding:3px 0">
+          <span>残業手当（60h超 50%）</span><span>¥${Math.round(salE.ot60over * salE.hourlyBase * 0.50).toLocaleString()}</span>
+        </div>
+        <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${hm(salE.ot60over)}×¥${salE.hourlyBase.toLocaleString()}×50%</div>`:''}
         ${(salE.monthOT===0)?payRow('残業手当',''):''}
-        ${salE.monthOT>0?`<div style="display:flex;justify-content:space-between;padding:2px 0;color:#888;font-size:11px"><span>└ 内訳：日8h超 ${hm(salE.monthDailyOT)} ／ 週40h超 ${hm(salE.monthWeekOT)}</span><span></span></div>`:''}
+        ${salE.monthOT>0?`<div style="padding:1px 0 4px 12px;font-size:11px;color:#aaa">└ 内訳：日8h超 ${hm(salE.monthDailyOT)} ／ 週40h超 ${hm(salE.monthWeekOT)}</div>`:''}
         ${midnightPay>0?payRow('深夜手当', midnightPay):''}
         ${holidayLegalPay>0?payRow('法定休日手当', holidayLegalPay):''}
         ${commute>0?payRow('交通費', commute):''}
@@ -299,7 +315,7 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
         ${payRow(`健康保険料（${salE.kaigo?'介護込11.14%':'9.52%'}・茨城支部R8）`, kenpo)}
         ${payRow('厚生年金保険料（18.30%）', kosei)}
         ${shienkin>0?payRow('子ども・子育て支援金（0.23%）', shienkin):''}
-        ${payRow('雇用保険料（5‰）', koyoHoken)}
+        ${payRow('雇用保険料（5%）', koyoHoken)}
         ${payRow('所得税', incomeTax)}
         ${payRow('住民税', juminzei)}
         ${chutaikyoAmount>0?payRow('中退共掛金', chutaikyoAmount):''}
