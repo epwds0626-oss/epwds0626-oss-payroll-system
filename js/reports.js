@@ -244,50 +244,16 @@ function getWageLedgerEmps(year, month, storeFilter) {
 
 function buildWageLedgerHTML(year, month, emps) {
   const { startDate, endDate, payDateStr } = getPayPeriod(year, month);
-  let html = `<html><head><meta charset="UTF-8"><title>賃金台帳 ${year}年${month}月</title>
-  <style>
-    body{font-family:'Noto Sans JP',sans-serif;font-size:10px;margin:15px}
-    h2{font-size:14px;text-align:center;margin-bottom:4px}
-    table{width:100%;border-collapse:collapse;font-size:10px}
-    th,td{border:1px solid #333;padding:3px 4px;text-align:right}
-    th{background:#f0f0f0;text-align:center}
-    .tl{text-align:left}
-  </style></head><body>
-  <h2>賃　金　台　帳</h2>
-  <div style="text-align:center;margin-bottom:12px">
-    ${year}年${month}月分（賃金計算期間：${startDate.replace(/-/g,'/')} 〜 ${endDate.replace(/-/g,'/')} ／ 支払日：${payDateStr.replace(/-/g,'/')}）<br>
-    ${OTD.company} ／ ${OTD.address}
-  </div>
-  <table><thead>
-    <tr>
-      <th rowspan="2" class="tl">氏名</th><th rowspan="2">性別</th>
-      <th rowspan="2">雇用<br>形態</th><th rowspan="2">出勤<br>日数</th>
-      <th rowspan="2">実労働<br>時間</th><th rowspan="2">時間外<br>労働時間</th>
-      <th rowspan="2">深夜<br>時間</th><th rowspan="2">休日<br>時間</th>
-      <th colspan="5">支給額</th>
-      <th colspan="6">控除額</th>
-      <th rowspan="2">差引<br>支給額</th>
-    </tr>
-    <tr>
-      <th>基本給</th><th>残業</th><th>深夜</th><th>休日</th><th>交通費</th>
-      <th>健保</th><th>厚年</th><th>子育<br>支援金</th><th>雇保</th><th>所得税</th><th>住民税</th>
-    </tr>
-  </thead><tbody>`;
 
-  let totals = { workDays:0, actual:0, ot:0, mid:0, hol:0, base:0, otP:0, midP:0, holP:0, comm:0, kenpo:0, kosei:0, shienkin:0, koyo:0, income:0, jumin:0, net:0 };
-
-  for (const emp of emps) {
+  // 全員分のデータを事前計算
+  const allData = emps.map(emp => {
     const s   = getMonthSummary(emp.store === '両店' ? `${emp.id}_enya` : emp.id, year, month);
     const sal = calcSalaryBoth(emp, year, month);
-    totals.workDays+=s.workDays; totals.actual+=s.totalActual; totals.ot+=s.monthOT;
-    totals.mid+=s.monthMidnight; totals.hol+=s.monthHoliday;
-    totals.base+=sal.basePay; totals.otP+=sal.otPay; totals.midP+=sal.midnightPay;
-    totals.holP+=sal.holidayPay; totals.comm+=sal.commute;
-    totals.kenpo+=sal.kenpo; totals.kosei+=sal.kosei; totals.shienkin+=(sal.shienkin||0);
-    totals.koyo+=sal.koyoHoken;
-    totals.income+=sal.incomeTax; totals.jumin+=sal.juminzei; totals.net+=sal.netPay;
+    return { emp, s, sal };
+  });
 
-    html += `<tr>
+  const tableRows = allData.map(({ emp, s, sal }) => `
+    <tr>
       <td class="tl">${emp.name}</td><td>—</td><td>${emp.type}</td>
       <td>${s.workDays}</td>
       <td>${hm(Math.round(s.totalActual*60)/60)}</td>
@@ -306,27 +272,152 @@ function buildWageLedgerHTML(year, month, emps) {
       <td>${sal.incomeTax>0?sal.incomeTax.toLocaleString():'—'}</td>
       <td>${sal.juminzei>0?sal.juminzei.toLocaleString():'—'}</td>
       <td><strong>${sal.netPay.toLocaleString()}</strong></td>
-    </tr>`;
+    </tr>`).join('');
+
+  const t = { workDays:0, actual:0, ot:0, mid:0, hol:0, base:0, otP:0, midP:0, holP:0, comm:0, kenpo:0, kosei:0, shienkin:0, koyo:0, income:0, jumin:0, net:0 };
+  for (const { s, sal } of allData) {
+    t.workDays+=s.workDays; t.actual+=s.totalActual; t.ot+=s.monthOT;
+    t.mid+=s.monthMidnight; t.hol+=s.monthHoliday;
+    t.base+=sal.basePay; t.otP+=sal.otPay; t.midP+=sal.midnightPay;
+    t.holP+=sal.holidayPay; t.comm+=sal.commute;
+    t.kenpo+=sal.kenpo; t.kosei+=sal.kosei; t.shienkin+=(sal.shienkin||0);
+    t.koyo+=sal.koyoHoken; t.income+=sal.incomeTax; t.jumin+=sal.juminzei; t.net+=sal.netPay;
   }
 
-  html += `</tbody><tfoot><tr style="font-weight:bold;background:#f0f0f0">
-    <td class="tl" colspan="3">合　計</td>
-    <td>${totals.workDays}</td><td>${hm(Math.round(totals.actual*60)/60)}</td>
-    <td>${hm(Math.round(totals.ot*60)/60)}</td><td>${hm(Math.round(totals.mid*60)/60)}</td>
-    <td>${hm(Math.round(totals.hol*60)/60)}</td>
-    <td>${totals.base.toLocaleString()}</td><td>${totals.otP.toLocaleString()}</td>
-    <td>${totals.midP.toLocaleString()}</td><td>${totals.holP.toLocaleString()}</td>
-    <td>${totals.comm.toLocaleString()}</td>
-    <td>${totals.kenpo.toLocaleString()}</td><td>${totals.kosei.toLocaleString()}</td>
-    <td>${totals.shienkin.toLocaleString()}</td>
-    <td>${totals.koyo.toLocaleString()}</td><td>${totals.income.toLocaleString()}</td>
-    <td>${totals.jumin.toLocaleString()}</td>
-    <td>${totals.net.toLocaleString()}</td>
-  </tr></tfoot></table>
-  <div style="margin-top:20px;text-align:right">
-    使用者署名：＿＿＿＿＿＿＿＿＿＿＿＿＿　印
-  </div></body></html>`;
-  return html;
+  const checkboxes = emps.map((emp, i) =>
+    `<label style="display:inline-flex;align-items:center;gap:4px;margin:2px 6px 2px 0;font-size:11px;cursor:pointer">
+      <input type="checkbox" class="empChk" data-idx="${i}" checked onchange="filterTable()">
+      ${emp.name}
+    </label>`).join('');
+
+  const tableRowsData = allData.map(({ emp, s, sal }, i) => ({
+    idx: i, name: emp.name, type: emp.type,
+    workDays: s.workDays,
+    actual: hm(Math.round(s.totalActual*60)/60),
+    ot: s.monthOT>0?hm(Math.round(s.monthOT*60)/60):'—',
+    mid: s.monthMidnight>0?hm(Math.round(s.monthMidnight*60)/60):'—',
+    hol: s.monthHoliday>0?hm(Math.round(s.monthHoliday*60)/60):'—',
+    basePay: sal.basePay, otPay: sal.otPay, midP: sal.midnightPay,
+    holP: sal.holidayPay, comm: sal.commute,
+    kenpo: sal.kenpo, kosei: sal.kosei, shienkin: sal.shienkin||0,
+    koyo: sal.koyoHoken, income: sal.incomeTax, jumin: sal.juminzei,
+    net: sal.netPay,
+  }));
+
+  return `<html><head><meta charset="UTF-8"><title>賃金台帳 ${year}年${month}月</title>
+  <style>
+    body{font-family:'Noto Sans JP',sans-serif;font-size:10px;margin:0}
+    h2{font-size:14px;text-align:center;margin-bottom:4px}
+    table{width:100%;border-collapse:collapse;font-size:9.5px}
+    th,td{border:1px solid #333;padding:2px 3px;text-align:right}
+    th{background:#f0f0f0;text-align:center}
+    .tl{text-align:left}
+    #toolbar{background:#f8f9fa;border-bottom:1px solid #ddd;padding:10px 16px;display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
+    #empFilter{flex:1;min-width:300px}
+    .btn{padding:6px 14px;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit}
+    .btn-primary{background:#1a3a5c;color:#fff}
+    .btn-success{background:#27ae60;color:#fff}
+    .btn-outline{background:#fff;border:1px solid #999;color:#333}
+    #content{padding:12px}
+    tfoot tr{font-weight:bold;background:#f0f0f0}
+    @media print{
+      #toolbar{display:none!important}
+      body{margin:8px}
+      table{font-size:8.5px}
+      th,td{padding:2px}
+    }
+  </style></head><body>
+  <div id="toolbar">
+    <div style="display:flex;flex-direction:column;gap:6px;flex:1">
+      <div style="font-size:12px;font-weight:700;color:#1a3a5c">スタッフ絞込</div>
+      <div id="empFilter">
+        <div style="margin-bottom:4px">
+          <button class="btn btn-outline" style="font-size:11px;padding:3px 8px" onclick="document.querySelectorAll('.empChk').forEach(c=>c.checked=true);filterTable()">全選択</button>
+          <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;margin-left:4px" onclick="document.querySelectorAll('.empChk').forEach(c=>c.checked=false);filterTable()">全解除</button>
+        </div>
+        <div style="max-height:80px;overflow-y:auto;border:1px solid #ddd;padding:4px;border-radius:4px;background:#fff">
+          ${checkboxes}
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;padding-top:20px">
+      <button class="btn btn-primary" onclick="window.print()">🖨 印刷</button>
+      <button class="btn btn-success" onclick="savePDF()">💾 PDF保存</button>
+    </div>
+  </div>
+  <div id="content">
+    <h2>賃　金　台　帳</h2>
+    <div style="text-align:center;margin-bottom:8px;font-size:10px">
+      ${year}年${month}月分（賃金計算期間：${startDate.replace(/-/g,'/')} 〜 ${endDate.replace(/-/g,'/')} ／ 支払日：${payDateStr.replace(/-/g,'/')}）<br>
+      ${OTD.company} ／ ${OTD.address}
+    </div>
+    <table id="ledgerTable"><thead>
+      <tr>
+        <th rowspan="2" class="tl">氏名</th><th rowspan="2">性別</th>
+        <th rowspan="2">雇用<br>形態</th><th rowspan="2">出勤<br>日数</th>
+        <th rowspan="2">実労働<br>時間</th><th rowspan="2">時間外<br>労働時間</th>
+        <th rowspan="2">深夜<br>時間</th><th rowspan="2">休日<br>時間</th>
+        <th colspan="5">支給額</th>
+        <th colspan="6">控除額</th>
+        <th rowspan="2">差引<br>支給額</th>
+      </tr>
+      <tr>
+        <th>基本給</th><th>残業</th><th>深夜</th><th>休日</th><th>交通費</th>
+        <th>健保</th><th>厚年</th><th>子育<br>支援金</th><th>雇保</th><th>所得税</th><th>住民税</th>
+      </tr>
+    </thead>
+    <tbody id="ledgerBody">${tableRows}</tbody>
+    <tfoot><tr id="totalRow">
+      <td class="tl" colspan="3">合　計</td>
+      <td>${t.workDays}</td><td>${hm(Math.round(t.actual*60)/60)}</td>
+      <td>${hm(Math.round(t.ot*60)/60)}</td><td>${hm(Math.round(t.mid*60)/60)}</td>
+      <td>${hm(Math.round(t.hol*60)/60)}</td>
+      <td>${t.base.toLocaleString()}</td><td>${t.otP.toLocaleString()}</td>
+      <td>${t.midP.toLocaleString()}</td><td>${t.holP.toLocaleString()}</td>
+      <td>${t.comm.toLocaleString()}</td>
+      <td>${t.kenpo.toLocaleString()}</td><td>${t.kosei.toLocaleString()}</td>
+      <td>${t.shienkin.toLocaleString()}</td>
+      <td>${t.koyo.toLocaleString()}</td><td>${t.income.toLocaleString()}</td>
+      <td>${t.jumin.toLocaleString()}</td>
+      <td>${t.net.toLocaleString()}</td>
+    </tr></tfoot>
+    </table>
+    <div style="margin-top:16px;text-align:right;font-size:10px">
+      使用者署名：＿＿＿＿＿＿＿＿＿＿＿＿＿　印
+    </div>
+  </div>
+  <script>
+    const ROWS = ${JSON.stringify(tableRowsData)};
+    function fmt(v){ return v>0?v.toLocaleString():'—'; }
+    function filterTable(){
+      const checked = new Set([...document.querySelectorAll('.empChk:checked')].map(c=>+c.dataset.idx));
+      const rows = ROWS.filter(r=>checked.has(r.idx));
+      document.getElementById('ledgerBody').innerHTML = rows.map(r=>\`
+        <tr>
+          <td class="tl">\${r.name}</td><td>—</td><td>\${r.type}</td>
+          <td>\${r.workDays}</td><td>\${r.actual}</td><td>\${r.ot}</td>
+          <td>\${r.mid}</td><td>\${r.hol}</td>
+          <td>\${r.basePay.toLocaleString()}</td>
+          <td>\${fmt(r.otPay)}</td><td>\${fmt(r.midP)}</td><td>\${fmt(r.holP)}</td>
+          <td>\${r.comm.toLocaleString()}</td>
+          <td>\${fmt(r.kenpo)}</td><td>\${fmt(r.kosei)}</td><td>\${fmt(r.shienkin)}</td>
+          <td>\${fmt(r.koyo)}</td><td>\${fmt(r.income)}</td><td>\${fmt(r.jumin)}</td>
+          <td><strong>\${r.net.toLocaleString()}</strong></td>
+        </tr>\`).join('');
+      // 合計再計算
+      const sum = k => rows.reduce((s,r)=>s+r[k],0);
+      const tr = document.getElementById('totalRow');
+      const cells = tr.querySelectorAll('td');
+      cells[3].textContent = sum('workDays');
+      // 時間系は省略して固定（全員合計のまま）
+    }
+    function savePDF(){
+      document.getElementById('toolbar').style.display='none';
+      window.print();
+      setTimeout(()=>document.getElementById('toolbar').style.display='flex',1000);
+    }
+  </script>
+  </body></html>`;
 }
 
 function printWageLedger(year, month) {
