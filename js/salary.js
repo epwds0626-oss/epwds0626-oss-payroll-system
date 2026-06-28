@@ -184,10 +184,10 @@ function payslipHTML(emp, sal, year, month) {
         ${adjRow(emp.id,year,month,'basePay','基本給',sal.basePay)}
         ${sal.skillPay>0?adjRow(emp.id,year,month,'skillPay','職能給',sal.skillPay):''}
         ${sal.positionAllowancePay>0?adjRow(emp.id,year,month,'positionAllowancePay','役職手当',sal.positionAllowancePay):''}
-        ${sal.dailyOTPay>0?payRow(`残業手当 日8h超（${hm(sal.monthDailyOT)} × 25%）`, sal.dailyOTPay):''}
-        ${sal.weekOTPay>0?payRow(`残業手当 週40h超（${hm(sal.monthWeekOT)} × 25%）`, sal.weekOTPay):''}
-        ${sal.ot60overPay>0?payRow(`残業手当 60h超（${hm(sal.ot60over)} × 追加25%）`, sal.ot60overPay):''}
-        ${(sal.monthOT===0)?payRow('残業手当',''):''}
+        ${sal.ot60under>0?payRow(`残業手当（〜60h 25%）`, Math.round(sal.ot60under * sal.hourlyBase * 0.25)):''}
+        ${sal.ot60over>0?payRow(`残業手当（60h超 50%）`, Math.round(sal.ot60over * sal.hourlyBase * 0.50)):''}
+        ${sal.monthOT===0?payRow('残業手当',''):''}
+        ${sal.monthOT>0?`<div style="display:flex;justify-content:space-between;padding:2px 0;color:#888;font-size:11px"><span>└ 内訳：日8h超 ${hm(sal.monthDailyOT)} ／ 週40h超 ${hm(sal.monthWeekOT)}</span><span></span></div>`:''}
         ${adjRow(emp.id,year,month,'midnightPay','深夜手当（22時〜 25%）',sal.midnightOnlyPay)}
         ${sal.midnightOTPay>0?payRow('深夜残業 追加割増（+25%）', sal.midnightOTPay):''}
         ${adjRow(emp.id,year,month,'holidayLegalPay','法定休日手当（木曜 35%）',sal.holidayLegalPay)}
@@ -283,10 +283,10 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">支給項目</div>
         ${payRow('基本給', basePay)}
-        ${salE.dailyOTPay>0?payRow(`残業手当 日8h超（${hm(salE.monthDailyOT)} × 25%）`, salE.dailyOTPay):''}
-        ${salE.weekOTPay>0?payRow(`残業手当 週40h超（${hm(salE.monthWeekOT)} × 25%）`, salE.weekOTPay):''}
-        ${salE.ot60overPay>0?payRow(`残業手当 60h超（${hm(salE.ot60over)} × 追加25%）`, salE.ot60overPay):''}
+        ${salE.ot60under>0?payRow(`残業手当（〜60h 25%）`, Math.round(salE.ot60under * salE.hourlyBase * 0.25)):''}
+        ${salE.ot60over>0?payRow(`残業手当（60h超 50%）`, Math.round(salE.ot60over * salE.hourlyBase * 0.50)):''}
         ${(salE.monthOT===0)?payRow('残業手当',''):''}
+        ${salE.monthOT>0?`<div style="display:flex;justify-content:space-between;padding:2px 0;color:#888;font-size:11px"><span>└ 内訳：日8h超 ${hm(salE.monthDailyOT)} ／ 週40h超 ${hm(salE.monthWeekOT)}</span><span></span></div>`:''}
         ${midnightPay>0?payRow('深夜手当', midnightPay):''}
         ${holidayLegalPay>0?payRow('法定休日手当', holidayLegalPay):''}
         ${commute>0?payRow('交通費', commute):''}
