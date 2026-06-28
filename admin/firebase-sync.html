@@ -637,6 +637,8 @@ function importToPayroll() {
 
     for (const [dateStr, rec] of Object.entries(empRec)) {
       if (!rec.in) { skipped++; continue; }
+      // in===out（00:00/00:00など）は無効データとしてスキップ
+      if (rec.in === rec.out) { skipped++; continue; }
 
       const dur = rec.out ? calcDurationNum(rec.in, rec.out) : null;
       if (!dur) { skipped++; continue; }
