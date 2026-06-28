@@ -184,8 +184,10 @@ function payslipHTML(emp, sal, year, month) {
         ${adjRow(emp.id,year,month,'basePay','基本給',sal.basePay)}
         ${sal.skillPay>0?adjRow(emp.id,year,month,'skillPay','職能給',sal.skillPay):''}
         ${sal.positionAllowancePay>0?adjRow(emp.id,year,month,'positionAllowancePay','役職手当',sal.positionAllowancePay):''}
-        ${adjRow(emp.id,year,month,'otPay','残業手当（〜60h 25%）',sal.monthOT>0?Math.round(Math.min(sal.monthOT,60)*sal.hourlyBase*0.25):0)}
-        ${sal.ot60over>0?payRow('残業手当（60h超 追加25%）', sal.otPay - Math.round(Math.min(sal.monthOT,60)*sal.hourlyBase*0.25)):''}
+        ${sal.dailyOTPay>0?payRow(`残業手当 日8h超（${hm(sal.monthDailyOT)} × 25%）`, sal.dailyOTPay):''}
+        ${sal.weekOTPay>0?payRow(`残業手当 週40h超（${hm(sal.monthWeekOT)} × 25%）`, sal.weekOTPay):''}
+        ${sal.ot60overPay>0?payRow(`残業手当 60h超（${hm(sal.ot60over)} × 追加25%）`, sal.ot60overPay):''}
+        ${(sal.monthOT===0)?payRow('残業手当',''):''}
         ${adjRow(emp.id,year,month,'midnightPay','深夜手当（22時〜 25%）',sal.midnightOnlyPay)}
         ${sal.midnightOTPay>0?payRow('深夜残業 追加割増（+25%）', sal.midnightOTPay):''}
         ${adjRow(emp.id,year,month,'holidayLegalPay','法定休日手当（木曜 35%）',sal.holidayLegalPay)}
@@ -281,7 +283,10 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">支給項目</div>
         ${payRow('基本給', basePay)}
-        ${otPay>0?payRow(`残業手当（両店合算 ${hm(salE.monthOT)}）`, otPay):''}
+        ${salE.dailyOTPay>0?payRow(`残業手当 日8h超（${hm(salE.monthDailyOT)} × 25%）`, salE.dailyOTPay):''}
+        ${salE.weekOTPay>0?payRow(`残業手当 週40h超（${hm(salE.monthWeekOT)} × 25%）`, salE.weekOTPay):''}
+        ${salE.ot60overPay>0?payRow(`残業手当 60h超（${hm(salE.ot60over)} × 追加25%）`, salE.ot60overPay):''}
+        ${(salE.monthOT===0)?payRow('残業手当',''):''}
         ${midnightPay>0?payRow('深夜手当', midnightPay):''}
         ${holidayLegalPay>0?payRow('法定休日手当', holidayLegalPay):''}
         ${commute>0?payRow('交通費', commute):''}
