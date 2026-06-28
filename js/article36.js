@@ -16,11 +16,11 @@ function renderArticle36(year, month) {
   const a36 = article36[year] || { limit36: 45, specialLimit: 80, yearLimit: 720 };
 
   // 全員の年間残業集計
-  const summaries = activeEmployeesExpanded().map(emp => {
+  const summaries = activeEmployees().map(emp => {
     const monthlyOTs = [];
     let yearlyOT = 0;
     for (let m = 1; m <= 12; m++) {
-      const s = getMonthSummary(emp.id, year, m);
+      const _eid36 = emp.store === '両店' ? `${emp.id}_enya` : emp.id; const s = getMonthSummary(_eid36, year, m);
       monthlyOTs.push(s.monthOT);
       yearlyOT += s.monthOT;
     }
@@ -165,11 +165,11 @@ function save36Settings(year) {
 function export36CSV(year) {
   const MONTHS = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
   const header = ['氏名', ...MONTHS, '年計(h)', '最大月(h)', '特別条項適用回数'];
-  const rows = activeEmployeesExpanded().map(emp => {
+  const rows = activeEmployees().map(emp => {
     const monthlyOTs = [];
     let yearlyOT = 0;
     for (let m=1;m<=12;m++) {
-      const s = getMonthSummary(emp.id, year, m);
+      const _eid36 = emp.store === '両店' ? `${emp.id}_enya` : emp.id; const s = getMonthSummary(_eid36, year, m);
       monthlyOTs.push(s.monthOT);
       yearlyOT += s.monthOT;
     }
