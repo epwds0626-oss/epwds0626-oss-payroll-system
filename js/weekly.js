@@ -125,18 +125,20 @@ function renderWeekDetail(year, month) {
     // 当月表示用の実働（当月期間分のみ）
     const wkActual   = inPeriodMins / 60;
 
-    // 週超残業の当月按分：週全体の実働に占める当月分の割合で按分
-    // 月マタギでない週はそのまま全額
-    const wkOT = (allActualMins > 0 && isCrossMonthCheck(days, startDate, endDate))
-      ? Math.round(wkOTAll * (inPeriodMins / allActualMins) * 60) / 60
-      : wkOTAll;
+    // 月マタギ種別判定
+    const hasPostPeriod = days.some(d => d.date > endDate);   // 期末マタギ（翌月にはみ出す）
+    const isCrossMonth  = isCrossMonthCheck(days, startDate, endDate);
 
-    const wkDailyOT  = inPeriod.reduce((s,d)=>s+Math.round((d.dailyOT||0)*60),0)/60;
-    const wkMidnight = inPeriod.reduce((s,d)=>s+Math.round((d.midnight||0)*60),0)/60;
-    const wkHoliday  = inPeriod.reduce((s,d)=>s+Math.round((d.holiday||0)*60),0)/60;
-
-    // 月マタギ判定（先に計算しておく）
-    const isCrossMonth = isCrossMonthCheck(days, startDate, endDate);
+    // 期末マタギは翌月で計算 → 当月はゼロ
+    // 期首マタギは当月分の実働比率で按分
+    let wkOT = 0;
+    if (hasPostPeriod) {
+      wkOT = 0; // 翌月に計上
+    } else if (isCrossMonth && allActualMins > 0) {
+      wkOT = Math.round(wkOTAll * (inPeriodMins / allActualMins) * 60) / 60;
+    } else {
+      wkOT = wkOTAll;
+    }
 
     html += `
     <div style="margin-bottom:16px">
