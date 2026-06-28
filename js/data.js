@@ -835,6 +835,23 @@ function getExtendedDailyList(empId, year, month) {
 
   for (const [y,m] of monthsToScan) {
     const ym = getYM(y,m);
+
+    // 【旧キー互換】両店スタッフの場合、数値IDのデータも読む（店舗選択導入前のデータ）
+    // _enya/_marco どちらから見ても旧データは表示する
+    if (bothStore) {
+      const oldData = (attendance[ym] && (attendance[ym][baseId] || attendance[ym][String(baseId)])) || {};
+      for (const [date, rec] of Object.entries(oldData)) {
+        const d = new Date(date);
+        if (d < rangeStart || d > rangeEnd) continue;
+        const existing = list.findIndex(r=>r.date===date);
+        if (existing === -1) {
+          list.push({ date, ...recomputeRec(rec), _legacy: true });
+        } else if (rec.source === 'manual') {
+          list[existing] = { date, ...recomputeRec(rec), _legacy: true };
+        }
+      }
+    }
+
     const empData = (attendance[ym] && attendance[ym][empId]) || {};
     for (const [date, rec] of Object.entries(empData)) {
       const d = new Date(date);
@@ -861,10 +878,12 @@ function getExtendedDailyList(empId, year, month) {
         const pRec = recomputeRec(partnerRec);
 
         if (existing === -1) {
-          // 自分側のデータがない日にパートナーのデータがある場合はそのまま追加
           list.push({ date, ...pRec });
+        } else if (list[existing]._legacy) {
+          // 旧データしかない日に新キーのデータが来たら新キーで上書き
+          list[existing] = { date, ...pRec };
         } else {
-          // 同日に両店のデータがある → 合算して1レコードに統合
+          // 同日に両店の新キーデータがある → 合算
           const myRec = list[existing];
           const mergedActualMins = Math.round((myRec.actual||0)*60) + Math.round((pRec.actual||0)*60);
           const mergedMidnightMins = Math.round((myRec.midnight||0)*60) + Math.round((pRec.midnight||0)*60);
@@ -876,14 +895,12 @@ function getExtendedDailyList(empId, year, month) {
             dailyOT:    mergedDailyOTMins / 60,
             midnight:   mergedMidnightMins / 60,
             midnightOT: mergedMidnightOT,
-            // 休憩は両店分を結合
             breaks: [...(myRec.breaks||[]), ...(pRec.breaks||[])],
             breakMins: (myRec.breakMins||0) + (pRec.breakMins||0),
-            // _enya側を主レコードとし、_marcoは合算済みとしてメモ
             punchIn:  myRec.punchIn  || pRec.punchIn,
             punchOut: myRec.punchOut || pRec.punchOut,
             source: myRec.source === 'manual' || pRec.source === 'manual' ? 'manual' : 'timecard',
-            _merged: true, // デバッグ用フラグ
+            _merged: true,
           };
         }
       }
@@ -1002,6 +1019,7 @@ function calcSalary(emp, year, month) {
     const { startDate, endDate } = getPayPeriod(year, month);
     for (const [y,m] of [prev, [year, month], next]) {
       const ym = getYM(y,m);
+      // _marco新キーのデータのみ集計（旧キー＝数値IDのデータは本店側に計上するため除外）
       const marcoData = (attendance[ym] && attendance[ym][emp.id]) || {};
       for (const [date, rec] of Object.entries(marcoData)) {
         if (date < startDate || date > endDate) continue;
