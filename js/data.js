@@ -810,7 +810,7 @@ function calcWeeklyOT(dailyList, year, month) {
     totalActual += actualInPeriod;
 
     weeks.push({ start:wkStart, end:wkEnd, actual:wkActual,
-      dailyOT:wkDailyOT, weekOT:wkWeekOT, overtime:wkOT,
+      dailyOT:wkDailyOT, weekOT:wkWeekOTMins/60, overtime:wkOT,
       midnight:wkMidnight, midnightOT:wkMidnightOT,
       holidayLegal:wkHolidayLegal, holidayNonLegal:wkHolidayNonLegal, daysInPeriod });
   }
