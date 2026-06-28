@@ -7,7 +7,7 @@ let _subtotalState = null;
 
 function renderSalary(year, month) {
   subscribeAdj(year, month);
-  const results = activeEmployeesExpanded().map(emp => ({ emp, sal: calcSalaryWithAdj(emp, year, month) }));
+  const results = activeEmployees().map(emp => ({ emp, sal: calcSalaryWithAdjBoth(emp, year, month) }));
   const totals  = results.reduce((acc, { sal }) => {
     acc.gross    += sal.grossTotal;
     acc.base     += sal.basePay;
@@ -121,8 +121,8 @@ function renderSalary(year, month) {
 
 function exportSalaryCSV(year, month) {
   const header = ['氏名','雇用区分','基本給/時給計','残業手当','深夜手当','休日手当','交通費','支給合計','健保','厚年','子育支援金','雇保','所得税','住民税','控除合計','振込額'];
-  const rows = activeEmployeesExpanded().map(emp => {
-    const s = calcSalaryWithAdj(emp, year, month);
+  const rows = activeEmployees().map(emp => {
+    const s = calcSalaryWithAdjBoth(emp, year, month);
     return [emp.name, emp.type, s.basePay, s.otPay, s.midnightPay, s.holidayPay, s.commute, s.grossTotal, s.kenpo, s.kosei, s.shienkin||0, s.koyoHoken, s.incomeTax, s.juminzei, s.totalDeduction, s.netPay];
   });
   const csv = [header,...rows].map(r=>r.join(',')).join('\n');
