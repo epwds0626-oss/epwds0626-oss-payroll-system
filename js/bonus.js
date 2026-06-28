@@ -3,7 +3,7 @@
 // ============================================================
 
 function renderBonus(year, month) {
-  const employees = getEmployees().filter(e => e.type !== '役員');
+  const emps = employees.filter(e => e.type !== '役員');
 
   return `
 <div style="max-width:900px;margin:0 auto;padding:16px">
@@ -48,7 +48,7 @@ function renderBonus(year, month) {
         </tr>
       </thead>
       <tbody id="bonusTbody">
-        ${employees.map(emp => renderBonusRow(emp, year, month)).join('')}
+        ${emps.map(emp => renderBonusRow(emp, year, month)).join('')}
       </tbody>
     </table>
   </div>
@@ -74,7 +74,7 @@ function renderBonusRow(emp, year, month) {
   }
 
   const shakaiTotal = calc.kenpo + calc.kosei + calc.shienkin;
-  const isBoth = BOTH_STORE_IDS && BOTH_STORE_IDS.includes(emp.id);
+  const isBoth = emp.store === '両店';
 
   return `<tr id="bonusRow_${emp.id}" style="border-bottom:1px solid #f3f4f6">
     <td style="padding:6px"><input type="checkbox" id="bonusChk_${emp.id}" style="width:15px;height:15px"></td>
@@ -101,7 +101,7 @@ function renderBonusRow(emp, year, month) {
 
 // -------- リアルタイム計算 --------
 function bonusCalcRow(empId, year, month) {
-  const emp = getEmployees().find(e => e.id === empId);
+  const emp = employees.find(e => e.id === empId);
   if (!emp) return;
 
   const amtEl = document.getElementById(`bonusAmt_${empId}`);
@@ -154,10 +154,10 @@ async function loadBonusFromFirebase(year, month) {
 function bonusSaveAll() {
   const year  = parseInt(document.getElementById('bonusYear')?.value)  || new Date().getFullYear();
   const month = parseInt(document.getElementById('bonusMonth')?.value) || new Date().getMonth()+1;
-  const employees = getEmployees().filter(e => e.type !== '役員');
+  const emps = employees.filter(e => e.type !== '役員');
 
   let count = 0;
-  employees.forEach(emp => {
+  emps.forEach(emp => {
     const amtEl = document.getElementById(`bonusAmt_${emp.id}`);
     const amount = parseInt(amtEl?.value) || 0;
     if (amount > 0) {
@@ -181,7 +181,7 @@ function bonusRefresh() {
 
 // -------- 賞与明細モーダル --------
 function bonusShowSlip(empId, year, month) {
-  const emp = getEmployees().find(e => e.id === empId);
+  const emp = employees.find(e => e.id === empId);
   if (!emp) return;
 
   const amtEl  = document.getElementById(`bonusAmt_${empId}`);
@@ -286,7 +286,7 @@ function bonusShowSlip(empId, year, month) {
 }
 
 function bonusSaveOne(empId, year, month) {
-  const emp = getEmployees().find(e => e.id === empId);
+  const emp = employees.find(e => e.id === empId);
   if (!emp) return;
   const amtEl = document.getElementById(`bonusAmt_${empId}`);
   const amount = parseInt(amtEl?.value) || 0;
@@ -311,9 +311,9 @@ function bonusSlipPrint(empId) {
 function bonusPrintSelected() {
   const year  = parseInt(document.getElementById('bonusYear')?.value)  || new Date().getFullYear();
   const month = parseInt(document.getElementById('bonusMonth')?.value) || new Date().getMonth()+1;
-  const employees = getEmployees().filter(e => e.type !== '役員');
+  const emps = employees.filter(e => e.type !== '役員');
 
-  const selected = employees.filter(emp => document.getElementById(`bonusChk_${emp.id}`)?.checked);
+  const selected = emps.filter(emp => document.getElementById(`bonusChk_${emp.id}`)?.checked);
   if (selected.length === 0) { alert('印刷するスタッフを選択してください'); return; }
 
   const payDate = new Date(year, month, 0);
