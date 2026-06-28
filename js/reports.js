@@ -37,7 +37,19 @@ function renderLaborReport(year, month) {
       <div class="card-title">💴 賃金台帳（労基法108条）</div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">保存義務：<strong>3年</strong></div>
       <p style="font-size:12.5px;margin-bottom:12px">氏名・性別・賃金計算期間・労働時間・割増賃金・控除額・振込額を記録した台帳。</p>
-      <button class="btn-primary" onclick="printWageLedger(${year},${month})">🖨 賃金台帳印刷（${year}年${month}月）</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <select id="wageLedgerStore" style="font-size:12px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb">
+          <option value="">全店舗</option>
+          <option value="本店">本店</option>
+          <option value="マルコ">マルコ</option>
+          <option value="両店">両店</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-primary" onclick="printWageLedger(${year},${month})">🖨 全員印刷</button>
+        <button class="btn-outline" onclick="printWageLedgerFiltered(${year},${month})">🖨 絞込印刷</button>
+        <button class="btn-outline" onclick="exportWageLedgerCSV(${year},${month})">CSV出力</button>
+      </div>
     </div>
 
     <div class="card">
@@ -222,8 +234,16 @@ function printAttendanceRecord(year, month) {
   w.print();
 }
 
-// -------- 賃金台帳 --------
-function printWageLedger(year, month) {
+// -------- 賃金台帳 共通データ生成 --------
+function getWageLedgerEmps(year, month, storeFilter) {
+  return activeEmployees().filter(emp => {
+    if (!storeFilter) return true;
+    return emp.store === storeFilter;
+  });
+}
+
+function buildWageLedgerHTML(year, month, emps) {
+  const { startDate, endDate, payDateStr } = getPayPeriod(year, month);
   let html = `<html><head><meta charset="UTF-8"><title>賃金台帳 ${year}年${month}月</title>
   <style>
     body{font-family:'Noto Sans JP',sans-serif;font-size:10px;margin:15px}
@@ -235,7 +255,7 @@ function printWageLedger(year, month) {
   </style></head><body>
   <h2>賃　金　台　帳</h2>
   <div style="text-align:center;margin-bottom:12px">
-    ${year}年${month}月分（賃金計算期間：${getPayPeriod(year,month).startDate.replace(/-/g,'/')} 〜 ${getPayPeriod(year,month).endDate.replace(/-/g,'/')} ／ 支払日：${getPayPeriod(year,month).payDateStr.replace(/-/g,'/')}）<br>
+    ${year}年${month}月分（賃金計算期間：${startDate.replace(/-/g,'/')} 〜 ${endDate.replace(/-/g,'/')} ／ 支払日：${payDateStr.replace(/-/g,'/')}）<br>
     ${OTD.company} ／ ${OTD.address}
   </div>
   <table><thead>
@@ -256,7 +276,7 @@ function printWageLedger(year, month) {
 
   let totals = { workDays:0, actual:0, ot:0, mid:0, hol:0, base:0, otP:0, midP:0, holP:0, comm:0, kenpo:0, kosei:0, shienkin:0, koyo:0, income:0, jumin:0, net:0 };
 
-  for (const emp of activeEmployees()) {
+  for (const emp of emps) {
     const s   = getMonthSummary(emp.store === '両店' ? `${emp.id}_enya` : emp.id, year, month);
     const sal = calcSalaryBoth(emp, year, month);
     totals.workDays+=s.workDays; totals.actual+=s.totalActual; totals.ot+=s.monthOT;
@@ -306,11 +326,48 @@ function printWageLedger(year, month) {
   <div style="margin-top:20px;text-align:right">
     使用者署名：＿＿＿＿＿＿＿＿＿＿＿＿＿　印
   </div></body></html>`;
+  return html;
+}
 
-  const w = window.open('','_blank');
-  w.document.write(html);
+function printWageLedger(year, month) {
+  const emps = getWageLedgerEmps(year, month, '');
+  const w = window.open('', '_blank');
+  w.document.write(buildWageLedgerHTML(year, month, emps));
   w.document.close();
   w.print();
+}
+
+function printWageLedgerFiltered(year, month) {
+  const store = document.getElementById('wageLedgerStore')?.value || '';
+  const emps = getWageLedgerEmps(year, month, store);
+  const w = window.open('', '_blank');
+  w.document.write(buildWageLedgerHTML(year, month, emps));
+  w.document.close();
+  w.print();
+}
+
+function exportWageLedgerCSV(year, month) {
+  const store = document.getElementById('wageLedgerStore')?.value || '';
+  const emps = getWageLedgerEmps(year, month, store);
+  const header = ['氏名','雇用形態','店舗','出勤日数','実労働時間','時間外労働時間','深夜時間','休日時間',
+    '基本給','残業手当','深夜手当','休日手当','交通費','健保','厚年','子育て支援金','雇保','所得税','住民税','差引支給額'];
+  const rows = emps.map(emp => {
+    const s   = getMonthSummary(emp.store === '両店' ? `${emp.id}_enya` : emp.id, year, month);
+    const sal = calcSalaryBoth(emp, year, month);
+    return [
+      emp.name, emp.type, emp.store,
+      s.workDays,
+      hm(Math.round(s.totalActual*60)/60),
+      s.monthOT>0?hm(Math.round(s.monthOT*60)/60):'0h',
+      s.monthMidnight>0?hm(Math.round(s.monthMidnight*60)/60):'0h',
+      s.monthHoliday>0?hm(Math.round(s.monthHoliday*60)/60):'0h',
+      sal.basePay, sal.otPay, sal.midnightPay, sal.holidayPay, sal.commute,
+      sal.kenpo, sal.kosei, sal.shienkin||0, sal.koyoHoken, sal.incomeTax, sal.juminzei, sal.netPay
+    ];
+  });
+  const csv = [header, ...rows].map(r => r.join(',')).join('\n');
+  const storeLabel = store ? `_${store}` : '';
+  dlFile(`賃金台帳_${year}年${month}月${storeLabel}.csv`, csv, 'text/csv');
 }
 
 // -------- 有給管理簿印刷 --------
