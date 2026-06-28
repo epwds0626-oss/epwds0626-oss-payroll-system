@@ -508,7 +508,7 @@ function isBothStoreId(empId) {
 function getBaseId(empId) {
   return parseInt(String(empId).replace('_enya','').replace('_marco',''));
 }
-// 両店スタッフを本店・マルコの2行に展開した一覧を返す（有給以外の全ページで使用）
+// 両店スタッフを本店・マルコの2行に展開した一覧を返す（勤怠入力・週次・月次など店舗別ページ専用）
 function activeEmployeesExpanded() {
   const list = [];
   for (const e of activeEmployees()) {
@@ -520,6 +520,43 @@ function activeEmployeesExpanded() {
     }
   }
   return list;
+}
+
+// 給与計算用：両店スタッフは _enya+_marco を合算して1つの給与オブジェクトを返す
+// 通常スタッフは calcSalary をそのまま呼ぶ
+function calcSalaryBoth(emp, year, month) {
+  if (emp.store !== '両店') return calcSalary(emp, year, month);
+  const empE = { ...emp, id: `${emp.id}_enya`,  name: `${emp.name}【本店】` };
+  const empM = { ...emp, id: `${emp.id}_marco`, name: `${emp.name}【マルコ】` };
+  const salE = calcSalary(empE, year, month);
+  const salM = calcSalary(empM, year, month);
+  // 支給合算・控除はenya側（合算計算済み）、基本給だけ合算
+  return {
+    ...salE,
+    basePay:      salE.basePay + salM.basePay,
+    grossTotal:   salE.grossTotal + salM.grossTotal,
+    netPay:       salE.grossTotal + salM.grossTotal - salE.totalDeduction,
+    totalActual:  salE.totalActual,  // enya側が両店合算済み
+    workDays:     salE.workDays + salM.workDays,
+    _marcoActual: salM.totalActual,  // 明細の内訳表示用
+  };
+}
+
+function calcSalaryWithAdjBoth(emp, year, month) {
+  if (emp.store !== '両店') return calcSalaryWithAdj(emp, year, month);
+  const empE = { ...emp, id: `${emp.id}_enya`,  name: `${emp.name}【本店】` };
+  const empM = { ...emp, id: `${emp.id}_marco`, name: `${emp.name}【マルコ】` };
+  const salE = calcSalaryWithAdj(empE, year, month);
+  const salM = calcSalaryWithAdj(empM, year, month);
+  return {
+    ...salE,
+    basePay:      salE.basePay + salM.basePay,
+    grossTotal:   salE.grossTotal + salM.grossTotal,
+    netPay:       salE.grossTotal + salM.grossTotal - salE.totalDeduction,
+    totalActual:  salE.totalActual,
+    workDays:     salE.workDays + salM.workDays,
+    _marcoActual: salM.totalActual,
+  };
 }
 
 // -------- Firebase 読み込み・リアルタイム購読 --------
