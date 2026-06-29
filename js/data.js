@@ -1157,16 +1157,18 @@ function calcSalary(emp, year, month) {
 
   const holidayLegalPay = effectiveHolidayLegal * h * 0.35;
 
-  // ── 職能給の計算 ──────────────────────────────────
-  let skillPay = 0, skillPayNote = '';
-  if (emp.payType === '月給' && emp.targetGross > 0) {
+  // ── 役職手当（調整給）の計算 ────────────────────────
+  // 月給スタッフかつ targetGross 設定あり → 役職手当を逆算して総支給を targetGross に合わせる
+  // 役職手当 = targetGross - 基本給 - 交通費 - 残業代等（マイナスは0）
+  const skillPay = 0; // 職能給廃止
+  let positionAllowanceAdj = positionAllowancePay; // 時給スタッフ等はマスタ値そのまま
+  if (emp.payType === '月給' && emp.targetGross > 0 && !isMarcoSide) {
     const otTotal = Math.round(otPay + midnightPay + holidayLegalPay);
-    skillPay = emp.targetGross - emp.baseSalary - actualCommute - positionAllowancePay - otTotal;
-    skillPay = Math.max(0, Math.round(skillPay));
-    skillPayNote = `目標¥${emp.targetGross.toLocaleString()} - 基本給 - 通勤 - 役職 - 残業`;
+    positionAllowanceAdj = emp.targetGross - emp.baseSalary - actualCommute - otTotal;
+    positionAllowanceAdj = Math.max(0, Math.round(positionAllowanceAdj));
   }
 
-  const grossTotal = Math.round(basePay + skillPay + positionAllowancePay + otPay + midnightPay + holidayLegalPay + actualCommute);
+  const grossTotal = Math.round(basePay + positionAllowanceAdj + otPay + midnightPay + holidayLegalPay + actualCommute);
 
   // 社会保険
   let kenpo = 0, kosei = 0, shienkin = 0;
@@ -1191,7 +1193,7 @@ function calcSalary(emp, year, month) {
   return {
     basePay:             Math.round(basePay),
     skillPay, skillPayNote,
-    positionAllowancePay,
+    positionAllowancePay: positionAllowanceAdj,
     otPay:               Math.round(otPay),
     midnightPay:         Math.round(midnightPay),
     midnightOnlyPay:     Math.round(midnightOnlyPay),
