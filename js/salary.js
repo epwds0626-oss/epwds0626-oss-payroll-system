@@ -145,14 +145,20 @@ function renderPayslip(year, month) {
     <button class="btn-outline" style="margin-left:8px" onclick="printAllPayslips(${year},${month})">全員分 一括印刷</button>
   </div>
   <div id="payslipWrap"></div>`;
+  // 描画後に選択中スタッフの明細を即時表示
+  setTimeout(() => renderPayslipDetail(${year},${month}), 0);
 }
 
 function renderPayslipDetail(year, month) {
   const sel = document.getElementById('payslipEmpSel');
   if (!sel) return;
   const empId = parseInt(sel.value);
-  const emp   = employees.find(e=>e.id===empId);
+  // セレクトのvalueが空や0の場合は最初のオプションを使用
+  const resolvedId = empId || parseInt(sel.options[0]?.value);
+  const emp = employees.find(e => e.id === resolvedId);
   if (!emp) return;
+  // 選択状態を正しく反映
+  sel.value = String(resolvedId);
 
   if (emp.store === '両店') {
     // 両店スタッフ：_enya（残業込み合算）と_marco（基本給のみ）を合算して1枚
