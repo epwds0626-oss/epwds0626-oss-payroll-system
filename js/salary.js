@@ -200,7 +200,7 @@ function payslipHTML(emp, sal, year, month) {
         ${sal.midnightOTPay>0?payRow('深夜残業 追加割増（+25%）', sal.midnightOTPay):''}
         ${adjRow(emp.id,year,month,'holidayLegalPay','法定休日手当（木曜 35%）',sal.holidayLegalPay)}
         ${sal.monthHolidayNonLegal>0?`<div style="display:flex;justify-content:space-between;padding:3px 0;color:#999"><span>法定外休日（水曜）出勤 ${hm(sal.monthHolidayNonLegal)}</span><span>週OT分に含む</span></div>`:''}
-        ${adjRow(emp.id,year,month,'commute',`交通費${sal.commuteNote?' ('+sal.commuteNote+')':''}`,sal.commute)}
+        ${adjRow(emp.id,year,month,'commute','交通費',sal.commute)}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>支給合計</span><span>¥${sal.grossTotal.toLocaleString()}</span>
         </div>
