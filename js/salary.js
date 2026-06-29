@@ -78,8 +78,8 @@ function renderSalary(year, month) {
       </thead>
       <tbody>
       ${results.map(({ emp, sal }) => {
-        const ot60Pay  = sal.ot60under>0 ? Math.round(sal.ot60under * sal.hourlyBase * 0.25) : 0;
-        const ot60oPay = sal.ot60over>0  ? Math.round(sal.ot60over  * sal.hourlyBase * 0.50) : 0;
+        const ot60Pay  = sal.ot60under>0 ? Math.round(sal.ot60under * sal.hourlyBase * 1.25) : 0;
+        const ot60oPay = sal.ot60over>0  ? Math.round(sal.ot60over  * sal.hourlyBase * 1.50) : 0;
         return `<tr>
         <td class="tl" style="cursor:pointer;color:#1a3a5c;font-weight:700;text-decoration:underline dotted" title="クリックして全項目編集" onclick="openEmpAdjDialog(${emp.id},${year},${month})">${emp.name}</td>
         ${adjCell(emp.id,year,month,'basePay',sal.basePay)}
@@ -186,14 +186,14 @@ function payslipHTML(emp, sal, year, month) {
         ${sal.positionAllowancePay>0?adjRow(emp.id,year,month,'positionAllowancePay','役職手当',sal.positionAllowancePay):''}
         ${sal.ot60under>0?`
         <div style="display:flex;justify-content:space-between;padding:3px 0">
-          <span>残業手当（〜60h 25%）</span><span>¥${Math.round(sal.ot60under * sal.hourlyBase * 0.25).toLocaleString()}</span>
+          <span>残業手当（〜60h 125%）</span><span>¥${Math.round(sal.ot60under * sal.hourlyBase * 1.25).toLocaleString()}</span>
         </div>
-        <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${hm(sal.ot60under)}×¥${sal.hourlyBase.toLocaleString()}×25%</div>`:''}
+        <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${hm(sal.ot60under)}×¥${sal.hourlyBase.toLocaleString()}×125%</div>`:''}
         ${sal.ot60over>0?`
         <div style="display:flex;justify-content:space-between;padding:3px 0">
-          <span>残業手当（60h超 50%）</span><span>¥${Math.round(sal.ot60over * sal.hourlyBase * 0.50).toLocaleString()}</span>
+          <span>残業手当（60h超 150%）</span><span>¥${Math.round(sal.ot60over * sal.hourlyBase * 1.50).toLocaleString()}</span>
         </div>
-        <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${hm(sal.ot60over)}×¥${sal.hourlyBase.toLocaleString()}×50%</div>`:''}
+        <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${hm(sal.ot60over)}×¥${sal.hourlyBase.toLocaleString()}×150%</div>`:''}
         ${sal.monthOT===0?payRow('残業手当',''):''}
         ${sal.monthOT>0?`<div style="padding:1px 0 4px 12px;font-size:11px;color:#aaa">└ 内訳：日8h超 ${hm(sal.monthDailyOT)} ／ 週40h超 ${hm(sal.monthWeekOT)}</div>`:''}
         ${adjRow(emp.id,year,month,'midnightPay','深夜手当（22時〜 25%）',sal.midnightOnlyPay)}
@@ -293,14 +293,14 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
         ${payRow('基本給', basePay)}
         ${salE.ot60under>0?`
         <div style="display:flex;justify-content:space-between;padding:3px 0">
-          <span>残業手当（〜60h 25%）</span><span>¥${Math.round(salE.ot60under * salE.hourlyBase * 0.25).toLocaleString()}</span>
+          <span>残業手当（〜60h 125%）</span><span>¥${Math.round(salE.ot60under * salE.hourlyBase * 1.25).toLocaleString()}</span>
         </div>
-        <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${hm(salE.ot60under)}×¥${salE.hourlyBase.toLocaleString()}×25%</div>`:''}
+        <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${hm(salE.ot60under)}×¥${salE.hourlyBase.toLocaleString()}×125%</div>`:''}
         ${salE.ot60over>0?`
         <div style="display:flex;justify-content:space-between;padding:3px 0">
-          <span>残業手当（60h超 50%）</span><span>¥${Math.round(salE.ot60over * salE.hourlyBase * 0.50).toLocaleString()}</span>
+          <span>残業手当（60h超 150%）</span><span>¥${Math.round(salE.ot60over * salE.hourlyBase * 1.50).toLocaleString()}</span>
         </div>
-        <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${hm(salE.ot60over)}×¥${salE.hourlyBase.toLocaleString()}×50%</div>`:''}
+        <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${hm(salE.ot60over)}×¥${salE.hourlyBase.toLocaleString()}×150%</div>`:''}
         ${(salE.monthOT===0)?payRow('残業手当',''):''}
         ${salE.monthOT>0?`<div style="padding:1px 0 4px 12px;font-size:11px;color:#aaa">└ 内訳：日8h超 ${hm(salE.monthDailyOT)} ／ 週40h超 ${hm(salE.monthWeekOT)}</div>`:''}
         ${midnightPay>0?payRow('深夜手当', midnightPay):''}
