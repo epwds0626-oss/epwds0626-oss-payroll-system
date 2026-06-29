@@ -143,6 +143,7 @@ function renderPayslip(year, month) {
       ${empOptions}
     </select>
     <button class="btn-outline" style="margin-left:8px" onclick="printAllPayslips(${year},${month})">全員分 一括印刷</button>
+    <button class="btn-outline" style="margin-left:8px;background:#fef3c7;border-color:#f59e0b;color:#92400e" onclick="openTargetGrossModal(${year},${month})">💰 月別目標支給設定</button>
   </div>
   <div id="payslipWrap"></div>`;
   // 描画後に選択中スタッフの明細を即時表示
@@ -997,4 +998,66 @@ function printSelectedSalary(year, month) {
   </div>
   </body></html>`);
   w.document.close();
+}
+
+// ============================================================
+// 月別目標総支給 設定モーダル
+// ============================================================
+function openTargetGrossModal(year, month) {
+  const monthlyEmps = activeEmployees().filter(e => e.payType === '月給');
+  if (!monthlyEmps.length) { showToast('月給スタッフがいません', 'error'); return; }
+
+  const rows = monthlyEmps.map(emp => {
+    const current = getMonthlyTargetGross(emp.id, year, month);
+    const master  = emp.targetGross || 0;
+    return `
+    <tr>
+      <td style="padding:6px 8px;font-weight:600">${emp.name}</td>
+      <td style="padding:6px 8px;font-size:12px;color:#6b7280">マスタ: ${master > 0 ? '¥'+master.toLocaleString() : '未設定'}</td>
+      <td style="padding:6px 8px">
+        <input type="number" id="tg_${emp.id}" value="${current !== undefined ? current : ''}"
+          placeholder="${master > 0 ? master : '例: 400000'}"
+          min="0" step="1000"
+          style="width:130px;border:1px solid #d1d5db;border-radius:6px;padding:4px 8px;font-size:13px;text-align:right">
+      </td>
+      <td style="padding:6px 8px">
+        ${current !== undefined ? `<span style="font-size:11px;color:#059669">✅ ¥${current.toLocaleString()}</span>` : '<span style="font-size:11px;color:#9ca3af">未設定</span>'}
+      </td>
+    </tr>`;
+  }).join('');
+
+  openModal(`
+  <div class="modal-title">💰 ${year}年${month}月 月別目標総支給設定</div>
+  <p style="font-size:12px;color:#6b7280;margin-bottom:12px">
+    この月だけの目標総支給を設定します。設定するとマスタの値より優先されます。<br>
+    空欄にするとマスタの値に戻ります。
+  </p>
+  <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#f3f4f6">
+        <th style="padding:6px 8px;text-align:left">氏名</th>
+        <th style="padding:6px 8px;text-align:left">マスタ値</th>
+        <th style="padding:6px 8px;text-align:left">${year}年${month}月 目標総支給</th>
+        <th style="padding:6px 8px;text-align:left">現在の設定</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>
+  <div class="modal-footer" style="margin-top:16px">
+    <button class="btn-outline" onclick="closeModal()">キャンセル</button>
+    <button class="btn-primary" onclick="saveTargetGrossModal(${year},${month})">保存して再計算</button>
+  </div>`);
+}
+
+function saveTargetGrossModal(year, month) {
+  const monthlyEmps = activeEmployees().filter(e => e.payType === '月給');
+  monthlyEmps.forEach(emp => {
+    const input = document.getElementById(`tg_${emp.id}`);
+    if (!input) return;
+    const val = input.value === '' ? null : parseInt(input.value) || 0;
+    setMonthlyTargetGross(emp.id, year, month, val);
+  });
+  showToast('保存しました。給与明細を再描画します...');
+  closeModal();
+  setTimeout(() => renderPayslipDetail(year, month), 300);
 }
