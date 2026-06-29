@@ -846,6 +846,9 @@ function calcWeeklyOT(dailyList, year, month) {
 // 両店マージ済みレコード（_merged:true）はactualが既に合算済みなのでスキップ
 function recomputeRec(rec) {
   if (rec._merged) return rec; // マージ済みは再計算しない
+  // 打刻キー正規化（timecard は 'in'/'out'、手動入力は 'punchIn'/'punchOut'）
+  if (!rec.punchIn  && rec.in)  rec = { ...rec, punchIn:  rec.in  };
+  if (!rec.punchOut && rec.out) rec = { ...rec, punchOut: rec.out };
   if (!rec.punchIn || !rec.punchOut) return rec;
   // punchIn === punchOut（00:00/00:00など）は無効データとして返す
   if (rec.punchIn === rec.punchOut) return { ...rec, actual: 0, midnight: 0, dailyOT: 0, midnightOT: 0 };
