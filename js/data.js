@@ -435,6 +435,7 @@ const FB = {
   paidLeave:  () => db.ref('payroll/paidLeave'),
   article36:  () => db.ref('payroll/article36'),
   salaryAdj:  (ym) => db.ref(`payroll/salaryAdj/${ym}`),
+  targetGrossHistory: () => db.ref('payroll/targetGrossHistory'),
 };
 
 // -------- State --------
@@ -443,6 +444,7 @@ let attendance = {};
 let paidLeave  = {};
 let article36  = {};
 let salaryAdj  = {}; // 給与調整値 { ym: { empId: { field: value } } }
+let targetGrossHistory = {}; // 月別目標総支給 { empId: { '2026-07': 400000, ... } }
 let _fbLoaded  = false; // 初回ロード完了フラグ
 
 // -------- 給与調整値 API --------
@@ -654,6 +656,9 @@ function initFirebaseData() {
   FB.article36().on('value', snap => {
     article36 = snap.val() || {};
     if (!_fbLoaded) onLoad(); else if (currentPage === 'article36') refreshCurrentPageData();
+  });
+  FB.targetGrossHistory().on('value', snap => {
+    targetGrossHistory = snap.val() || {};
   });
 }
 
@@ -1041,6 +1046,13 @@ function getMonthSummary(empId, year, month) {
 // 給与計算本体
 function calcSalary(emp, year, month) {
 
+  // 月別targetGrossHistory を参照（マスタのtargetGrossより優先）
+  const _ym = `${year}-${String(month).padStart(2,'0')}`;
+  const _monthlyTG = (targetGrossHistory[String(emp.id)] || {})[_ym];
+  if (_monthlyTG !== undefined) {
+    emp = Object.assign({}, emp, { targetGross: _monthlyTG, fixedOTHours: 0 });
+  }
+
   // fixedOTHours が設定されている場合、targetGross を動的に計算
   // targetGross = baseSalary + 固定残業代(fixedOTHours×時給×1.25) + commute
   if (emp.payType === '月給' && (emp.fixedOTHours || 0) > 0) {
@@ -1421,4 +1433,25 @@ function getPrevMonthNetShakai(empId, year, month) {
   } catch(e) {
     return 0;
   }
+}
+
+// ============================================================
+// 月別目標総支給 API
+// ============================================================
+function setMonthlyTargetGross(empId, year, month, value) {
+  const ym = `${year}-${String(month).padStart(2,'0')}`;
+  const key = String(empId);
+  if (!targetGrossHistory[key]) targetGrossHistory[key] = {};
+  if (value === null || value === 0) {
+    delete targetGrossHistory[key][ym];
+    db.ref(`payroll/targetGrossHistory/${key}/${ym}`).remove();
+  } else {
+    targetGrossHistory[key][ym] = value;
+    db.ref(`payroll/targetGrossHistory/${key}/${ym}`).set(value);
+  }
+}
+
+function getMonthlyTargetGross(empId, year, month) {
+  const ym = `${year}-${String(month).padStart(2,'0')}`;
+  return (targetGrossHistory[String(empId)] || {})[ym];
 }
