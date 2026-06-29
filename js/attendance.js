@@ -59,16 +59,13 @@ function renderPunchTimeline(rec) {
 function openPunchEditor(empId, dateStr, dy, dm) {
   const ym  = `${dy}-${String(dm).padStart(2,'0')}`;
   // 両店スタッフの場合、新キー（_enya/_marco）にデータがなければ旧キー（数値）を参照
-  let rec = ((attendance[ym]||{})[empId]||{})[dateStr];
-  if (!rec && (String(empId).includes('_enya') || String(empId).includes('_marco'))) {
+  let rawRec = ((attendance[ym]||{})[empId]||{})[dateStr];
+  if (!rawRec && (String(empId).includes('_enya') || String(empId).includes('_marco'))) {
     const baseId = parseInt(String(empId).replace('_enya','').replace('_marco',''));
-    rec = ((attendance[ym]||{})[baseId]||{})[dateStr] || ((attendance[ym]||{})[String(baseId)]||{})[dateStr];
+    rawRec = ((attendance[ym]||{})[baseId]||{})[dateStr] || ((attendance[ym]||{})[String(baseId)]||{})[dateStr];
   }
-  rec = rec || {};
-  // 打刻システムは 'in'/'out' キーで保存、勤怠編集は 'punchIn'/'punchOut' を参照
-  // どちらも対応できるよう正規化
-  if (!rec.punchIn  && rec.in)  rec.punchIn  = rec.in;
-  if (!rec.punchOut && rec.out) rec.punchOut = rec.out;
+  // recomputeRec を通して in/out → punchIn/punchOut に正規化
+  let rec = rawRec ? recomputeRec({ ...rawRec }) : {};
   const br  = rec.breaks || [{},{},{}];
   while (br.length < 3) br.push({});
 
