@@ -319,7 +319,8 @@ function renderAttendanceTable(year, month) {
     const rec     = empMap[dateStr] || {};
     const isLegal    = dow === PAY_CONFIG.legalHolidayDow;
     const isNonLegal = dow === PAY_CONFIG.nonLegalHolidayDow;
-    const [dy, dm] = dateStr.split('-').map(Number);
+    // dy/dmは給与計算期間の年月（dateStrの年月ではない）
+    const dy = year, dm = month;
 
     const rowBg    = isLegal ? 'background:#fff0f0' : isNonLegal ? 'background:#fff8f0' : '';
     const dowColor = isLegal ? '#c0392b' : isNonLegal ? '#d35400' : '';
