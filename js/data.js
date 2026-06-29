@@ -1157,18 +1157,28 @@ function calcSalary(emp, year, month) {
 
   const holidayLegalPay = effectiveHolidayLegal * h * 0.35;
 
-  // ── 役職手当（調整給）の計算 ────────────────────────
-  // 月給スタッフかつ targetGross 設定あり → 役職手当を逆算して総支給を targetGross に合わせる
-  // 役職手当 = targetGross - 基本給 - 交通費 - 残業代等（マイナスは0）
+  // ── 役職手当・交通費（調整給）の計算 ───────────────────
+  // 月給スタッフかつ targetGross 設定あり:
+  //   ① 役職手当 = targetGross - 基本給 - 交通費(固定) - 残業代等
+  //   ② ①がマイナスになる場合は役職手当=0にして、交通費から差額を吸収
   const skillPay = 0; // 職能給廃止
-  let positionAllowanceAdj = positionAllowancePay; // 時給スタッフ等はマスタ値そのまま
+  let positionAllowanceAdj = positionAllowancePay;
+  let commuteAdj = actualCommute;
   if (emp.payType === '月給' && emp.targetGross > 0 && !isMarcoSide) {
     const otTotal = Math.round(otPay + midnightPay + holidayLegalPay);
-    positionAllowanceAdj = emp.targetGross - emp.baseSalary - actualCommute - otTotal;
-    positionAllowanceAdj = Math.max(0, Math.round(positionAllowanceAdj));
+    const needed = emp.targetGross - emp.baseSalary - otTotal; // 役職手当+交通費の合計目標
+    if (needed >= actualCommute) {
+      // 通常：役職手当で調整、交通費は固定
+      positionAllowanceAdj = Math.round(needed - actualCommute);
+      commuteAdj = actualCommute;
+    } else {
+      // 残業が多く役職手当が0になる場合：交通費で吸収
+      positionAllowanceAdj = 0;
+      commuteAdj = Math.max(0, Math.round(needed));
+    }
   }
 
-  const grossTotal = Math.round(basePay + positionAllowanceAdj + otPay + midnightPay + holidayLegalPay + actualCommute);
+  const grossTotal = Math.round(basePay + positionAllowanceAdj + otPay + midnightPay + holidayLegalPay + commuteAdj);
 
   // 社会保険
   let kenpo = 0, kosei = 0, shienkin = 0;
@@ -1182,7 +1192,7 @@ function calcSalary(emp, year, month) {
   if (emp.koyo === '加入') koyoHoken = Math.round(grossTotal * KOYO_RATE);
 
   // 所得税
-  const taxable   = grossTotal - actualCommute - kenpo - kosei - shienkin - koyoHoken;
+  const taxable   = grossTotal - commuteAdj - kenpo - kosei - shienkin - koyoHoken;
   const incomeTax = calcIncomeTax(taxable, emp.dependents, emp.tax);
 
   const juminzei        = emp.juminzei || 0;
@@ -1201,7 +1211,7 @@ function calcSalary(emp, year, month) {
     holidayLegalPay:     Math.round(holidayLegalPay),
     holidayNonLegalPay:  0,
     holidayPay:          Math.round(holidayLegalPay),
-    commute:    actualCommute,
+    commute:    commuteAdj,
     commuteNote: emp.commuteType === 'daily' ? `${(emp.commutePerDay||0).toLocaleString()}円×${baseWorkDays}日` : (isMarcoSide ? '（本店側で計上）' : '月額固定'),
     kaigo: isKaigoTarget(emp.birthDate),
     grossTotal, kenpo, kosei, shienkin, koyoHoken, incomeTax, juminzei, chutaikyoAmount,
