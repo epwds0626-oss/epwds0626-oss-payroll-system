@@ -523,6 +523,7 @@ function saveAdjModal(empId, year, month, field) {
   const val = parseInt(document.getElementById('adjModalInput').value) || 0;
   setAdj(year, month, empId, field, val);
   document.getElementById('adjModal').remove();
+  setTimeout(() => renderPayslipDetail(year, month), 100);
 }
 
 function resetAdjModal(empId, year, month, field) {
@@ -532,6 +533,7 @@ function resetAdjModal(empId, year, month, field) {
     FB.salaryAdj(ym).child(String(empId)).child(field).remove();
   }
   document.getElementById('adjModal').remove();
+  setTimeout(() => renderPayslipDetail(year, month), 100);
 }
 
 function printAllPayslips(year, month) {
