@@ -1192,7 +1192,7 @@ function calcSalary(emp, year, month) {
 
   return {
     basePay:             Math.round(basePay),
-    skillPay, skillPayNote,
+    skillPay, skillPayNote: '',
     positionAllowancePay: positionAllowanceAdj,
     otPay:               Math.round(otPay),
     midnightPay:         Math.round(midnightPay),
