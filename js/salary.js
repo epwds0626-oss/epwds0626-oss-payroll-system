@@ -146,7 +146,7 @@ function renderPayslip(year, month) {
   </div>
   <div id="payslipWrap"></div>`;
   // 描画後に選択中スタッフの明細を即時表示
-  setTimeout(() => renderPayslipDetail(${year},${month}), 0);
+  setTimeout(() => renderPayslipDetail(year, month), 0);
 }
 
 function renderPayslipDetail(year, month) {
