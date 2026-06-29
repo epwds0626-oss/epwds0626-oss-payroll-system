@@ -435,7 +435,7 @@ function reactivateEmployee(id) {
 
 function openAddEmployee() {
   const nextId = Math.max(...employees.map(e=>e.id),0) + 1;
-  openModal(employeeForm({ id:nextId, name:'', kana:'', type:'パート', dept:'ホール', payType:'時給', baseSalary:0, hourlyWage:0, commute:0, commuteType:'fixed', commutePerDay:0, positionAllowance:0, targetGross:0, dependents:0, shakai:'未加入', koyo:'未加入', chutaikyo:'未加入', tax:'甲', juminzei:0, store:'本店', hireDate:'', birthDate:'', status:'active' }, true));
+  openModal(employeeForm({ id:nextId, name:'', kana:'', type:'パート', dept:'ホール', payType:'時給', baseSalary:0, hourlyWage:0, commute:0, commuteType:'fixed', commutePerDay:0, positionAllowance:0, fixedOTHours:0, targetGross:0, dependents:0, shakai:'未加入', koyo:'未加入', chutaikyo:'未加入', tax:'甲', juminzei:0, store:'本店', hireDate:'', birthDate:'', status:'active' }, true));
 }
 
 function editEmployee(id) {
@@ -481,7 +481,11 @@ function employeeForm(emp, isNew) {
   </div>
   <div class="form-row">
     <div class="form-group"><label>役職手当（月額）</label><input type="number" id="ef_positionAllowance" value="${emp.positionAllowance||0}"></div>
-    <div class="form-group"><label>目標総支給額 <span style="font-size:11px;color:#e8a020">※月給制のみ　職能給を自動計算</span></label><input type="number" id="ef_targetGross" value="${emp.targetGross||0}"></div>
+    <div class="form-group" id="ef_fixedOTGroup">
+      <label>固定残業時間（h）<span style="font-size:11px;color:#e8a020">※月給制のみ　入力すると目標総支給を自動計算</span></label>
+      <input type="number" id="ef_fixedOTHours" value="${emp.fixedOTHours||0}" min="0" max="45" step="1" oninput="calcTargetGross()">
+    </div>
+    <div class="form-group"><label>目標総支給額 <span style="font-size:11px;color:#6b7280">（固定残業時間入力時は自動計算）</span></label><input type="number" id="ef_targetGross" value="${emp.targetGross||0}" oninput="document.getElementById('ef_fixedOTHours').value=0"></div>
   </div>
   <div class="form-row">
     <div class="form-group">
@@ -569,6 +573,18 @@ function employeeForm(emp, isNew) {
   </div>`;
 }
 
+function calcTargetGross() {
+  const baseSalary = parseInt(document.getElementById('ef_baseSalary')?.value) || 0;
+  const fixedOTH   = parseFloat(document.getElementById('ef_fixedOTHours')?.value) || 0;
+  const commute    = parseInt(document.getElementById('ef_commute')?.value) || 0;
+  if (baseSalary <= 0 || fixedOTH <= 0) return;
+  const MONTHLY_HOURS = 173.3;
+  const hourly = baseSalary / MONTHLY_HOURS;
+  const fixedOTPay = Math.round(fixedOTH * hourly * 1.25);
+  const target = baseSalary + fixedOTPay + commute;
+  document.getElementById('ef_targetGross').value = target;
+}
+
 function saveEmployee(id, isNew) {
   const get = sid => document.getElementById(sid);
   const existing = employees.find(e=>e.id===id) || {};
@@ -582,6 +598,7 @@ function saveEmployee(id, isNew) {
     commuteType: document.querySelector('input[name="commuteType"]:checked')?.value || 'fixed',
     commutePerDay: parseInt(get('ef_commutePerDay')?.value)||0,
     positionAllowance: parseInt(get('ef_positionAllowance')?.value)||0,
+    fixedOTHours: parseInt(get('ef_fixedOTHours')?.value)||0,
     targetGross: parseInt(get('ef_targetGross')?.value)||0,
     dependents: parseInt(get('ef_dep')?.value)||0,
     shakai: get('ef_shakai')?.value, koyo: get('ef_koyo')?.value,
