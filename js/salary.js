@@ -296,7 +296,7 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">支給項目</div>
-        ${payRow('基本給', basePay)}
+        ${adjRow(`${emp.id}_enya`,year,month,'basePay','基本給',basePay)}
         ${salE.ot60under>0?`
         <div style="display:flex;justify-content:space-between;padding:3px 0">
           <span>残業手当（〜60h 125%）</span><span>¥${Math.round(salE.ot60under * salE.hourlyBase * 1.25).toLocaleString()}</span>
@@ -309,22 +309,22 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
         <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${hm(salE.ot60over)}×¥${salE.hourlyBase.toLocaleString()}×150%</div>`:''}
         ${(salE.monthOT===0)?payRow('残業手当',''):''}
         ${salE.monthOT>0?`<div style="padding:1px 0 4px 12px;font-size:11px;color:#aaa">└ 内訳：日8h超 ${hm(salE.monthDailyOT)} ／ 週40h超 ${hm(salE.monthWeekOT)}</div>`:''}
-        ${midnightPay>0?payRow('深夜手当', midnightPay):''}
-        ${holidayLegalPay>0?payRow('法定休日手当', holidayLegalPay):''}
-        ${commute>0?payRow('交通費', commute):''}
+        ${midnightPay>0?adjRow(`${emp.id}_enya`,year,month,'midnightPay','深夜手当（22時〜 25%）',midnightPay):''}
+        ${holidayLegalPay>0?adjRow(`${emp.id}_enya`,year,month,'holidayLegalPay','法定休日手当（木曜 35%）',holidayLegalPay):''}
+        ${commute>0?adjRow(`${emp.id}_enya`,year,month,'commute','交通費',commute):''}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>支給合計</span><span>¥${grossTotal.toLocaleString()}</span>
         </div>
       </div>
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">控除項目</div>
-        ${payRow(`健康保険料（${salE.kaigo?'介護込11.14%':'9.52%'}・茨城支部R8）`, kenpo)}
-        ${payRow('厚生年金保険料（18.30%）', kosei)}
-        ${shienkin>0?payRow('子ども・子育て支援金（0.23%）', shienkin):''}
-        ${payRow('雇用保険料（0.5%）', koyoHoken)}
-        ${payRow('所得税', incomeTax)}
-        ${payRow('住民税', juminzei)}
-        ${chutaikyoAmount>0?payRow('中退共掛金', chutaikyoAmount):''}
+        ${adjRow(`${emp.id}_enya`,year,month,'kenpo',`健康保険料（${salE.kaigo?'介護込11.14%':'9.52%'}・茨城支部R8）`,kenpo)}
+        ${adjRow(`${emp.id}_enya`,year,month,'kosei','厚生年金保険料（18.30%）',kosei)}
+        ${shienkin>0?adjRow(`${emp.id}_enya`,year,month,'shienkin','子ども・子育て支援金（0.23%）',shienkin):''}
+        ${adjRow(`${emp.id}_enya`,year,month,'koyoHoken','雇用保険料（0.5%）',koyoHoken)}
+        ${adjRow(`${emp.id}_enya`,year,month,'incomeTax','所得税',incomeTax)}
+        ${adjRow(`${emp.id}_enya`,year,month,'juminzei','住民税',juminzei)}
+        ${chutaikyoAmount>0?adjRow(`${emp.id}_enya`,year,month,'chutaikyoAmount','中退共掛金',chutaikyoAmount):''}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>控除合計</span><span>¥${totalDeduction.toLocaleString()}</span>
         </div>
