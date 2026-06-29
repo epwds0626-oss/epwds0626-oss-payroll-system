@@ -163,21 +163,58 @@ function deleteUsed(empId, idx) {
 }
 
 function openGrantModal(empId) {
-  const emp  = employees.find(e=>e.id===empId);
-  const auto = calcPaidLeaveGrant(emp.hireDate||'');
+  const emp     = employees.find(e=>e.id===empId);
+  const auto    = calcPaidLeaveGrant(emp.hireDate||'');
+  const granted = paidLeave[empId]?.grants || [];
+
+  // 手動付与のデフォルト日数：法定テーブルの最新値（最大20日、2年キャップ）
+  const defaultDays = Math.min(auto.length ? auto[auto.length-1].days : 10, 20);
+
+  // 自動スケジュール行
+  const autoRows = auto.map(g => {
+    const already = granted.find(x => x.date === g.date);
+    if (already) {
+      return `
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #eee">
+      <span style="min-width:100px">${g.date}</span>
+      <span style="min-width:40px">${already.days}日</span>
+      <span style="color:#059669;font-size:12px;flex:1">✅ 付与済</span>
+      <button class="btn-sm" style="background:#fee2e2;color:#dc2626;border:none;border-radius:4px;padding:3px 10px;cursor:pointer"
+        onclick="deleteGrant(${empId},'${g.date}')">🗑 削除</button>
+    </div>`;
+    } else {
+      return `
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #eee">
+      <span style="min-width:100px">${g.date}</span>
+      <span style="min-width:40px">${g.days}日</span>
+      <span style="flex:1"></span>
+      <button class="btn-success btn-sm" onclick="grantAuto(${empId},'${g.date}',${g.days})">この日付で付与</button>
+    </div>`;
+    }
+  }).join('');
+
+  // 手動付与済みで自動スケジュールにない分
+  const manualOnly = granted.filter(g => !auto.find(a => a.date === g.date));
+  const manualRows = manualOnly.map(g => `
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #eee;background:#fffbeb">
+      <span style="min-width:100px">${g.date}</span>
+      <span style="min-width:40px">${g.days}日</span>
+      <span style="color:#d97706;font-size:12px;flex:1">✏ 手動付与</span>
+      <button class="btn-sm" style="background:#fee2e2;color:#dc2626;border:none;border-radius:4px;padding:3px 10px;cursor:pointer"
+        onclick="deleteGrant(${empId},'${g.date}')">🗑 削除</button>
+    </div>`).join('');
+
   openModal(`
   <div class="modal-title">🌿 ${emp.name} 有給付与</div>
-  ${auto.length?`
-  <div style="margin-bottom:12px"><strong>自動計算された付与スケジュール</strong></div>
-  ${auto.map(g=>`
-    <div style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid #eee">
-      <span>${g.date}</span><span>${g.days}日</span>
-      <button class="btn-success btn-sm" onclick="grantAuto(${empId},'${g.date}',${g.days})">この日付で付与</button>
-    </div>`).join('')}`:'<p>入社日が未設定です</p>'}
-  <div style="margin-top:16px;font-weight:700;color:var(--primary)">手動付与</div>
+  ${auto.length ? `
+  <div style="margin-bottom:8px"><strong>自動計算された付与スケジュール</strong></div>
+  ${autoRows}
+  ${manualRows ? `<div style="margin-top:8px;margin-bottom:4px;font-size:11px;color:#6b7280">手動付与分</div>${manualRows}` : ''}
+  ` : '<p>入社日が未設定です</p>'}
+  <div style="margin-top:16px;font-weight:700;color:var(--primary)">手動付与（任意の日付）</div>
   <div class="form-row" style="margin-top:8px">
     <div class="form-group"><label>付与日</label><input type="date" id="pg_date"></div>
-    <div class="form-group"><label>付与日数</label><input type="number" id="pg_days" min="1" max="40" value="10"></div>
+    <div class="form-group"><label>付与日数</label><input type="number" id="pg_days" min="1" max="40" value="${defaultDays}"></div>
   </div>
   <div class="modal-footer">
     <button class="btn-outline" onclick="closeModal()">閉じる</button>
@@ -204,6 +241,20 @@ function doGrant(empId, date, days) {
     if (err) { showToast('保存エラー','error'); return; }
     showToast(`${days}日付与しました`);
     closeModal();
+    renderPage('paid_leave');
+  });
+}
+
+function deleteGrant(empId, date) {
+  if (!confirm(`${date} の付与データを削除しますか？\n取得記録との整合性に注意してください。`)) return;
+  if (!paidLeave[empId]) return;
+  const grants = (paidLeave[empId].grants||[]).filter(g => g.date !== date);
+  db.ref(`payroll/paidLeave/${empId}/grants`).set(grants, err => {
+    if (err) { showToast('削除エラー','error'); return; }
+    paidLeave[empId].grants = grants;
+    showToast('付与データを削除しました');
+    closeModal();
+    renderPage('paid_leave');
   });
 }
 
