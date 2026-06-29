@@ -463,52 +463,130 @@ function exportWageLedgerCSV(year, month) {
 
 // -------- 有給管理簿印刷 --------
 function printPaidLeaveRecord(year) {
-  let html = `<html><head><meta charset="UTF-8"><title>有給管理簿 ${year}年度</title>
-  <style>
-    body{font-family:'Noto Sans JP',sans-serif;font-size:11px;margin:20px}
-    h2{font-size:14px;text-align:center;margin-bottom:4px}
-    h3{font-size:12px;margin:16px 0 4px}
-    table{width:100%;border-collapse:collapse;margin-bottom:12px}
-    th,td{border:1px solid #333;padding:3px 6px;text-align:center}
-    th{background:#f0f0f0}
-    .tl{text-align:left}
-  </style></head><body>
-  <h2>年次有給休暇管理簿</h2>
-  <div style="text-align:center;margin-bottom:12px">${year}年度（${year}年4月1日〜${year+1}年3月31日）／ ${OTD.company}</div>`;
+  const emps = activeEmployees();
 
-  for (const emp of activeEmployees()) {
-    const pl    = getPaidLeaveBalance(emp.id);
+  // スタッフごとのデータを事前構築
+  const empData = emps.map((emp, idx) => {
+    const pl = getPaidLeaveBalance(emp.id);
     const used5 = (pl.used||[])
       .filter(u=>{ const uy=parseInt(u.date.slice(0,4)); const uyear=u.date.slice(5,7)>='04'?uy:uy-1; return uyear===year; })
       .reduce((s,u)=>s+u.days,0);
     const totalGrant = pl.grants.reduce((s,g)=>s+g.days,0);
 
-    html += `<h3>${emp.name}（${emp.type}）　入社日：${emp.hireDate||'不明'}</h3>
-    <table>
-      <thead><tr><th>付与日</th><th>付与日数</th><th>取得日</th><th>取得日数</th><th>理由</th></tr></thead>
-      <tbody>`;
-
     const maxLen = Math.max(pl.grants.length, pl.used.length, 1);
+    let rows = '';
     for (let i=0;i<maxLen;i++) {
       const g = pl.grants[i];
       const u = pl.used[i];
-      html += `<tr>
+      rows += `<tr>
         <td>${g?g.date:''}</td><td>${g?g.days+'日':''}</td>
         <td>${u?u.date:''}</td><td>${u?u.days+'日':''}</td><td class="tl">${u?u.reason||'':''}</td>
       </tr>`;
     }
-    html += `</tbody><tfoot><tr>
-      <td colspan="1" style="font-weight:bold">付与合計</td><td>${totalGrant}日</td>
-      <td style="font-weight:bold">取得合計</td><td>${pl.used.reduce((s,u)=>s+u.days,0)}日</td>
-      <td>残日数：${pl.balance}日　／　${year}年度取得：${used5}日（5日義務：${totalGrant>=10?(used5>=5?'達成':'未達'):'対象外'}）</td>
-    </tr></tfoot></table>`;
-  }
 
-  html += '</body></html>';
+    return {
+      idx,
+      id: emp.id,
+      name: emp.name,
+      type: emp.type,
+      hireDate: emp.hireDate||'不明',
+      totalGrant,
+      totalUsed: pl.used.reduce((s,u)=>s+u.days,0),
+      balance: pl.balance,
+      used5,
+      obligation: totalGrant>=10?(used5>=5?'達成':'未達'):'対象外',
+      rows
+    };
+  });
+
+  const checkboxes = empData.map(d =>
+    `<label style="display:block;padding:2px 0;cursor:pointer">
+      <input type="checkbox" class="empChk" data-idx="${d.idx}" checked onchange="filterContent()">
+      ${d.name}
+    </label>`
+  ).join('');
+
+  const html = `<html><head><meta charset="UTF-8"><title>有給管理簿 ${year}年度</title>
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:'Noto Sans JP',sans-serif;font-size:11px;margin:0}
+    #toolbar{
+      position:fixed;top:0;left:0;right:0;background:#f8f8f8;border-bottom:2px solid #ccc;
+      padding:8px 16px;display:flex;align-items:flex-start;gap:16px;z-index:100
+    }
+    .btn{padding:5px 12px;border:none;border-radius:4px;cursor:pointer;font-size:12px}
+    .btn-primary{background:#1a3a5c;color:#fff}
+    .btn-success{background:#059669;color:#fff}
+    .btn-outline{background:#fff;border:1px solid #999;color:#333}
+    #content{padding:80px 20px 20px}
+    h2{font-size:14px;text-align:center;margin-bottom:4px}
+    .emp-block{margin-bottom:20px}
+    h3{font-size:12px;margin:0 0 4px}
+    table{width:100%;border-collapse:collapse;margin-bottom:4px}
+    th,td{border:1px solid #333;padding:3px 6px;text-align:center}
+    th{background:#f0f0f0}
+    .tl{text-align:left}
+    tfoot tr{font-weight:bold;background:#f0f0f0}
+    @media print{
+      #toolbar{display:none!important}
+      #content{padding:8px}
+    }
+  </style></head><body>
+  <div id="toolbar">
+    <div style="display:flex;flex-direction:column;gap:6px;flex:1">
+      <div style="font-size:12px;font-weight:700;color:#1a3a5c">スタッフ絞込</div>
+      <div style="margin-bottom:4px">
+        <button class="btn btn-outline" style="font-size:11px;padding:3px 8px" onclick="document.querySelectorAll('.empChk').forEach(c=>c.checked=true);filterContent()">全選択</button>
+        <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;margin-left:4px" onclick="document.querySelectorAll('.empChk').forEach(c=>c.checked=false);filterContent()">全解除</button>
+      </div>
+      <div style="max-height:80px;overflow-y:auto;border:1px solid #ddd;padding:4px;border-radius:4px;background:#fff">
+        ${checkboxes}
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;padding-top:20px">
+      <button class="btn btn-primary" onclick="window.print()">🖨 印刷</button>
+      <button class="btn btn-success" onclick="savePDF()">💾 PDF保存</button>
+    </div>
+  </div>
+
+  <div id="content">
+    <h2>年次有給休暇管理簿</h2>
+    <div style="text-align:center;margin-bottom:12px">${year}年度（${year}年4月1日〜${year+1}年3月31日）／ ${OTD.company}</div>
+    <div id="empBlocks">
+      ${empData.map(d => `
+      <div class="emp-block" data-idx="${d.idx}">
+        <h3>${d.name}（${d.type}）　入社日：${d.hireDate}</h3>
+        <table>
+          <thead><tr><th>付与日</th><th>付与日数</th><th>取得日</th><th>取得日数</th><th>理由</th></tr></thead>
+          <tbody>${d.rows}</tbody>
+          <tfoot><tr>
+            <td style="font-weight:bold">付与合計</td><td>${d.totalGrant}日</td>
+            <td style="font-weight:bold">取得合計</td><td>${d.totalUsed}日</td>
+            <td>残日数：${d.balance}日　／　${year}年度取得：${d.used5}日（5日義務：${d.obligation}）</td>
+          </tr></tfoot>
+        </table>
+      </div>`).join('')}
+    </div>
+  </div>
+
+  <script>
+    function filterContent() {
+      const checked = new Set([...document.querySelectorAll('.empChk:checked')].map(c=>+c.dataset.idx));
+      document.querySelectorAll('.emp-block').forEach(el => {
+        el.style.display = checked.has(+el.dataset.idx) ? '' : 'none';
+      });
+    }
+    function savePDF() {
+      document.getElementById('toolbar').style.display = 'none';
+      window.print();
+      setTimeout(() => document.getElementById('toolbar').style.display = 'flex', 1000);
+    }
+  </script>
+  </body></html>`;
+
   const w = window.open('','_blank');
   w.document.write(html);
   w.document.close();
-  w.print();
 }
 
 // -------- 36協定記入補助シート --------
