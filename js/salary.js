@@ -189,7 +189,7 @@ function payslipHTML(emp, sal, year, month) {
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">支給項目</div>
         ${adjRow(emp.id,year,month,'basePay','基本給',sal.basePay)}
 
-        ${sal.positionAllowancePay>0?adjRow(emp.id,year,month,'positionAllowancePay','役職手当（調整給）',sal.positionAllowancePay):''}
+        ${sal.positionAllowancePay>0?adjRow(emp.id,year,month,'positionAllowancePay','役職手当',sal.positionAllowancePay):''}
         ${sal.ot60under>0?`
         <div style="display:flex;justify-content:space-between;padding:3px 0">
           <span>残業手当（〜60h 125%）</span><span>¥${Math.round(sal.ot60under * sal.hourlyBase * 1.25).toLocaleString()}</span>
