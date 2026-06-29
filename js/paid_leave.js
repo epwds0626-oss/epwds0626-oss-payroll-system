@@ -163,28 +163,30 @@ function deleteUsed(empId, idx) {
 }
 
 function openGrantModal(empId) {
+  renderGrantModal(empId);
+}
+
+function renderGrantModal(empId) {
   const emp     = employees.find(e=>e.id===empId);
   const auto    = calcPaidLeaveGrant(emp.hireDate||'');
   const granted = paidLeave[empId]?.grants || [];
-
-  // 手動付与のデフォルト日数：法定テーブルの最新値（最大20日、2年キャップ）
   const defaultDays = Math.min(auto.length ? auto[auto.length-1].days : 10, 20);
 
-  // 自動スケジュール行
+  // 削除チェックボックス付きの行を構築
   const autoRows = auto.map(g => {
     const already = granted.find(x => x.date === g.date);
     if (already) {
       return `
     <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #eee">
+      <input type="checkbox" class="del-chk" data-date="${g.date}" style="width:16px;height:16px;cursor:pointer">
       <span style="min-width:100px">${g.date}</span>
       <span style="min-width:40px">${already.days}日</span>
       <span style="color:#059669;font-size:12px;flex:1">✅ 付与済</span>
-      <button class="btn-sm" style="background:#fee2e2;color:#dc2626;border:none;border-radius:4px;padding:3px 10px;cursor:pointer"
-        onclick="deleteGrant(${empId},'${g.date}')">🗑 削除</button>
     </div>`;
     } else {
       return `
     <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #eee">
+      <span style="width:16px"></span>
       <span style="min-width:100px">${g.date}</span>
       <span style="min-width:40px">${g.days}日</span>
       <span style="flex:1"></span>
@@ -193,23 +195,35 @@ function openGrantModal(empId) {
     }
   }).join('');
 
-  // 手動付与済みで自動スケジュールにない分
   const manualOnly = granted.filter(g => !auto.find(a => a.date === g.date));
   const manualRows = manualOnly.map(g => `
     <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #eee;background:#fffbeb">
+      <input type="checkbox" class="del-chk" data-date="${g.date}" style="width:16px;height:16px;cursor:pointer">
       <span style="min-width:100px">${g.date}</span>
       <span style="min-width:40px">${g.days}日</span>
       <span style="color:#d97706;font-size:12px;flex:1">✏ 手動付与</span>
-      <button class="btn-sm" style="background:#fee2e2;color:#dc2626;border:none;border-radius:4px;padding:3px 10px;cursor:pointer"
-        onclick="deleteGrant(${empId},'${g.date}')">🗑 削除</button>
     </div>`).join('');
+
+  const hasGranted = granted.length > 0;
 
   openModal(`
   <div class="modal-title">🌿 ${emp.name} 有給付与</div>
   ${auto.length ? `
-  <div style="margin-bottom:8px"><strong>自動計算された付与スケジュール</strong></div>
+  <div style="margin-bottom:6px;display:flex;align-items:center;justify-content:space-between">
+    <strong>自動計算された付与スケジュール</strong>
+    ${hasGranted ? `<span style="font-size:11px;color:#6b7280">☑ チェックして一括削除</span>` : ''}
+  </div>
   ${autoRows}
   ${manualRows ? `<div style="margin-top:8px;margin-bottom:4px;font-size:11px;color:#6b7280">手動付与分</div>${manualRows}` : ''}
+  ${hasGranted ? `
+  <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+    <button class="btn-sm" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px"
+      onclick="document.querySelectorAll('.del-chk').forEach(c=>c.checked=true)">全選択</button>
+    <button class="btn-sm" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px"
+      onclick="document.querySelectorAll('.del-chk').forEach(c=>c.checked=false)">全解除</button>
+    <button class="btn-sm" style="background:#fee2e2;color:#dc2626;border:none;border-radius:4px;padding:3px 14px;cursor:pointer;font-size:12px;margin-left:auto"
+      onclick="deleteGrantSelected(${empId})">🗑 選択を削除</button>
+  </div>` : ''}
   ` : '<p>入社日が未設定です</p>'}
   <div style="margin-top:16px;font-weight:700;color:var(--primary)">手動付与（任意の日付）</div>
   <div class="form-row" style="margin-top:8px">
@@ -217,7 +231,7 @@ function openGrantModal(empId) {
     <div class="form-group"><label>付与日数</label><input type="number" id="pg_days" min="1" max="40" value="${defaultDays}"></div>
   </div>
   <div class="modal-footer">
-    <button class="btn-outline" onclick="closeModal()">閉じる</button>
+    <button class="btn-outline" onclick="closeModal();renderPage('paid_leave')">閉じる</button>
     <button class="btn-primary" onclick="grantManual(${empId})">手動付与</button>
   </div>`);
 }
@@ -239,22 +253,23 @@ function doGrant(empId, date, days) {
   const grants = [...(paidLeave[empId].grants||[]), { date, days }];
   db.ref(`payroll/paidLeave/${empId}/grants`).set(grants, err => {
     if (err) { showToast('保存エラー','error'); return; }
+    paidLeave[empId].grants = grants;
     showToast(`${days}日付与しました`);
-    closeModal();
-    renderPage('paid_leave');
+    renderGrantModal(empId); // モーダルを閉じずに再描画
   });
 }
 
-function deleteGrant(empId, date) {
-  if (!confirm(`${date} の付与データを削除しますか？\n取得記録との整合性に注意してください。`)) return;
+function deleteGrantSelected(empId) {
+  const checked = [...document.querySelectorAll('.del-chk:checked')].map(c => c.dataset.date);
+  if (checked.length === 0) { showToast('削除する付与データを選択してください','error'); return; }
+  if (!confirm(`${checked.length}件の付与データを削除しますか？\n取得記録との整合性に注意してください。`)) return;
   if (!paidLeave[empId]) return;
-  const grants = (paidLeave[empId].grants||[]).filter(g => g.date !== date);
+  const grants = (paidLeave[empId].grants||[]).filter(g => !checked.includes(g.date));
   db.ref(`payroll/paidLeave/${empId}/grants`).set(grants, err => {
     if (err) { showToast('削除エラー','error'); return; }
     paidLeave[empId].grants = grants;
-    showToast('付与データを削除しました');
-    closeModal();
-    renderPage('paid_leave');
+    showToast(`${checked.length}件削除しました`);
+    renderGrantModal(empId); // モーダルを閉じずに再描画
   });
 }
 
