@@ -357,7 +357,7 @@ function renderEmployees() {
             <td style="white-space:nowrap">
               <button class="btn-outline btn-sm" onclick="moveEmp(${emp.id},-1)" ${idx===0?'disabled':''}>↑</button>
               <button class="btn-outline btn-sm" onclick="moveEmp(${emp.id},1)" ${idx===showList.length-1?'disabled':''}>↓</button>
-              <button class="btn-primary btn-sm" onclick="editEmployee(${emp.id})">編集</button>
+              <button class="btn-primary btn-sm" onclick="editEmployee('${emp.id}')">編集</button>
               ${emp.status==='inactive'
                 ? `<button class="btn-success btn-sm" onclick="reactivateEmployee(${emp.id})">復職</button>`
                 : `<button class="btn-outline btn-sm" onclick="openLeaveModal(${emp.id})">退職/休業</button>`
@@ -439,7 +439,9 @@ function openAddEmployee() {
 }
 
 function editEmployee(id) {
-  const emp = employees.find(e=>e.id===id);
+  // 両店スタッフのIDは '10_enya' 等の文字列 → 数値部分を抽出
+  const numId = typeof id === 'string' ? parseInt(id) : id;
+  const emp = employees.find(e => e.id === numId || e.id === id);
   if (!emp) return;
   openModal(employeeForm(emp, false));
 }
