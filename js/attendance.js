@@ -58,14 +58,20 @@ function renderPunchTimeline(rec) {
 // ── 打刻編集ダイアログ ────────────────────────────────────
 function openPunchEditor(empId, dateStr, dy, dm) {
   const ym  = `${dy}-${String(dm).padStart(2,'0')}`;
-  // 両店スタッフの場合、新キー（_enya/_marco）にデータがなければ旧キー（数値）を参照
-  let rawRec = ((attendance[ym]||{})[empId]||{})[dateStr];
-  if (!rawRec && (String(empId).includes('_enya') || String(empId).includes('_marco'))) {
-    const baseId = parseInt(String(empId).replace('_enya','').replace('_marco',''));
-    rawRec = ((attendance[ym]||{})[baseId]||{})[dateStr] || ((attendance[ym]||{})[String(baseId)]||{})[dateStr];
+  // empMap（getExtendedDailyListの処理済みデータ）から取得するのが最も確実
+  // Firebaseプロキシオブジェクトの直接アクセス問題を回避
+  let rec = (window._lastEmpMap || {})[dateStr];
+  if (!rec) {
+    // フォールバック：attendanceから走査して取得
+    const empData = (attendance[ym]||{})[empId] || (attendance[ym]||{})[String(empId)] || {};
+    let rawRec = Object.entries(empData).find(([k]) => k === dateStr)?.[1];
+    if (!rawRec && (String(empId).includes('_enya') || String(empId).includes('_marco'))) {
+      const baseId = parseInt(String(empId).replace('_enya','').replace('_marco',''));
+      const baseData = (attendance[ym]||{})[baseId] || (attendance[ym]||{})[String(baseId)] || {};
+      rawRec = Object.entries(baseData).find(([k]) => k === dateStr)?.[1];
+    }
+    rec = rawRec ? recomputeRec({ ...rawRec }) : {};
   }
-  // recomputeRec を通して in/out → punchIn/punchOut に正規化
-  let rec = rawRec ? recomputeRec({ ...rawRec }) : {};
   const br  = rec.breaks || [{},{},{}];
   while (br.length < 3) br.push({});
 
@@ -291,6 +297,7 @@ function renderAttendanceTable(year, month) {
   const extended = getExtendedDailyList(empId, year, month);
   const empMap   = {};
   for (const d of extended) empMap[d.date] = d;
+  window._lastEmpMap = empMap; // openPunchEditorから参照するためグローバルに保持
 
   let html = `<div class="table-wrap"><table>
     <thead><tr>
