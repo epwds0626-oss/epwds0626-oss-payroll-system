@@ -466,9 +466,10 @@ function calcSalaryWithAdj(emp, year, month) {
   if (!adj || Object.keys(adj).length === 0) return sal;
 
   // 各項目に調整値を上書き
-  const fields = ['basePay','skillPay','positionAllowancePay','otPay','midnightPay',
+  const fields = ['basePay','skillPay','otPay','midnightPay',
     'holidayLegalPay','commute','kenpo','kosei','shienkin','koyoHoken',
     'incomeTax','juminzei','chutaikyoAmount'];
+  sal.positionAllowancePay = 0; // 役職手当廃止（調整データが残っていても無視）
   for (const f of fields) {
     if (adj[f] !== undefined) sal[f] = adj[f];
   }
@@ -1167,25 +1168,17 @@ function calcSalary(emp, year, month) {
 
   const holidayLegalPay = effectiveHolidayLegal * h * 0.35;
 
-  // ── 役職手当・交通費（調整給）の計算 ───────────────────
-  // 月給スタッフかつ targetGross 設定あり:
-  //   ① 役職手当 = targetGross - 基本給 - 交通費(固定) - 残業代等
-  //   ② ①がマイナスになる場合は役職手当=0にして、交通費から差額を吸収
+  // ── 交通費（調整給）の計算 ─────────────────────────────
+  // 役職手当廃止。月給スタッフかつ targetGross 設定あり:
+  //   交通費 = targetGross - 基本給 - 残業代等
+  //   残業代が targetGross を超えた場合は交通費=0（追払い発生）
   const skillPay = 0; // 職能給廃止
-  let positionAllowanceAdj = positionAllowancePay;
+  const positionAllowanceAdj = 0; // 役職手当廃止
   let commuteAdj = actualCommute;
   if (emp.payType === '月給' && emp.targetGross > 0 && !isMarcoSide) {
     const otTotal = Math.round(otPay + midnightPay + holidayLegalPay);
-    const needed = emp.targetGross - emp.baseSalary - otTotal; // 役職手当+交通費の合計目標
-    if (needed >= actualCommute) {
-      // 通常：役職手当で調整、交通費は固定
-      positionAllowanceAdj = Math.round(needed - actualCommute);
-      commuteAdj = actualCommute;
-    } else {
-      // 残業が多く役職手当が0になる場合：交通費で吸収
-      positionAllowanceAdj = 0;
-      commuteAdj = Math.max(0, Math.round(needed));
-    }
+    const needed = emp.targetGross - emp.baseSalary - otTotal;
+    commuteAdj = Math.max(0, Math.round(needed));
   }
 
   const grossTotal = Math.round(basePay + positionAllowanceAdj + otPay + midnightPay + holidayLegalPay + commuteAdj);
