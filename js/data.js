@@ -1037,7 +1037,7 @@ function calcSalary(emp, year, month) {
   // fixedOTHours が設定されている場合、targetGross を動的に計算
   // targetGross = baseSalary + 固定残業代(fixedOTHours×時給×1.25) + commute
   if (emp.payType === '月給' && (emp.fixedOTHours || 0) > 0) {
-    const h = emp.baseSalary / MONTHLY_HOURS;
+    const h = emp.baseSalary / 173.3;
     const fixedOTPay = Math.round(emp.fixedOTHours * h * 1.25);
     emp = Object.assign({}, emp, {
       targetGross: emp.baseSalary + fixedOTPay + (emp.commute || 0)
