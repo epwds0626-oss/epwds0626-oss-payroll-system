@@ -359,7 +359,7 @@ function adjCellHide(empId, year, month, field, value) {
   const disp = value > 0 ? `¥${value.toLocaleString()}` : '—';
   const style = isAdj ? 'color:#d97706;font-weight:700;cursor:pointer' : 'cursor:pointer';
   return `<td class="col-hide" style="${style}" title="クリックして編集"
-    onclick="openAdjInput(${empId},${year},${month},'${field}',${value})">${disp}</td>`;
+    onclick="openAdjInput('${empId}',${year},${month},'${field}',${value})">${disp}</td>`;
 }
 function adjCell(empId, year, month, field, value) {
   const adj = getAdj(year, month, empId);
@@ -367,7 +367,7 @@ function adjCell(empId, year, month, field, value) {
   const disp = value > 0 ? `¥${value.toLocaleString()}` : '—';
   const style = isAdj ? 'color:#d97706;font-weight:700;cursor:pointer' : 'cursor:pointer';
   return `<td style="${style}" title="クリックして編集"
-    onclick="openAdjInput(${empId},${year},${month},'${field}',${value})">${disp}</td>`;
+    onclick="openAdjInput('${empId}',${year},${month},'${field}',${value})">${disp}</td>`;
 }
 
 // 編集可能行（給与明細用）
@@ -378,7 +378,7 @@ function adjRow(empId, year, month, field, label, value) {
   const adjBadge = isAdj ? ' <span style="font-size:10px;background:#fef3c7;color:#d97706;border-radius:3px;padding:0 3px">調整</span>' : '';
   const style = isAdj ? 'color:#d97706;font-weight:700' : '';
   return `<div style="display:flex;justify-content:space-between;padding:3px 0;cursor:pointer" title="クリックして編集"
-    onclick="openAdjInput(${empId},${year},${month},'${field}',${value})">
+    onclick="openAdjInput('${empId}',${year},${month},'${field}',${value})">
     <span>${label}${adjBadge}</span><span style="${style}">${disp}</span></div>`;
 }
 
@@ -498,9 +498,9 @@ function openAdjInput(empId, year, month, field, currentVal) {
       <input id="adjModalInput" type="number" value="${currentVal||0}"
         style="width:100%;border:2px solid #f59e0b;border-radius:8px;padding:8px 12px;font-size:16px;box-sizing:border-box;margin-bottom:16px">
       <div style="display:flex;gap:8px">
-        <button onclick="saveAdjModal(${empId},${year},${month},'${field}')"
+        <button onclick="saveAdjModal('${empId}',${year},${month},'${field}')"
           style="flex:1;background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;cursor:pointer;font-weight:700">保存</button>
-        <button onclick="resetAdjModal(${empId},${year},${month},'${field}')"
+        <button onclick="resetAdjModal('${empId}',${year},${month},'${field}')"
           style="flex:1;background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:10px;font-size:14px;cursor:pointer">元に戻す</button>
         <button onclick="document.getElementById('adjModal').remove()"
           style="background:#eee;color:#666;border:none;border-radius:8px;padding:10px 14px;font-size:14px;cursor:pointer">✕</button>
