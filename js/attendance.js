@@ -31,7 +31,11 @@ function attToggleEdit(td, dateStr, field, empId, dy, dm) {
 
 // ── 打刻タイムライン表示 ──────────────────────────────────
 function renderPunchTimeline(rec) {
-  if (!rec || (!rec.punchIn && !rec.actual)) return '<span style="color:#ccc">—</span>';
+  if (!rec) return '<span style="color:#ccc">—</span>';
+  // 打刻キー正規化（'in'/'out' → 'punchIn'/'punchOut'）
+  if (!rec.punchIn  && rec.in)  rec.punchIn  = rec.in;
+  if (!rec.punchOut && rec.out) rec.punchOut = rec.out;
+  if (!rec.punchIn && !rec.actual) return '<span style="color:#ccc">—</span>';
   const lines = [];
   if (rec._legacy) lines.push(`<span style="color:#e67e22;font-size:10px">⚠ 店舗区分前データ</span>`);
   if (rec.punchIn)  lines.push(`<span style="color:#1a3a5c">▶ ${rec.punchIn}</span>`);
@@ -61,6 +65,10 @@ function openPunchEditor(empId, dateStr, dy, dm) {
     rec = ((attendance[ym]||{})[baseId]||{})[dateStr] || ((attendance[ym]||{})[String(baseId)]||{})[dateStr];
   }
   rec = rec || {};
+  // 打刻システムは 'in'/'out' キーで保存、勤怠編集は 'punchIn'/'punchOut' を参照
+  // どちらも対応できるよう正規化
+  if (!rec.punchIn  && rec.in)  rec.punchIn  = rec.in;
+  if (!rec.punchOut && rec.out) rec.punchOut = rec.out;
   const br  = rec.breaks || [{},{},{}];
   while (br.length < 3) br.push({});
 
