@@ -645,7 +645,7 @@ function initFirebaseData() {
 
   FB.attendance().on('value', snap => {
     attendance = snap.val() || {};
-    if (!_fbLoaded) onLoad(); else if (currentPage === 'attendance' || currentPage === 'weekly' || currentPage === 'monthly') refreshCurrentPageData();
+    if (!_fbLoaded) onLoad(); else if (currentPage === 'attendance' || currentPage === 'weekly' || currentPage === 'monthly' || currentPage === 'freelance') refreshCurrentPageData();
   });
 
   FB.paidLeave().on('value', snap => {
