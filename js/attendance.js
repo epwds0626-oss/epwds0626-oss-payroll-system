@@ -161,12 +161,15 @@ function savePunchEditor(empId, dateStr, dy, dm) {
     }
   }
   const existing = attendance[ym][empId][dateStr] || {};
+  // punchIn/punchOut が両方入力されている場合は計算結果を採用する（0でも上書きする）。
+  // 「actual || existing.actual」だと actual=0 がfalsyになり既存値が残ってしまうバグがあったため修正。
+  const hasFullPunch = !!(punchIn && punchOut);
   const updated  = {
     ...existing,
     punchIn, punchOut, breaks,
-    actual:   actual   || existing.actual   || 0,
-    dailyOT:  dailyOT  || existing.dailyOT  || 0,
-    midnight: midnight || existing.midnight || 0,
+    actual:   hasFullPunch ? actual   : (existing.actual   || 0),
+    dailyOT:  hasFullPunch ? dailyOT  : (existing.dailyOT  || 0),
+    midnight: hasFullPunch ? midnight : (existing.midnight || 0),
     source:   'manual',
   };
 
