@@ -297,7 +297,7 @@ function renderAttendanceTable(year, month) {
   const DOW   = ['日','月','火','水','木','金','土'];
 
   // 全期間の打刻データを取得（前月・当月にまたがるため両方から）
-  const extended = getExtendedDailyList(empId, year, month);
+  const extended = getExtendedDailyList(empId, year, month, true); // noMerge=true：本店/マルコを完全分離
   const empMap   = {};
   for (const d of extended) empMap[d.date] = d;
   window._lastEmpMap = empMap; // openPunchEditorから参照するためグローバルに保持
