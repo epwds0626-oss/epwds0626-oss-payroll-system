@@ -882,7 +882,7 @@ function recomputeRec(rec) {
   return { ...rec, actual, midnight, dailyOT, midnightOT };
 }
 
-function getExtendedDailyList(empId, year, month) {
+function getExtendedDailyList(empId, year, month, noMerge) {
   const list = [];
   const { startDate, endDate } = getPayPeriod(year, month);
 
@@ -898,7 +898,9 @@ function getExtendedDailyList(empId, year, month) {
   const monthsToScan = [prev, [year, month], next];
 
   // 両店スタッフ判定：empIdが '_enya' or '_marco' 形式か
-  const bothStore = isBothStoreId(empId);
+  // noMerge=true の場合（勤怠入力ページなど店舗ごとに完全に独立させたい画面）は
+  // 旧キー互換読み込み・パートナー店舗マージを行わず、自分のキーのデータのみ返す
+  const bothStore = isBothStoreId(empId) && !noMerge;
   const baseId    = bothStore ? getBaseId(empId) : null;
   // 両店の場合、もう片方のキーを求める
   const partnerKey = bothStore
