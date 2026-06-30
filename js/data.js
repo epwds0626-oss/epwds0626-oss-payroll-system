@@ -1053,15 +1053,9 @@ function calcSalary(emp, year, month) {
     emp = Object.assign({}, emp, { targetGross: _monthlyTG, fixedOTHours: 0 });
   }
 
-  // fixedOTHours が設定されている場合、targetGross を動的に計算
-  // targetGross = baseSalary + 固定残業代(fixedOTHours×時給×1.25) + commute
-  if (emp.payType === '月給' && (emp.fixedOTHours || 0) > 0) {
-    const h = emp.baseSalary / 173.3;
-    const fixedOTPay = Math.round(emp.fixedOTHours * h * 1.25);
-    emp = Object.assign({}, emp, {
-      targetGross: emp.baseSalary + fixedOTPay + (emp.commute || 0)
-    });
-  }
+  // fixedOTHours は targetGross を変えない（手動設定優先）
+  // 残業代の下限保証として使用：実績残業代 < 固定残業代 の場合は固定残業代を保証
+  // ※ 実際の下限保証はotPay計算後に適用（下記参照）
 
   // ── 役員：固定総支給のみ ──────────────────────────
   if (emp.payType === '役員報酬') {
@@ -1165,7 +1159,14 @@ function calcSalary(emp, year, month) {
 
   const ot60under = Math.min(effectiveMonthOT, 60);
   const ot60over  = Math.max(0, effectiveMonthOT - 60);
-  const otPay     = ot60under * h * 1.25 + ot60over * h * 1.50;
+  let otPay       = ot60under * h * 1.25 + ot60over * h * 1.50;
+
+  // 固定残業代の下限保証：実績残業代 < 固定残業代 の場合は固定残業代を支給
+  // （実績が上回った場合は実績通り追加支給）
+  if (emp.payType === '月給' && (emp.fixedOTHours || 0) > 0 && !isMarcoSide) {
+    const fixedOTPay = Math.round(emp.fixedOTHours * h * 1.25);
+    if (otPay < fixedOTPay) otPay = fixedOTPay;
+  }
 
   // 残業内訳（明細表示用）
   // 日8h超・週40h超を60h枠に按分して計算
