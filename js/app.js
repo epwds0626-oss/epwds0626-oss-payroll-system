@@ -484,10 +484,16 @@ function employeeForm(emp, isNew) {
   <div class="form-row">
     <div class="form-group"><label>役職手当（月額）</label><input type="number" id="ef_positionAllowance" value="${emp.positionAllowance||0}"></div>
     <div class="form-group" id="ef_fixedOTGroup">
-      <label>固定残業時間（h）<span style="font-size:11px;color:#e8a020">※月給制のみ　入力すると目標総支給を自動計算</span></label>
-      <input type="number" id="ef_fixedOTHours" value="${emp.fixedOTHours||0}" min="0" max="45" step="1" oninput="calcTargetGross()">
+      <label>固定残業時間（h）<span style="font-size:11px;color:#e8a020">※月給制のみ　上限45h　残業代の下限保証に使用</span></label>
+      <input type="number" id="ef_fixedOTHours" value="${emp.fixedOTHours||0}" min="0" max="45" step="1">
     </div>
-    <div class="form-group"><label>目標総支給額 <span style="font-size:11px;color:#6b7280">（固定残業時間入力時は自動計算）</span></label><input type="number" id="ef_targetGross" value="${emp.targetGross||0}" oninput="document.getElementById('ef_fixedOTHours').value=0"></div>
+    <div class="form-group">
+      <label>目標総支給額 <span style="font-size:11px;color:#6b7280">（手動設定・固定残業時間では変わりません）</span></label>
+      <input type="number" id="ef_targetGross" value="${emp.targetGross||0}">
+      <button type="button" onclick="calcTargetGross()" style="margin-top:6px;padding:4px 10px;font-size:11px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:4px;cursor:pointer;color:#374151">
+        📐 固定残業から参考計算
+      </button>
+    </div>
   </div>
   <div class="form-row">
     <div class="form-group">
