@@ -30,28 +30,48 @@ function getFreelanceDailyData(empId, startDate, endDate) {
     ymSet.add(getYM(dy, dm));
   }
 
-  const keysToCheck = [empId, String(empId), `${empId}_enya`, `${empId}_marco`];
-
   for (const ym of ymSet) {
     if (!attendance[ym]) continue;
-    for (const key of keysToCheck) {
-      const empData = attendance[ym][key];
-      if (!empData) continue;
-      for (const [dateStr, rawRec] of Object.entries(empData)) {
-        const d = new Date(dateStr);
-        if (d < start || d > end) continue;
-        const rec = recomputeRec(rawRec);
-        if (!result[dateStr]) {
-          result[dateStr] = { ...rec };
-        } else {
-          // 同日に複数店舗の打刻がある場合は実働時間を合算
-          result[dateStr] = {
-            ...result[dateStr],
-            actual: (result[dateStr].actual || 0) + (rec.actual || 0),
-            _merged: true,
-            _stores: [...(result[dateStr]._stores || []), key]
-          };
-        }
+
+    // 1. 旧キー（店舗区分前データ）を _legacy フラグ付きでまず登録
+    const oldData = attendance[ym][empId] || attendance[ym][String(empId)] || {};
+    for (const [dateStr, rawRec] of Object.entries(oldData)) {
+      const d = new Date(dateStr);
+      if (d < start || d > end) continue;
+      result[dateStr] = { ...recomputeRec(rawRec), _legacy: true };
+    }
+
+    // 2. 新キー（_enya）：旧データがあれば上書き、新キー同士なら合算
+    const enyaData = attendance[ym][`${empId}_enya`] || {};
+    for (const [dateStr, rawRec] of Object.entries(enyaData)) {
+      const d = new Date(dateStr);
+      if (d < start || d > end) continue;
+      const rec = recomputeRec(rawRec);
+      if (!result[dateStr] || result[dateStr]._legacy) {
+        result[dateStr] = { ...rec };
+      } else {
+        result[dateStr] = {
+          ...result[dateStr],
+          actual: (result[dateStr].actual || 0) + (rec.actual || 0),
+          _merged: true
+        };
+      }
+    }
+
+    // 3. 新キー（_marco）：旧データがあれば上書き、新キー同士なら合算
+    const marcoData = attendance[ym][`${empId}_marco`] || {};
+    for (const [dateStr, rawRec] of Object.entries(marcoData)) {
+      const d = new Date(dateStr);
+      if (d < start || d > end) continue;
+      const rec = recomputeRec(rawRec);
+      if (!result[dateStr] || result[dateStr]._legacy) {
+        result[dateStr] = { ...rec };
+      } else {
+        result[dateStr] = {
+          ...result[dateStr],
+          actual: (result[dateStr].actual || 0) + (rec.actual || 0),
+          _merged: true
+        };
       }
     }
   }
