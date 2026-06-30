@@ -73,7 +73,12 @@ function renderPage(page) {
     case 'monthly':     container.innerHTML = renderMonthly(y,m);     break;
     case 'salary':      container.innerHTML = renderSalary(y,m);      break;
     case 'payslip':     container.innerHTML = renderPayslip(y,m);     break;
-    case 'freelance':   container.innerHTML = renderFreelance(y,m);   break;
+    case 'freelance':
+      container.innerHTML = renderFreelance(y,m);
+      if (typeof _flSelectedId !== 'undefined' && _flSelectedId !== null) {
+        setTimeout(() => selectFreelancer(_flSelectedId), 0);
+      }
+      break;
     case 'paid_leave':  container.innerHTML = renderPaidLeave();       break;
     case 'article36':   container.innerHTML = renderArticle36(y,m);   break;
     case 'labor_report':container.innerHTML = renderLaborReport(y,m); break;
