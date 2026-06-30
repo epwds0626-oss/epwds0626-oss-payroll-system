@@ -14,6 +14,50 @@ function getFreelancePeriod(empId, year, month) {
   return getPayPeriod(year, month);
 }
 
+// 指定期間の日次データを取得（両店スタッフ対応：旧キー・_enya・_marco を統合）
+// 戻り値：{ dateStr: rec }（同日に複数店舗の打刻がある場合は実働時間を合算）
+function getFreelanceDailyData(empId, startDate, endDate) {
+  const result = {};
+  const start = new Date(startDate);
+  const end   = new Date(endDate);
+
+  // 給与期間ベース（21〜20日）ではなく月ベースで保存されているため、
+  // 期間にまたがる全ての ym（カレンダー月）をスキャンする
+  const ymSet = new Set();
+  for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate()+1)) {
+    const dateStr = dt.toISOString().slice(0,10);
+    const [dy, dm] = dateStr.split('-').map(Number);
+    ymSet.add(getYM(dy, dm));
+  }
+
+  const keysToCheck = [empId, String(empId), `${empId}_enya`, `${empId}_marco`];
+
+  for (const ym of ymSet) {
+    if (!attendance[ym]) continue;
+    for (const key of keysToCheck) {
+      const empData = attendance[ym][key];
+      if (!empData) continue;
+      for (const [dateStr, rawRec] of Object.entries(empData)) {
+        const d = new Date(dateStr);
+        if (d < start || d > end) continue;
+        const rec = recomputeRec(rawRec);
+        if (!result[dateStr]) {
+          result[dateStr] = { ...rec };
+        } else {
+          // 同日に複数店舗の打刻がある場合は実働時間を合算
+          result[dateStr] = {
+            ...result[dateStr],
+            actual: (result[dateStr].actual || 0) + (rec.actual || 0),
+            _merged: true,
+            _stores: [...(result[dateStr]._stores || []), key]
+          };
+        }
+      }
+    }
+  }
+  return result;
+}
+
 function renderFreelance(year, month) {
   const freelancers = employees.filter(e =>
     e.type === '業務委託' && e.status !== 'inactive'
@@ -26,17 +70,12 @@ function renderFreelance(year, month) {
     </div>`;
   }
 
-  // 月間集計（スタッフごとに期間を取得）
+  // 月間集計（スタッフごとに期間を取得、店舗統合データを使用）
   const summaries = freelancers.map(emp => {
     const { startDate, endDate } = getFreelancePeriod(emp.id, year, month);
-    const start = new Date(startDate);
-    const end   = new Date(endDate);
+    const dailyData = getFreelanceDailyData(emp.id, startDate, endDate);
     let totalHours = 0, totalPay = 0, unpaidPay = 0;
-    for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate()+1)) {
-      const dateStr = dt.toISOString().slice(0,10);
-      const [dy, dm] = dateStr.split('-').map(Number);
-      const ym  = `${dy}-${String(dm).padStart(2,'0')}`;
-      const rec = ((attendance[ym]||{})[emp.id]||{})[dateStr] || {};
+    for (const [dateStr, rec] of Object.entries(dailyData)) {
       if (rec.actual > 0) {
         const pay = Math.round((emp.hourlyWage||0) * rec.actual);
         totalHours += rec.actual;
@@ -116,23 +155,27 @@ function renderFreelanceDetail(empId) {
   let rows = '';
   let totalHours = 0, totalPay = 0;
 
-  for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate()+1)) {
-    const dateStr = dt.toISOString().slice(0,10);
-    const [dy, dm, dd] = dateStr.split('-').map(Number);
-    const ym  = `${dy}-${String(dm).padStart(2,'0')}`;
-    const rec = ((attendance[ym]||{})[empId]||{})[dateStr] || {};
+  const dailyData = getFreelanceDailyData(empId, startDate, endDate);
+  const sortedDates = Object.keys(dailyData).sort();
+
+  for (const dateStr of sortedDates) {
+    const rec = dailyData[dateStr];
     if (!rec.actual) continue;
+    const [dy, dm, dd] = dateStr.split('-').map(Number);
+    const dow = new Date(dateStr).getDay();
 
     const pay  = Math.round((emp.hourlyWage||0) * rec.actual);
     const paid = rec.freelancePaid ? true : false;
     totalHours += rec.actual;
     totalPay   += pay;
 
-    // タイムライン
-    const timeline = renderFreelanceTimeline(rec);
+    // タイムライン（複数店舗合算の場合はその旨を表示）
+    const timeline = rec._merged
+      ? `<span style="color:#888">本店＋マルコ合算　計${hm(rec.actual)}</span>`
+      : renderFreelanceTimeline(rec);
 
     rows += `<tr style="vertical-align:top">
-      <td style="padding:8px;white-space:nowrap">${dm}/${dd}（${DOW[dt.getDay()]}）</td>
+      <td style="padding:8px;white-space:nowrap">${dm}/${dd}（${DOW[dow]}）</td>
       <td style="padding:8px">${hm(rec.actual)}</td>
       <td style="padding:8px;font-weight:700">¥${pay.toLocaleString()}</td>
       <td style="padding:8px;font-size:11px;line-height:1.7">${timeline}</td>
@@ -201,8 +244,23 @@ function renderFreelanceTimeline(rec) {
 }
 
 function toggleFreelancePaid(empId, dateStr, dy, dm, paid) {
-  const ym = `${dy}-${String(dm).padStart(2,'0')}`;
-  db.ref(`payroll/attendance/${ym}/${empId}/${dateStr}`).update({ freelancePaid: paid }, err => {
+  const ym = getYM(dy, dm);
+  // 実データがどのキー（旧ID / _enya / _marco）にあるか分からないため、
+  // 存在するキー全てに freelancePaid を反映する
+  const keysToCheck = [empId, String(empId), `${empId}_enya`, `${empId}_marco`];
+  const updates = {};
+  let found = false;
+  for (const key of keysToCheck) {
+    if (attendance[ym] && attendance[ym][key] && attendance[ym][key][dateStr]) {
+      updates[`payroll/attendance/${ym}/${key}/${dateStr}/freelancePaid`] = paid;
+      found = true;
+    }
+  }
+  if (!found) {
+    // フォールバック：従来通り数値IDに書き込む
+    updates[`payroll/attendance/${ym}/${empId}/${dateStr}/freelancePaid`] = paid;
+  }
+  db.ref().update(updates, err => {
     if (!err) renderFreelanceDetail(empId);
   });
 }
