@@ -2,6 +2,18 @@
 // freelance.js  ―  業務委託管理
 // ============================================================
 
+// 業務委託スタッフの期間を返す
+// ID=5（半谷）のみ 1日〜末日、それ以外は通常給与期間
+function getFreelancePeriod(empId, year, month) {
+  if (empId === 5) {
+    const startDate = `${year}-${String(month).padStart(2,'0')}-01`;
+    const lastDay   = new Date(year, month, 0).getDate();
+    const endDate   = `${year}-${String(month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+    return { startDate, endDate };
+  }
+  return getPayPeriod(year, month);
+}
+
 function renderFreelance(year, month) {
   const freelancers = employees.filter(e =>
     e.type === '業務委託' && e.status !== 'inactive'
@@ -14,12 +26,11 @@ function renderFreelance(year, month) {
     </div>`;
   }
 
-  const { startDate, endDate } = getPayPeriod(year, month);
-  const start = new Date(startDate);
-  const end   = new Date(endDate);
-
-  // 月間集計
+  // 月間集計（スタッフごとに期間を取得）
   const summaries = freelancers.map(emp => {
+    const { startDate, endDate } = getFreelancePeriod(emp.id, year, month);
+    const start = new Date(startDate);
+    const end   = new Date(endDate);
     let totalHours = 0, totalPay = 0, unpaidPay = 0;
     for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate()+1)) {
       const dateStr = dt.toISOString().slice(0,10);
@@ -92,10 +103,15 @@ function renderFreelanceDetail(empId) {
   if (!emp) return;
 
   const y = currentYear, m = currentMonth;
-  const { startDate, endDate } = getPayPeriod(y, m);
+  const { startDate, endDate } = getFreelancePeriod(empId, y, m);
   const start = new Date(startDate);
   const end   = new Date(endDate);
   const DOW   = ['日','月','火','水','木','金','土'];
+
+  // 期間ラベル（半谷は月表示、その他は給与期間表示）
+  const periodLabel = empId === 5
+    ? `${y}年${m}月（${startDate} 〜 ${endDate}）`
+    : `${y}年${m}月給与期間（${startDate} 〜 ${endDate}）`;
 
   let rows = '';
   let totalHours = 0, totalPay = 0;
@@ -135,9 +151,10 @@ function renderFreelanceDetail(empId) {
 
   detail.innerHTML = `
     <div style="padding:4px">
-      <h3 style="font-size:15px;font-weight:700;margin-bottom:12px;color:#1a3a5c">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:4px;color:#1a3a5c">
         ${emp.name}　時給 ¥${(emp.hourlyWage||0).toLocaleString()}
       </h3>
+      <div style="font-size:12px;color:#888;margin-bottom:12px">📅 ${periodLabel}</div>
       ${rows ? `
         <table style="width:100%;border-collapse:collapse;font-size:13px">
           <thead>
