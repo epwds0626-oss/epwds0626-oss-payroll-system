@@ -25,6 +25,14 @@ function renderSalary(year, month) {
     return acc;
   }, { gross:0,base:0,otPay:0,midnight:0,holiday:0,commute:0,kenpo:0,kosei:0,shienkin:0,koyo:0,income:0,jumin:0,deduct:0,net:0 });
 
+  // 残業手当の60h超（150%）部分の合計（フッター表示用）
+  // 手動調整済みスタッフは分割せず〜60h列に合計表示するため加算しない
+  const totalOtOver = results.reduce((s, { emp, sal }) => {
+    const adj = getAdj(year, month, emp.id);
+    if (adj.otPay !== undefined) return s;
+    return s + ((sal.ot60over > 0 && sal.hourlyBase > 0) ? Math.round(sal.ot60over * sal.hourlyBase * 1.50) : 0);
+  }, 0);
+
   return `
   <div class="section-header">
     <div class="section-title">💴 給与計算書 ― ${year}年${month}月</div>
@@ -78,13 +86,10 @@ function renderSalary(year, month) {
       </thead>
       <tbody>
       ${results.map(({ emp, sal }) => {
-        const ot60Pay  = sal.ot60under>0 ? Math.round(sal.ot60under * sal.hourlyBase * 1.25) : 0;
-        const ot60oPay = sal.ot60over>0  ? Math.round(sal.ot60over  * sal.hourlyBase * 1.50) : 0;
         return `<tr>
         <td class="tl" style="cursor:pointer;color:#1a3a5c;font-weight:700;text-decoration:underline dotted" title="クリックして全項目編集" onclick="openEmpAdjDialog(${emp.id},${year},${month})">${emp.name}</td>
         ${adjCell(emp.id,year,month,'basePay',sal.basePay)}
-        ${adjCell(emp.id,year,month,'otPay',sal.otPay)}
-        <td class="col-hide">—</td>
+        ${otSplitCells(emp.id,year,month,sal)}
         ${adjCell(emp.id,year,month,'midnightPay',sal.midnightPay)}
         ${adjCellHide(emp.id,year,month,'holidayLegalPay',sal.holidayLegalPay)}
         <td class="col-hide">—</td>
@@ -101,7 +106,8 @@ function renderSalary(year, month) {
       <tfoot><tr class="total-row">
         <td class="tl">合　計</td>
         <td>¥${totals.base.toLocaleString()}</td>
-        <td class="col-hide">—</td><td>¥${totals.otPay.toLocaleString()}</td>
+        <td>¥${(totals.otPay - totalOtOver).toLocaleString()}</td>
+        <td class="col-hide">${totalOtOver > 0 ? `¥${totalOtOver.toLocaleString()}` : '—'}</td>
         <td>¥${totals.midnight.toLocaleString()}</td>
         <td class="col-hide">¥${totals.holiday.toLocaleString()}</td>
         <td class="col-hide">—</td>
@@ -244,9 +250,9 @@ function payslipHTML(emp, sal, year, month) {
 function fixedOTRows(emp, sal, empIdStr, year, month) {
   const fixedH = emp.fixedOTHours || 0;
   if (!fixedH || emp.payType !== '月給') {
-    // 固定残業なし：従来表示
-    const ot60Pay  = sal.ot60under > 0 ? Math.round(sal.ot60under * sal.hourlyBase * 1.25) : 0;
-    const ot60oPay = sal.ot60over  > 0 ? Math.round(sal.ot60over  * sal.hourlyBase * 1.50) : 0;
+    // 固定残業なし：従来表示（端数差異を出さないため〜60h側は合計との差分で確定）
+    const ot60oPay = sal.ot60over  > 0 ? Math.round(sal.ot60over * sal.hourlyBase * 1.50) : 0;
+    const ot60Pay  = sal.ot60under > 0 ? Math.max(0, (sal.otPay || 0) - ot60oPay) : 0;
     return `
       ${ot60Pay > 0 ? `
         <div style="display:flex;justify-content:space-between;padding:3px 0">
@@ -266,10 +272,13 @@ function fixedOTRows(emp, sal, empIdStr, year, month) {
   const fixedOTPay = Math.round(fixedH * h * 1.25);
 
   // 実績が固定時間を超えた場合の超過分
+  // ※月60h超150%のしきい値は「固定分も含めた実残業合計」の60hで判定（労基法）
+  //   旧実装は超過分単独に60hしきい値を当てており、150%部分を過小計上していた
   const excessH   = Math.max(0, sal.monthOT - fixedH);
-  const excess60u = Math.min(excessH, 60);
-  const excess60o = Math.max(0, excessH - 60);
-  const excessPay = Math.round(excess60u * h * 1.25 + excess60o * h * 1.50);
+  const excess60u = Math.max(0, Math.min(sal.monthOT, 60) - fixedH); // 総残業60hまでの超過分 → 125%
+  const excess60o = Math.max(0, sal.monthOT - Math.max(60, fixedH)); // 総残業60hを超える部分 → 150%
+  // 端数差異を出さないため、超過分＝計算済み残業手当合計−固定残業手当 で確定
+  const excessPay = excessH > 0 ? Math.max(0, (sal.otPay || 0) - fixedOTPay) : 0;
 
   return `
     <div style="display:flex;justify-content:space-between;padding:3px 0">
@@ -385,6 +394,22 @@ function adjCellHide(empId, year, month, field, value) {
   return `<td class="col-hide" style="${style}" title="クリックして編集"
     onclick="openAdjInput('${empId}',${year},${month},'${field}',${value})">${disp}</td>`;
 }
+// 残業手当セル：〜60h（125%）／60h超（150%）に分割表示
+// 端数差異を出さないため、〜60h側＝残業手当合計−60h超部分 で確定
+// クリック時の手動調整は残業手当「合計」（otPay）に対して行う
+// 手動調整済みの場合は分割せず、調整後の合計を〜60h列に表示
+function otSplitCells(empId, year, month, sal) {
+  const adj   = getAdj(year, month, empId);
+  const isAdj = adj.otPay !== undefined;
+  const over  = (!isAdj && sal.ot60over > 0 && sal.hourlyBase > 0)
+    ? Math.round(sal.ot60over * sal.hourlyBase * 1.50) : 0;
+  const under = Math.max(0, (sal.otPay || 0) - over);
+  const style = isAdj ? 'color:#d97706;font-weight:700;cursor:pointer' : 'cursor:pointer';
+  const click = `title="クリックして残業手当合計を編集" onclick="openAdjInput('${empId}',${year},${month},'otPay',${sal.otPay})"`;
+  return `<td style="${style}" ${click}>${under > 0 ? `¥${under.toLocaleString()}` : '—'}</td>
+        <td class="col-hide" style="${style}" ${click}>${over > 0 ? `¥${over.toLocaleString()}` : '—'}</td>`;
+}
+
 function adjCell(empId, year, month, field, value) {
   const adj = getAdj(year, month, empId);
   const isAdj = adj[field] !== undefined;
@@ -421,7 +446,7 @@ function openEmpAdjDialog(empId, year, month) {
   const fields = [
     { section: '支給', items: [
       { key: 'basePay',          label: emp.payType === '時給' ? '時給計' : '基本給',  val: sal.basePay },
-      { key: 'otPay',            label: '残業手当（〜60h）',   val: sal.otPay },
+      { key: 'otPay',            label: '残業手当（合計）',    val: sal.otPay },
       { key: 'midnightPay',      label: '深夜手当',            val: sal.midnightPay },
       { key: 'holidayLegalPay',  label: '法定休日手当',        val: sal.holidayLegalPay },
       { key: 'commute',          label: '交通費',              val: sal.commute },
