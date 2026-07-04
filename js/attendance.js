@@ -161,15 +161,12 @@ function savePunchEditor(empId, dateStr, dy, dm) {
     }
   }
   const existing = attendance[ym][empId][dateStr] || {};
-  // punchIn/punchOut が両方入力されている場合は計算結果を採用する（0でも上書きする）。
-  // 「actual || existing.actual」だと actual=0 がfalsyになり既存値が残ってしまうバグがあったため修正。
-  const hasFullPunch = !!(punchIn && punchOut);
   const updated  = {
     ...existing,
     punchIn, punchOut, breaks,
-    actual:   hasFullPunch ? actual   : (existing.actual   || 0),
-    dailyOT:  hasFullPunch ? dailyOT  : (existing.dailyOT  || 0),
-    midnight: hasFullPunch ? midnight : (existing.midnight || 0),
+    actual:   actual   || existing.actual   || 0,
+    dailyOT:  dailyOT  || existing.dailyOT  || 0,
+    midnight: midnight || existing.midnight || 0,
     source:   'manual',
   };
 
@@ -297,7 +294,7 @@ function renderAttendanceTable(year, month) {
   const DOW   = ['日','月','火','水','木','金','土'];
 
   // 全期間の打刻データを取得（前月・当月にまたがるため両方から）
-  const extended = getExtendedDailyList(empId, year, month, true); // noMerge=true：本店/マルコを完全分離
+  const extended = getExtendedDailyList(empId, year, month);
   const empMap   = {};
   for (const d of extended) empMap[d.date] = d;
   window._lastEmpMap = empMap; // openPunchEditorから参照するためグローバルに保持
@@ -442,21 +439,12 @@ function setAttFull(empId, dateStr, field, value, actualYear, actualMonth) {
   const path = db.ref(`payroll/attendance/${ym}/${empId}/${dateStr}`);
 
   if (value === '' || value === false || value === 0 || value === '0') {
-    if (field === 'actual') {
-      // 実働を0にする＝打刻記録ごと取り消す。
-      // punchIn/punchOut/breaks を残したまま actual だけ消すと、
-      // 再描画時に recomputeRec が打刻時刻から actual を再計算してしまい
-      // 元の時間に戻ってしまうため、関連フィールドを全て削除する。
+    delete attendance[ym][empId][dateStr][field];
+    if (Object.keys(attendance[ym][empId][dateStr]).length === 0) {
       delete attendance[ym][empId][dateStr];
       path.remove();
     } else {
-      delete attendance[ym][empId][dateStr][field];
-      if (Object.keys(attendance[ym][empId][dateStr]).length === 0) {
-        delete attendance[ym][empId][dateStr];
-        path.remove();
-      } else {
-        path.update({ [field]: null });
-      }
+      path.update({ [field]: null });
     }
   } else {
     const numVal = parseFloat(value);
@@ -651,8 +639,8 @@ function execAttCsvImport(year, month) {
 
   const updates = {};
   for (const r of attCsvParsedRows) {
-    const [dy, dm] = r.dateStr.split('-').map(Number);
-    const payM = dm + (dy >= 21 ? 1 : 0);
+    const [dy, dm, dd] = r.dateStr.split('-').map(Number);
+    const payM = dm + (dd >= 21 ? 1 : 0);
     const payY = payM > 12 ? dy + 1 : dy;
     const ym = `${payY}-${String(payM > 12 ? payM - 12 : payM).padStart(2,'0')}`;
     updates[`${ym}/${r.emp.id}/${r.dateStr}`] = {
