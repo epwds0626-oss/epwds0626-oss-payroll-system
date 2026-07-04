@@ -197,8 +197,9 @@ function exportWeeklyCSV(year, month) {
 
 // 月次勤怠ページ
 function renderMonthly(year, month) {
+  // noMerge=true：両店スタッフは【本店】【マルコ】各行にその店舗の実働のみを表示
   const rows = activeEmployeesExpanded().map(emp => {
-    const s = getMonthSummary(emp.id, year, month);
+    const s = getMonthSummary(emp.id, year, month, true);
     return { emp, s };
   });
   const totals = rows.reduce((acc, { s }) => {
@@ -259,7 +260,8 @@ function renderMonthly(year, month) {
 function exportMonthlyCSV(year, month) {
   const header = ['No','氏名','雇用区分','出勤日数','有給日数','欠勤日数','実働(h)','週残業(h)','深夜(h)','休日(h)'];
   const rows = activeEmployeesExpanded().map(emp => {
-    const s = getMonthSummary(emp.id, year, month);
+    // noMerge=true：両店スタッフの行はその店舗の実働のみ（インセンティブ按分の元データ）
+    const s = getMonthSummary(emp.id, year, month, true);
     return [emp.id, emp.name, emp.type, s.workDays, s.paidDays, s.absentDays, s.totalActual, s.monthOT, s.monthMidnight, s.monthHoliday];
   });
   const csv = [header,...rows].map(r=>r.join(',')).join('\n');
