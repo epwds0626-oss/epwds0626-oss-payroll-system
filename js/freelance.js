@@ -21,20 +21,19 @@ function getFreelanceDailyData(empId, startDate, endDate) {
   const start = new Date(startDate);
   const end   = new Date(endDate);
 
-  // 打刻データは実際の日付の「給与期間月（21〜翌20日）」で保存されることがあるため
-  // （例：6/22の打刻 → ym=2026-07 に保存）、カレンダー月だけでなく
-  // 期間中の全日付について「その日が属する給与期間のym」も合わせてスキャンする
+  // 打刻データの保存先ymはタイムカードアプリの実装によって
+  // カレンダー月・給与期間月（21〜翌20日）のどちらになるか不定のため、
+  // 期間にかかるカレンダー月 ± 1ヶ月をすべてスキャンして確実に拾う
   const ymSet = new Set();
   for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate()+1)) {
     const dateStr = dt.toISOString().slice(0,10);
-    const [dy, dm, dd] = dateStr.split('-').map(Number);
+    const [dy, dm] = dateStr.split('-').map(Number);
     // カレンダー月
     ymSet.add(getYM(dy, dm));
-    // 給与期間月：21日以降ならその月の翌月、20日以前ならその月が「給与期間月」
-    const payYM = dd >= 21
-      ? getYM(dm === 12 ? dy + 1 : dy, dm === 12 ? 1 : dm + 1)
-      : getYM(dy, dm);
-    ymSet.add(payYM);
+    // 前月（給与期間またぎ対策）
+    ymSet.add(dm === 1 ? getYM(dy-1, 12) : getYM(dy, dm-1));
+    // 翌月（給与期間またぎ対策）
+    ymSet.add(dm === 12 ? getYM(dy+1, 1) : getYM(dy, dm+1));
   }
 
   for (const ym of ymSet) {
