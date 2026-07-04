@@ -583,8 +583,8 @@ function importCsv() {
 
   const updates = {};
   for (const r of csvParsedRows) {
-    const [dy, dm] = r.dateStr.split('-').map(Number);
-    const payM = dm + (dy >= 21 ? 1 : 0);
+    const [dy, dm, dd] = r.dateStr.split('-').map(Number);
+    const payM = dm + (dd >= 21 ? 1 : 0);  // 日で判定（旧実装は年で判定していたバグ）
     const payY = payM > 12 ? dy + 1 : dy;
     const ym   = `${payY}-${String(payM > 12 ? payM - 12 : payM).padStart(2,'0')}`;
     updates[`${ym}/${r.staffRec.id}/${r.dateStr}`] = {
@@ -632,16 +632,26 @@ function importToPayroll() {
   const updates = {};
 
   for (const s of STAFF_LIST) {
-    const empRec = monthlyRawData[s.id] || {};
     const isBoth = s.store === '両店';
+    const empRec = monthlyRawData[s.id] || {};
+    // 両店スタッフ：_enya/_marco キーで打刻された日付も取込対象に含める
+    // （旧実装は素キーの日付しか走査せず、店舗キーのみの打刻日が丸ごと取込漏れになっていた）
+    const dateSet = new Set(Object.keys(empRec));
+    if (isBoth) {
+      for (const k of Object.keys(monthlyRawData[`${s.id}_enya`]  || {})) dateSet.add(k);
+      for (const k of Object.keys(monthlyRawData[`${s.id}_marco`] || {})) dateSet.add(k);
+    }
 
-    for (const [dateStr, rec] of Object.entries(empRec)) {
-      if (!rec.in) { skipped++; continue; }
-      // in===out（00:00/00:00など）は無効データとしてスキップ
-      if (rec.in === rec.out) { skipped++; continue; }
+    for (const dateStr of [...dateSet].sort()) {
+      const rec = empRec[dateStr] || {};
+      if (!isBoth) {
+        if (!rec.in) { skipped++; continue; }
+        // in===out（00:00/00:00など）は無効データとしてスキップ
+        if (rec.in === rec.out) { skipped++; continue; }
+      }
 
       const dur = rec.out ? calcDurationNum(rec.in, rec.out) : null;
-      if (!dur) { skipped++; continue; }
+      if (!isBoth && !dur) { skipped++; continue; }
 
       // 休憩時間を引く（分単位精度）
       const breaks    = rec.breaks || [];
@@ -651,8 +661,8 @@ function importToPayroll() {
       const netDur    = Math.round(netMins / 60 * 100) / 100; // 小数h（1分単位精度）
 
       // 20日締め給与月計算
-      const [dy, dm] = dateStr.split('-').map(Number);
-      const payM = dm + (dy >= 21 ? 1 : 0);
+      const [dy, dm, dd] = dateStr.split('-').map(Number);
+      const payM = dm + (dd >= 21 ? 1 : 0);  // 日で判定（旧実装は年で判定していたバグ）
       const payY = payM > 12 ? dy + 1 : dy;
       const ym = `${payY}-${String(payM > 12 ? payM - 12 : payM).padStart(2,'0')}`;
 
@@ -688,7 +698,7 @@ function importToPayroll() {
         // payroll/attendanceにも同じキーで書き込む
         const enyaRec  = (monthlyRawData[`${s.id}_enya`]  || {})[dateStr];
         const marcoRec = (monthlyRawData[`${s.id}_marco`] || {})[dateStr];
-        if (enyaRec && enyaRec.in) {
+        if (enyaRec && enyaRec.in && enyaRec.in !== enyaRec.out) {
           const eBreaks = enyaRec.breaks || [];
           const eBrkMins = eBreaks.filter(b=>b.end&&b.minutes).reduce((s,b)=>s+b.minutes,0);
           const eDurMins = Math.round(calcDurationNum(enyaRec.in, enyaRec.out||enyaRec.in)*60);
@@ -709,7 +719,7 @@ function importToPayroll() {
           };
           imported++;
         }
-        if (marcoRec && marcoRec.in) {
+        if (marcoRec && marcoRec.in && marcoRec.in !== marcoRec.out) {
           const mBreaks = marcoRec.breaks || [];
           const mBrkMins = mBreaks.filter(b=>b.end&&b.minutes).reduce((s,b)=>s+b.minutes,0);
           const mDurMins = Math.round(calcDurationNum(marcoRec.in, marcoRec.out||marcoRec.in)*60);
