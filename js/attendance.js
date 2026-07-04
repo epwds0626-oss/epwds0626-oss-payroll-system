@@ -164,9 +164,10 @@ function savePunchEditor(empId, dateStr, dy, dm) {
   const updated  = {
     ...existing,
     punchIn, punchOut, breaks,
-    actual:   actual   || existing.actual   || 0,
-    dailyOT:  dailyOT  || existing.dailyOT  || 0,
-    midnight: midnight || existing.midnight || 0,
+    // 0-falsy問題対応：計算結果をそのまま保存（旧実装の actual||existing.actual は0を保存できなかった）
+    actual:   actual,
+    dailyOT:  dailyOT,
+    midnight: midnight,
     source:   'manual',
   };
 
@@ -231,8 +232,9 @@ function renderAttendance(year, month) {
     <div class="card-title" style="color:#b07d00;">📂 エクセルCSV一括取込</div>
     <div class="alert alert-info"><span>📌</span>
     <div>
-      <strong>必須列：</strong>スタッフ名, 日付(YYYY/MM/DD), 出勤, 退勤, 休憩入1, 休憩終1, 休憩入2, 休憩終2, 休憩入3, 休憩終3<br>
-      <span style="font-size:12px;color:#666;">※ 社員はランチ前・ランチ後・ディナー休憩の3回まで対応。パートは休憩列を空白でOK。</span>
+      <strong>必須列：</strong>スタッフ名, 日付(YYYY/MM/DD), 出勤, 退勤, 休憩入1, 休憩終1, 休憩入2, 休憩終2, 休憩入3, 休憩終3, 店舗<br>
+      <span style="font-size:12px;color:#666;">※ 社員はランチ前・ランチ後・ディナー休憩の3回まで対応。パートは休憩列を空白でOK。<br>
+      ※ <strong>両店スタッフ（勘田・仲田・半谷など）は11列目「店舗」に「本店」または「マルコ」が必須</strong>。単店スタッフは空白でOK。</span>
     </div></div>
     <div style="margin-bottom:10px;">
       <button class="btn-outline" onclick="downloadAttCsvTemplate()" style="font-size:12px;">📄 CSVテンプレートをダウンロード</button>
@@ -294,7 +296,8 @@ function renderAttendanceTable(year, month) {
   const DOW   = ['日','月','火','水','木','金','土'];
 
   // 全期間の打刻データを取得（前月・当月にまたがるため両方から）
-  const extended = getExtendedDailyList(empId, year, month);
+  // noMerge=true：勤怠入力は本店・マルコを完全分離表示（旧キー互換・パートナー店舗マージなし）
+  const extended = getExtendedDailyList(empId, year, month, true);
   const empMap   = {};
   for (const d of extended) empMap[d.date] = d;
   window._lastEmpMap = empMap; // openPunchEditorから参照するためグローバルに保持
@@ -439,12 +442,18 @@ function setAttFull(empId, dateStr, field, value, actualYear, actualMonth) {
   const path = db.ref(`payroll/attendance/${ym}/${empId}/${dateStr}`);
 
   if (value === '' || value === false || value === 0 || value === '0') {
-    delete attendance[ym][empId][dateStr][field];
-    if (Object.keys(attendance[ym][empId][dateStr]).length === 0) {
+    if (field === 'actual') {
+      // 実働0入力はレコード全体を削除（punchIn/punchOut残存による復活バグ対応）
       delete attendance[ym][empId][dateStr];
       path.remove();
     } else {
-      path.update({ [field]: null });
+      delete attendance[ym][empId][dateStr][field];
+      if (Object.keys(attendance[ym][empId][dateStr]).length === 0) {
+        delete attendance[ym][empId][dateStr];
+        path.remove();
+      } else {
+        path.update({ [field]: null });
+      }
     }
   } else {
     const numVal = parseFloat(value);
@@ -469,12 +478,14 @@ function setAttFull(empId, dateStr, field, value, actualYear, actualMonth) {
 let attCsvParsedRows = [];
 
 function downloadAttCsvTemplate() {
-  const header = 'スタッフ名,日付,出勤,退勤,休憩入1,休憩終1,休憩入2,休憩終2,休憩入3,休憩終3';
+  const header = 'スタッフ名,日付,出勤,退勤,休憩入1,休憩終1,休憩入2,休憩終2,休憩入3,休憩終3,店舗';
   const samples = [
-    '青木,2026/05/21,07:43,21:44,10:10,10:21,15:29,16:50,,',
-    '原,2026/05/21,07:42,21:58,10:12,10:21,,,,',
-    '小沼,2026/05/21,08:00,17:00,12:00,13:00,,,,',
-    '武田,2026/05/21,11:00,21:00,15:00,16:00,,,,'
+    '青木,2026/05/21,07:43,21:44,10:10,10:21,15:29,16:50,,,',
+    '原,2026/05/21,07:42,21:58,10:12,10:21,,,,,',
+    '小沼,2026/05/21,08:00,17:00,12:00,13:00,,,,,',
+    '武田,2026/05/21,11:00,21:00,15:00,16:00,,,,,',
+    '勘田,2026/05/21,07:55,16:00,10:10,10:21,,,,,本店',
+    '半谷,2026/05/22,10:30,15:30,,,,,,,マルコ'
   ];
   const csv = [header, ...samples].join('\n');
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -531,7 +542,7 @@ function parseAttCsv(text, year, month) {
 
   for (let i = startIdx; i < lines.length; i++) {
     const cols = lines[i].split(',').map(c => c.trim().replace(/"/g, ''));
-    const [nameRaw, dateRaw, punchIn, punchOut, b1in, b1out, b2in, b2out, b3in, b3out] = cols;
+    const [nameRaw, dateRaw, punchIn, punchOut, b1in, b1out, b2in, b2out, b3in, b3out, storeRaw] = cols;
 
     if (!nameRaw || !dateRaw || !punchIn || !punchOut) {
       errors.push(`行${i+1}: スタッフ名・日付・出退勤が必要です`);
@@ -544,6 +555,21 @@ function parseAttCsv(text, year, month) {
     if (!emp) {
       errors.push(`行${i+1}: 「${nameRaw}」は給与システムに存在しません`);
       continue;
+    }
+
+    // 両店スタッフは店舗列（11列目）で保存先キー（_enya/_marco）を決定
+    let saveKey = emp.id;
+    let storeLabel = '—';
+    if (emp.store === '両店') {
+      const sv = (storeRaw || '').trim();
+      if (sv === '本店' || sv.toLowerCase() === 'enya') {
+        saveKey = `${emp.id}_enya`;  storeLabel = '本店';
+      } else if (sv === 'マルコ' || sv.toLowerCase() === 'marco') {
+        saveKey = `${emp.id}_marco`; storeLabel = 'マルコ';
+      } else {
+        errors.push(`行${i+1}: 「${nameRaw}」は両店スタッフのため、店舗列に「本店」または「マルコ」が必要です`);
+        continue;
+      }
     }
 
     // 日付正規化（月日のゼロ埋め対応: 2026/5/22 → 2026-05-22）
@@ -591,7 +617,7 @@ function parseAttCsv(text, year, month) {
     else if (outH < 5) midnightMins = Math.round((outH + 2) * 60);
     const midnight = Math.round(midnightMins / 60 * 100) / 100;
 
-    rows.push({ emp, dateStr, punchIn, punchOut, breakMins, breaks, netH, netHdec, dailyOT, midnight });
+    rows.push({ emp, saveKey, storeLabel, dateStr, punchIn, punchOut, breakMins, breaks, netH, netHdec, dailyOT, midnight });
   }
 
   attCsvParsedRows = rows;
@@ -610,13 +636,14 @@ function parseAttCsv(text, year, month) {
 
   let tbl = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
   tbl += '<thead><tr style="background:#f5f5f5;position:sticky;top:0;">';
-  for (const h of ['スタッフ','日付','出勤','退勤','休憩(分)','実労働h','残業h','深夜h']) {
+  for (const h of ['スタッフ','店舗','日付','出勤','退勤','休憩(分)','実労働h','残業h','深夜h']) {
     tbl += `<th style="padding:5px 8px;border:1px solid #ddd;white-space:nowrap;">${h}</th>`;
   }
   tbl += '</tr></thead><tbody>';
   for (const r of rows) {
     tbl += `<tr>
       <td style="padding:4px 8px;border:1px solid #eee;">${r.emp.name}</td>
+      <td style="padding:4px 8px;border:1px solid #eee;">${r.storeLabel}</td>
       <td style="padding:4px 8px;border:1px solid #eee;">${r.dateStr.replace(/-/g,'/')}</td>
       <td style="padding:4px 8px;border:1px solid #eee;">${r.punchIn}</td>
       <td style="padding:4px 8px;border:1px solid #eee;">${r.punchOut}</td>
@@ -643,7 +670,7 @@ function execAttCsvImport(year, month) {
     const payM = dm + (dd >= 21 ? 1 : 0);
     const payY = payM > 12 ? dy + 1 : dy;
     const ym = `${payY}-${String(payM > 12 ? payM - 12 : payM).padStart(2,'0')}`;
-    updates[`${ym}/${r.emp.id}/${r.dateStr}`] = {
+    updates[`${ym}/${r.saveKey}/${r.dateStr}`] = {
       actual:     r.netHdec,  // 計算用小数（給与計算に使用）
       dailyOT:    r.dailyOT,
       midnight:   r.midnight,
