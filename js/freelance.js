@@ -270,21 +270,26 @@ function renderFreelanceTimeline(rec) {
 }
 
 function toggleFreelancePaid(empId, dateStr, dy, dm, paid) {
-  const ym = getYM(dy, dm);
-  // 実データがどのキー（旧ID / _enya / _marco）にあるか分からないため、
-  // 存在するキー全てに freelancePaid を反映する
+  // 保存先ymがカレンダー月・給与期間月のどちらか不定のため
+  // カレンダー月・前月・翌月の3ヶ月 × 全キーをチェックして実データに書き込む
+  const ymBase = getYM(dy, dm);
+  const ymPrev = dm === 1 ? getYM(dy-1, 12) : getYM(dy, dm-1);
+  const ymNext = dm === 12 ? getYM(dy+1, 1) : getYM(dy, dm+1);
   const keysToCheck = [empId, String(empId), `${empId}_enya`, `${empId}_marco`];
   const updates = {};
   let found = false;
-  for (const key of keysToCheck) {
-    if (attendance[ym] && attendance[ym][key] && attendance[ym][key][dateStr]) {
-      updates[`payroll/attendance/${ym}/${key}/${dateStr}/freelancePaid`] = paid;
-      found = true;
+  for (const ym of [ymBase, ymPrev, ymNext]) {
+    if (!attendance[ym]) continue;
+    for (const key of keysToCheck) {
+      if (attendance[ym][key] && attendance[ym][key][dateStr]) {
+        updates[`payroll/attendance/${ym}/${key}/${dateStr}/freelancePaid`] = paid;
+        found = true;
+      }
     }
   }
   if (!found) {
-    // フォールバック：従来通り数値IDに書き込む
-    updates[`payroll/attendance/${ym}/${empId}/${dateStr}/freelancePaid`] = paid;
+    // フォールバック：カレンダー月の数値IDに書き込む
+    updates[`payroll/attendance/${ymBase}/${empId}/${dateStr}/freelancePaid`] = paid;
   }
   db.ref().update(updates, err => {
     if (!err) renderFreelanceDetail(empId);
