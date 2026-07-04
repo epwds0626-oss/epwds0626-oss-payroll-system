@@ -984,8 +984,8 @@ function getExtendedDailyList(empId, year, month, noMerge) {
 }
 
 // 月次サマリ取得（週マタギ計算込み・給与計算期間基準）
-function getMonthSummary(empId, year, month) {
-  const extended = getExtendedDailyList(empId, year, month);
+function getMonthSummary(empId, year, month, noMerge) {
+  const extended = getExtendedDailyList(empId, year, month, noMerge);
   const result = calcWeeklyOT(extended, year, month);
 
   // 勤怠入力ページと一致させるため 期間内の日を直接合算
