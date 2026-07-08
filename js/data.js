@@ -1441,7 +1441,11 @@ function getPrevMonthNetShakai(empId, year, month) {
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevYear  = month === 1 ? year - 1 : year;
   try {
-    const sal = calcSalaryWithAdj(empId, prevYear, prevMonth);
+    // empIdはID（数値/文字列）でもempオブジェクトでも受け付ける
+    const emp = (empId && typeof empId === 'object') ? empId
+      : employees.find(e => String(e.id) === String(empId));
+    if (!emp) return 0;
+    const sal = calcSalaryWithAdj(emp, prevYear, prevMonth);
     if (!sal) return 0;
     // 社保控除後 = 課税総支給 - 社保（通勤費除いた支給額から）
     return Math.max(0, sal.grossTotal - (sal.commute||0) - (sal.kenpo||0) - (sal.kosei||0) - (sal.shienkin||0));
