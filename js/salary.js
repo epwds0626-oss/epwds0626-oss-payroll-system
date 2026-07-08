@@ -137,6 +137,8 @@ function exportSalaryCSV(year, month) {
 
 // -------- 給与明細 --------
 function renderPayslip(year, month) {
+  // 給与計算ページを経由しなくても調整値（salaryAdj）が反映されるよう、ここでも購読する
+  subscribeAdj(year, month);
   // 給与明細のセレクトは展開前（両店スタッフも1行）
   const empOptions = activeEmployees().map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
   return `
