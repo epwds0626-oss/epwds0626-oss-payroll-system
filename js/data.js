@@ -1237,8 +1237,9 @@ function calcSalary(emp, year, month) {
   if (emp.koyo === '加入') koyoHoken = Math.round(grossTotal * KOYO_RATE);
 
   // 所得税
+  // ※業務委託は給与所得ではないため、給与の源泉徴収税額表による所得税計算は行わない
   const taxable   = grossTotal - commuteAdj - kenpo - kosei - shienkin - koyoHoken;
-  const incomeTax = calcIncomeTax(taxable, emp.dependents, emp.tax);
+  const incomeTax = (emp.type === '業務委託') ? 0 : calcIncomeTax(taxable, emp.dependents, emp.tax);
 
   const juminzei        = emp.juminzei || 0;
   const chutaikyoAmount = (emp.chutaikyo === '加入') ? (emp.chutaikyoAmount || 0) : 0;
