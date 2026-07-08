@@ -12,27 +12,7 @@ function hm(h) {
 // weekly.js  ―  週次集計・週マタギ残業詳細
 // ============================================================
 
-// 週40h超残業を「日」に帰属させる（労基法準拠）
-// 日次残業(8h超)と法定休日労働を除いた実働を時系列に累積し、
-// 累計40h(2400分)を超えた分をその日の週次残業として帰属する。
-// 月マタギ週でも「40hを超えた日が属する給与月」に全額計上される。
-// 戻り値: { 'YYYY-MM-DD': 分, ... }
-function attributeWeeklyOT(days) {
-  const sorted = [...days].sort((a, b) => (a.date < b.date ? -1 : 1));
-  let cumMins = 0;
-  const otByDate = {};
-  for (const d of sorted) {
-    if (d.holiday) continue; // 法定休日労働は週40h算定から除外（35%側で別途計上）
-    const actualM  = Math.round((d.actual  || 0) * 60);
-    const dailyOTM = Math.round((d.dailyOT || 0) * 60);
-    const regM = Math.max(0, actualM - dailyOTM); // 週40h判定の対象時間
-    const before = cumMins;
-    cumMins += regM;
-    const over = Math.max(0, cumMins - 2400) - Math.max(0, before - 2400);
-    if (over > 0) otByDate[d.date] = over;
-  }
-  return otByDate;
-}
+// 週40h超残業の日別帰属は data.js の attributeWeeklyOT() を使用（定義の重複を排除）
 
 function renderWeekly(year, month) {
   const rows = activeEmployeesExpanded().map(emp => {
