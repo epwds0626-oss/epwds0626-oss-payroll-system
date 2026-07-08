@@ -487,16 +487,25 @@ function calcSalaryWithAdj(emp, year, month) {
 
 // salaryAdj の Firebase 購読（月が変わった時に呼ぶ）
 let _adjUnsub = null;
+let _adjSubYm = null; // 購読中の年月（再購読ループ防止）
 function subscribeAdj(year, month) {
-  if (_adjUnsub) _adjUnsub();
   const ym = `${year}-${String(month).padStart(2,'0')}`;
+  // 同じ月を既に購読中なら何もしない
+  // （renderPayslip等がページ再描画のたびに呼んでも、購読の張り直し→
+  //   Firebaseの即時value発火→再描画→再購読…の無限ループにならない）
+  if (_adjSubYm === ym && _adjUnsub) return;
+  if (_adjUnsub) _adjUnsub();
+  _adjSubYm = ym;
   const ref = FB.salaryAdj(ym);
   const handler = snap => {
-    salaryAdj[ym] = snap.val() || {};
-    if (_fbLoaded && ['salary','payslip','dashboard'].includes(currentPage)) refreshCurrentPageData();
+    const val = snap.val() || {};
+    // 値が変わった時だけ再描画（初回購読の即時発火で中身が同じなら再描画しない）
+    const changed = JSON.stringify(salaryAdj[ym] || {}) !== JSON.stringify(val);
+    salaryAdj[ym] = val;
+    if (changed && _fbLoaded && ['salary','payslip','dashboard'].includes(currentPage)) refreshCurrentPageData();
   };
   ref.on('value', handler);
-  _adjUnsub = () => ref.off('value', handler);
+  _adjUnsub = () => { ref.off('value', handler); _adjSubYm = null; };
 }
 
 // 在籍中スタッフのみ
