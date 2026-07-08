@@ -200,7 +200,7 @@ function payslipHTML(emp, sal, year, month) {
         ${fixedOTRows(emp, sal, emp.id, year, month)}
         ${adjRow(emp.id,year,month,'midnightPay','深夜手当（22時〜 25%）',sal.midnightOnlyPay)}
         ${sal.midnightOTPay>0?payRow('深夜残業 追加割増（+25%）', sal.midnightOTPay):''}
-        ${adjRow(emp.id,year,month,'holidayLegalPay','法定休日手当（木曜 35%）',sal.holidayLegalPay)}
+        ${sal.holidayLegalPay>0?adjRow(emp.id,year,month,'holidayLegalPay','法定休日手当（木曜 35%）',sal.holidayLegalPay):''}
         ${sal.monthHolidayNonLegal>0?`<div style="display:flex;justify-content:space-between;padding:3px 0;color:#999"><span>法定外休日（水曜）出勤 ${hm(sal.monthHolidayNonLegal)}</span><span>週OT分に含む</span></div>`:''}
         ${adjRow(emp.id,year,month,'commute','交通費',sal.commute)}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
@@ -271,25 +271,37 @@ function fixedOTRows(emp, sal, empIdStr, year, month) {
   const h = sal.hourlyBase;
   const fixedOTPay = Math.round(fixedH * h * 1.25);
 
-  // 実績が固定時間を超えた場合の超過分
-  // ※月60h超150%のしきい値は「固定分も含めた実残業合計」の60hで判定（労基法）
-  //   旧実装は超過分単独に60hしきい値を当てており、150%部分を過小計上していた
-  const excessH   = Math.max(0, sal.monthOT - fixedH);
-  const excess60u = Math.max(0, Math.min(sal.monthOT, 60) - fixedH); // 総残業60hまでの超過分 → 125%
-  const excess60o = Math.max(0, sal.monthOT - Math.max(60, fixedH)); // 総残業60hを超える部分 → 150%
-  // 端数差異を出さないため、超過分＝計算済み残業手当合計−固定残業手当 で確定
-  const excessPay = excessH > 0 ? Math.max(0, (sal.otPay || 0) - fixedOTPay) : 0;
+  // ---- 社員向け内訳（固定40h → 20h枠125% → 60h超150% ＋ 週残業を別掲） ----
+  // 月60h超150%のしきい値は「固定分も含めた実残業合計」で判定（労基法）
+  const totalOT = sal.monthOT; // 日8h超＋週40h超の合計（60h判定はこの合計で行う）
+  const over60H = Math.max(0, totalOT - 60);                          // 150%対象
+  const band125 = Math.max(0, Math.min(totalOT, 60) - fixedH);        // 固定超過〜60hの125%帯
+  const weekH   = Math.min(sal.monthWeekOT || 0, band125);            // 週残業（別掲・125%）
+  const ot20H   = Math.max(0, band125 - weekH);                       // 20h残業枠（日8h超由来）
+
+  // 端数差異を出さないため、合計は計算済み残業手当から確定し内訳行に配分する
+  const excessPayTotal = totalOT > fixedH ? Math.max(0, (sal.otPay || 0) - fixedOTPay) : 0;
+  const over60Pay = over60H > 0 ? Math.round(over60H * h * 1.50) : 0;
+  const weekPay   = weekH   > 0 ? Math.round(weekH   * h * 1.25) : 0;
+  const ot20Pay   = Math.max(0, excessPayTotal - over60Pay - weekPay); // 残余で丸め吸収
+
+  const line = (label, sub, pay) => pay > 0
+    ? `<div style="display:flex;justify-content:space-between;padding:3px 0">
+         <span>${label}</span><span>¥${pay.toLocaleString()}</span>
+       </div>
+       <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${sub}</div>`
+    : `<div style="display:flex;justify-content:space-between;padding:3px 0;color:#999">
+         <span>${label}</span><span>—</span>
+       </div>`;
 
   return `
     <div style="display:flex;justify-content:space-between;padding:3px 0">
-      <span>固定残業手当（${fixedH}h）</span><span>¥${fixedOTPay.toLocaleString()}</span>
+      <span>固定残業（${fixedH}h×¥${h.toLocaleString()}×125%）</span><span>¥${fixedOTPay.toLocaleString()}</span>
     </div>
-    <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${fixedH}h×¥${h.toLocaleString()}×125%　実績：${hm(sal.monthOT)}</div>
-    <div style="display:flex;justify-content:space-between;padding:3px 0;color:${excessPay > 0 ? '#c0392b' : '#999'}">
-      <span>超過残業手当${excessPay > 0 ? `（${hm(excessH)}）` : ''}</span>
-      <span>${excessPay > 0 ? `¥${excessPay.toLocaleString()}` : '—'}</span>
-    </div>
-    ${excessPay > 0 ? `<div style="padding:1px 0 3px 12px;font-size:11px;color:#c0392b">${hm(excess60u)}×125%${excess60o > 0 ? ` + ${hm(excess60o)}×150%` : ''}</div>` : ''}`;
+    <div style="padding:1px 0 3px 12px;font-size:11px;color:#888">実績：${hm(totalOT)}（日8h超 ${hm(sal.monthDailyOT)}／週40h超 ${hm(sal.monthWeekOT)}）</div>
+    ${line(`20h残業（〜60hまで）`, `${hm(ot20H)}×¥${h.toLocaleString()}×125%`, ot20Pay)}
+    ${line(`60h超残業`, `${hm(over60H)}×¥${h.toLocaleString()}×150%`, over60Pay)}
+    ${line(`週残業`, `${hm(weekH)}×¥${h.toLocaleString()}×125%`, weekPay)}`;
 }
 
 function payRow(label, amount) {
