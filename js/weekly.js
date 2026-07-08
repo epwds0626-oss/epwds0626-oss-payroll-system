@@ -12,6 +12,28 @@ function hm(h) {
 // weekly.js  ―  週次集計・週マタギ残業詳細
 // ============================================================
 
+// 週40h超残業を「日」に帰属させる（労基法準拠）
+// 日次残業(8h超)と法定休日労働を除いた実働を時系列に累積し、
+// 累計40h(2400分)を超えた分をその日の週次残業として帰属する。
+// 月マタギ週でも「40hを超えた日が属する給与月」に全額計上される。
+// 戻り値: { 'YYYY-MM-DD': 分, ... }
+function attributeWeeklyOT(days) {
+  const sorted = [...days].sort((a, b) => (a.date < b.date ? -1 : 1));
+  let cumMins = 0;
+  const otByDate = {};
+  for (const d of sorted) {
+    if (d.holiday) continue; // 法定休日労働は週40h算定から除外（35%側で別途計上）
+    const actualM  = Math.round((d.actual  || 0) * 60);
+    const dailyOTM = Math.round((d.dailyOT || 0) * 60);
+    const regM = Math.max(0, actualM - dailyOTM); // 週40h判定の対象時間
+    const before = cumMins;
+    cumMins += regM;
+    const over = Math.max(0, cumMins - 2400) - Math.max(0, before - 2400);
+    if (over > 0) otByDate[d.date] = over;
+  }
+  return otByDate;
+}
+
 function renderWeekly(year, month) {
   const rows = activeEmployeesExpanded().map(emp => {
     const extended = getExtendedDailyList(emp.id, year, month);
@@ -28,7 +50,7 @@ function renderWeekly(year, month) {
   <div class="alert alert-info">
     <span>⚠️</span>
     <div><strong>週マタギ計算について</strong><br>
-    労基法は「週」単位（月曜〜日曜）で40時間を管理します。月をまたぐ週も正しく計算します。<br>
+    労基法は「週」単位（月曜〜日曜）で40時間を管理します。月をまたぐ週は、累計40時間を超えた「日」が属する給与月に週次残業を計上します。<br>
     🔴 <strong>法定休日：木曜日</strong>（35%割増）　🟠 <strong>法定外休日：水曜日</strong>（週40h超分のみ25%）</div>
   </div>
 
@@ -112,37 +134,32 @@ function renderWeekDetail(year, month) {
     const endDt  = new Date(wkStart); endDt.setDate(endDt.getDate()+6);
     const wkEnd  = endDt.toISOString().slice(0,10);
     // 週全日の合計（月マタギでも全部合算 → 法的に正しい週40h判定）
-    const allActualMins  = days.reduce((s,d)=>s+Math.round((d.actual||0)*60),0);
-    const allDailyOTMins = days.reduce((s,d)=>s+Math.round((d.dailyOT||0)*60),0);
-    const wkActualAll    = allActualMins / 60;
-    const wkOTAll        = Math.max(0, wkActualAll - 40 - allDailyOTMins/60); // 週全体の週超残業
+    const allActualMins = days.reduce((s,d)=>s+Math.round((d.actual||0)*60),0);
+    const wkActualAll   = allActualMins / 60;
 
     // 給与期間内の日だけ（表示・深夜・休日は当月分のみ）
     const { startDate, endDate } = getPayPeriod(year, month);
-    const inPeriod   = days.filter(d => d.date >= startDate && d.date <= endDate);
+    const inPeriod     = days.filter(d => d.date >= startDate && d.date <= endDate);
     const inPeriodMins = inPeriod.reduce((s,d)=>s+Math.round((d.actual||0)*60),0);
 
     // 当月表示用の実働（当月期間分のみ）
-    const wkActual   = inPeriodMins / 60;
+    const wkActual = inPeriodMins / 60;
 
     // 月マタギ種別判定
-    const hasPostPeriod = days.some(d => d.date > endDate);
-    const isCrossMonth  = isCrossMonthCheck(days, startDate, endDate);
+    const isCrossMonth = isCrossMonthCheck(days, startDate, endDate);
 
-    const wkDailyOT  = inPeriod.reduce((s,d)=>s+Math.round((d.dailyOT||0)*60),0)/60;
     const wkMidnight = inPeriod.reduce((s,d)=>s+Math.round((d.midnight||0)*60),0)/60;
     const wkHoliday  = inPeriod.reduce((s,d)=>s+Math.round((d.holiday||0)*60),0)/60;
 
-    // 期末マタギは翌月で計算 → 当月はゼロ
-    // 期首マタギは当月分の実働比率で按分
-    let wkOT = 0;
-    if (hasPostPeriod) {
-      wkOT = 0; // 翌月に計上
-    } else if (isCrossMonth && allActualMins > 0) {
-      wkOT = Math.round(wkOTAll * (inPeriodMins / allActualMins) * 60) / 60;
-    } else {
-      wkOT = wkOTAll;
+    // 週40h超残業を日別に帰属し、当月給与期間内の日の分だけ計上する。
+    // 按分・翌月送りの分岐は廃止（旧方式は期末マタギで全額翌月送り／
+    // 期首マタギで按分となっており、差額が計上漏れになるバグがあった）
+    const otByDate = attributeWeeklyOT(days);
+    let wkOTmins = 0;
+    for (const [dDate, mins] of Object.entries(otByDate)) {
+      if (dDate >= startDate && dDate <= endDate) wkOTmins += mins;
     }
+    const wkOT = wkOTmins / 60;
 
     html += `
     <div style="margin-bottom:16px">
@@ -152,13 +169,13 @@ function renderWeekDetail(year, month) {
         <span style="margin-left:auto">週実働：${hm(wkActualAll)}${isCrossMonth?` <span style="font-size:11px;color:#888">（当月${hm(wkActual)}）</span>`:''} ／ 残業：<strong style="color:${wkOT>0?'var(--danger)':'inherit'}">${hm(wkOT)}</strong></span>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>日付</th><th>曜日</th><th>当月</th><th>実働(h)</th><th>深夜(h)</th><th>休日</th><th>備考</th></tr></thead>
+        <thead><tr><th>日付</th><th>曜日</th><th>当月</th><th>実働(h)</th><th>深夜(h)</th><th>休日</th><th>週超残業</th><th>備考</th></tr></thead>
         <tbody>
         ${days.map(d=>{
           const dt = new Date(d.date);
           const dow = dt.getDay();
-          const [y,m]=d.date.split('-').map(Number);
           const inMonth = isInPayPeriod(d.date, year, month);
+          const dayWkOT = otByDate[d.date] ? hm(otByDate[d.date]/60) : '';
           return `<tr ${!inMonth?'style="opacity:0.5"':''}>
             <td>${d.date.replace(/-/g,'/')}</td>
             <td style="color:${dow===0?'#c0392b':dow===6?'#2980b9':'inherit'}">${DOW[dow]}</td>
@@ -166,6 +183,7 @@ function renderWeekDetail(year, month) {
             <td>${hm(d.actual||0)}</td>
             <td>${hm(d.midnight||0)}</td>
             <td>${d.holiday?'●':''}</td>
+            <td>${dayWkOT ? '<strong style="color:var(--danger)">'+dayWkOT+'</strong>' : ''}</td>
             <td>${d.note||''}</td>
           </tr>`;
         }).join('')}
@@ -175,7 +193,7 @@ function renderWeekDetail(year, month) {
           <td>${hm(wkActual)}</td>
           <td>${hm(wkMidnight)}</td>
           <td>${hm(wkHoliday)}</td>
-          <td>残業：<strong>${hm(wkOT)}</strong></td>
+          <td colspan="2">残業：<strong>${hm(wkOT)}</strong></td>
         </tr></tfoot>
       </table></div>
     </div>`;
