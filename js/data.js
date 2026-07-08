@@ -732,6 +732,29 @@ function getMonthAttendance(year, month, empId) {
 //   midnightOT    : 22時〜5時 かつ 残業（日8h超 or 週40h超）の時間（h）
 //   holidayLegal  : 法定休日（木曜）実働時間（h）
 //   holidayNonLegal:法定外休日（水曜）実働時間（h）
+// 週40h超残業を「日」に帰属させる（労基法準拠）
+// 日次残業(8h超)と法定休日(木曜)労働を除いた実働を時系列に累積し、
+// 累計40h(2400分)を超えた分をその日の週次残業として帰属する。
+// ※法定外休日(水曜)の労働は週40hの算定に含める（超過分が25%対象になるため）
+// 月マタギ週でも「40hを超えた日が属する給与月」に全額計上される。
+// 戻り値: { 'YYYY-MM-DD': 分, ... }
+function attributeWeeklyOT(days) {
+  const sorted = [...days].sort((a, b) => (a.date < b.date ? -1 : 1));
+  let cumMins = 0;
+  const otByDate = {};
+  for (const d of sorted) {
+    const actualM   = Math.round((d.actual       || 0) * 60);
+    const dailyOTM  = Math.round((d.dailyOT      || 0) * 60);
+    const holLegalM = Math.round((d.holidayLegal || 0) * 60); // 法定休日労働は35%側で別計上
+    const regM = Math.max(0, actualM - dailyOTM - holLegalM); // 週40h判定の対象時間
+    const before = cumMins;
+    cumMins += regM;
+    const over = Math.max(0, cumMins - 2400) - Math.max(0, before - 2400);
+    if (over > 0) otByDate[d.date] = over;
+  }
+  return otByDate;
+}
+
 function calcWeeklyOT(dailyList, year, month) {
   if (!dailyList.length) return {
     weeks:[], monthOT:0, monthDailyOT:0, monthWeekOT:0,
@@ -763,12 +786,7 @@ function calcWeeklyOT(dailyList, year, month) {
 
     const { startDate, endDate } = getPayPeriod(year, month);
 
-    // 週全日の実働合計（月マタギでも全部合算 → 法的に正しい週40h判定）
-    let allActualMins=0, allDailyOTMins=0;
-    for (const d of wkData.days) {
-      allActualMins  += Math.round((d.actual  ||0) * 60);
-      allDailyOTMins += Math.round((d.dailyOT ||0) * 60);
-    }
+    // （週全体の40h判定は attributeWeeklyOT 内で日別に累積計算する）
 
     // 当月期間内の日だけ（深夜・休日・表示用実働は当月分のみ）
     let wkActualMins=0, wkDailyOTMins=0, wkMidnightMins=0, wkMidnightOTMins=0;
@@ -793,21 +811,15 @@ function calcWeeklyOT(dailyList, year, month) {
     const wkHolidayNonLegal = wkHolidayNonLegalMins / 60;
 
     // 週40h超残業：週全日の合計で判定（法的に正しい）
-    const wkWeekOTAllMins = Math.max(0, allActualMins - 40*60 - allDailyOTMins);
-
-    // 月マタギの種別判定
-    const hasPrePeriod  = wkData.days.some(d => d.date < startDate); // 前月分が混入（期首マタギ）
-    const hasPostPeriod = wkData.days.some(d => d.date > endDate);   // 翌月分が混入（期末マタギ）
-    const isCross = (hasPrePeriod || hasPostPeriod) &&
-                     wkData.days.some(d => d.date >= startDate && d.date <= endDate);
-
-    // 期末マタギ（翌月にはみ出す週）は翌月の給与計算で処理 → 当月はゼロ
-    // 期首マタギ（前月分が混入）は当月分の実働比率で按分
+    // 週40h超残業：週全日を通しで「日」に帰属させ、当月給与期間内の日の分のみ計上する。
+    // 【旧方式のバグ】期末マタギは全額翌月送り／期首マタギは実働比按分という非対称な
+    // 設計だったため、翌月側では按分分しか受け取れず差額が計上漏れになっていた。
+    // 日別帰属方式なら「累計40hを超えた日が属する給与月」に全額計上され、月をまたいでも
+    // 合計が必ず週の法定残業と一致する。
+    const otByDate = attributeWeeklyOT(wkData.days);
     let wkWeekOTMins = 0;
-    if (!hasPostPeriod) {
-      // 期末マタギでない → 全額 or 期首按分
-      const ratio = (isCross && allActualMins > 0) ? wkActualMins / allActualMins : 1;
-      wkWeekOTMins = Math.round(wkWeekOTAllMins * ratio);
+    for (const dDate in otByDate) {
+      if (dDate >= startDate && dDate <= endDate) wkWeekOTMins += otByDate[dDate];
     }
     const wkOT = wkDailyOT + wkWeekOTMins / 60;
     monthOT              += (wkDailyOTMins + wkWeekOTMins) / 60;
