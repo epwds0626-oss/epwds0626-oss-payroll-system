@@ -542,15 +542,15 @@ function calcSalaryBoth(emp, year, month) {
   const empM = { ...emp, id: `${emp.id}_marco`, name: `${emp.name}【マルコ】` };
   const salE = calcSalary(empE, year, month);
   const salM = calcSalary(empM, year, month);
-  // 支給合算・控除はenya側（合算計算済み）、基本給だけ合算
+  // 【修正 R8.7.12】_enya側は両店マージ済みの勤怠で基本給・残業・控除まで
+  // 全額計算済み＝会社としての正しい総支給。従来はここに salM.basePay /
+  // salM.grossTotal / salM.workDays を加算していたため、マルコ分の時間・日数が
+  // 二重計上になっていた（基本給・総支給・振込額が過大）。_marco側の値は
+  // 店舗別コストの内訳表示用の参考値としてのみ保持する。
   return {
     ...salE,
-    basePay:      salE.basePay + salM.basePay,
-    grossTotal:   salE.grossTotal + salM.grossTotal,
-    netPay:       salE.grossTotal + salM.grossTotal - salE.totalDeduction,
-    totalActual:  salE.totalActual,  // enya側が両店合算済み
-    workDays:     salE.workDays + salM.workDays,
-    _marcoActual: salM.totalActual,  // 明細の内訳表示用
+    _marcoActual:  salM.totalActual, // マルコ側実働（明細の内訳表示用）
+    _marcoBasePay: salM.basePay,     // マルコ側人件費（店舗別コスト参考値）
   };
 }
 
@@ -560,14 +560,12 @@ function calcSalaryWithAdjBoth(emp, year, month) {
   const empM = { ...emp, id: `${emp.id}_marco`, name: `${emp.name}【マルコ】` };
   const salE = calcSalaryWithAdj(empE, year, month);
   const salM = calcSalaryWithAdj(empM, year, month);
+  // 【修正 R8.7.12】calcSalaryBothと同様、_enya側が両店合算済みのためsalMは加算しない。
+  // 調整値は _enya側のID（例: 10_enya）に対して入力すれば合算後の明細に反映される。
   return {
     ...salE,
-    basePay:      salE.basePay + salM.basePay,
-    grossTotal:   salE.grossTotal + salM.grossTotal,
-    netPay:       salE.grossTotal + salM.grossTotal - salE.totalDeduction,
-    totalActual:  salE.totalActual,
-    workDays:     salE.workDays + salM.workDays,
-    _marcoActual: salM.totalActual,
+    _marcoActual:  salM.totalActual,
+    _marcoBasePay: salM.basePay,
   };
 }
 
@@ -1145,7 +1143,7 @@ function calcSalary(emp, year, month) {
     }
   }
 
-  let basePay = 0, hourlyBase = 0;
+  let basePay = 0, hourlyBase = 0, baseHours = 0;
 
   if (emp.payType === '月給') {
     const MONTHLY_HOURS = emp.monthlyHours || 173.8;
@@ -1155,11 +1153,18 @@ function calcSalary(emp, year, month) {
   } else {
     hourlyBase = emp.hourlyWage;
     if (isMarcoSide) {
-      // _marco側：マルコでの実労働時間分のみ基本給計上
-      basePay = marcoOnlyActual * hourlyBase;
+      // _marco側：マルコでの実労働時間分のみ基本給計上（残業は_enya側で全額計上）
+      baseHours = marcoOnlyActual;
+      basePay = baseHours * hourlyBase;
     } else {
-      // 通常 or _enya側：totalActual（両店合算）で基本給計上
-      basePay = totalActual * hourlyBase;
+      // 通常 or _enya側：基本給＝所定内時間（実働−法定残業）×時給
+      // 【修正 R8.7.12】従来は実働全時間×時給を基本給とし、さらに残業手当で
+      // 125%/150%を全額支給していたため、残業時間に225%を支払う二重計上だった。
+      // 残業時間分の100%＋割増は残業手当側で全額支給するため、基本給から除外する。
+      // ※法定休日（木曜）の時間はmonthOTに含まれない＝100%分は基本給に残り、
+      //   +35%を法定休日手当で別途支給（合計135%）。深夜は+25%を深夜手当で加算。
+      baseHours = Math.max(0, totalActual - monthOT);
+      basePay = baseHours * hourlyBase;
     }
   }
 
@@ -1248,6 +1253,7 @@ function calcSalary(emp, year, month) {
 
   return {
     basePay:             Math.round(basePay),
+    baseHours,           // 時給者の基本給対象時間（h）明細の内訳表示用。月給者は0
     skillPay, skillPayNote: '',
     positionAllowancePay: positionAllowanceAdj,
     otPay:               Math.round(otPay),
