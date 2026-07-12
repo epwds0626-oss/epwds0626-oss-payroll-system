@@ -197,7 +197,7 @@ function payslipHTML(emp, sal, year, month) {
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">支給項目</div>
         ${adjRow(emp.id,year,month,'basePay','基本給',sal.basePay)}
-
+        ${emp.payType==='時給' && sal.baseHours>0?`<div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${hm(sal.baseHours)}×¥${sal.hourlyBase.toLocaleString()}（実働${hm(sal.totalActual)}−残業${hm(sal.monthOT)}）</div>`:''}
         ${sal.positionAllowancePay>0?adjRow(emp.id,year,month,'positionAllowancePay','役職手当',sal.positionAllowancePay):''}
         ${fixedOTRows(emp, sal, emp.id, year, month)}
         ${adjRow(emp.id,year,month,'midnightPay','深夜手当（22時〜 25%）',sal.midnightOnlyPay)}
@@ -314,13 +314,14 @@ function payRow(label, amount) {
 // 両店スタッフ用：1枚の明細に合算して表示
 function payslipHTMLBoth(emp, salE, salM, year, month) {
   const empEnya = { ...emp, id: `${emp.id}_enya` }; // fixedOTRows用
-  // 支給合算
-  const basePay            = salE.basePay + salM.basePay;
+  // 【修正 R8.7.12】_enya側は両店マージ済み勤怠で全額計算済み。
+  // 従来の salM.basePay / salM.grossTotal / salM.workDays 加算はマルコ分の二重計上。
+  const basePay            = salE.basePay;
   const otPay              = salE.otPay;   // 残業代は_enya側のみ
   const midnightPay        = salE.midnightPay;
   const holidayLegalPay    = salE.holidayLegalPay;
   const commute            = salE.commute; // 通勤手当は_enya側のみ
-  const grossTotal         = salE.grossTotal + salM.grossTotal;
+  const grossTotal         = salE.grossTotal;
   // 控除合算（社保・雇保・税は合算総支給から再計算済みのものを使う）
   // _enya側に全控除が乗っているのでそのまま使用
   const kenpo              = salE.kenpo;
@@ -333,11 +334,11 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
   const totalDeduction     = salE.totalDeduction;
   const netPay             = grossTotal - totalDeduction;
 
-  // 勤怠：_enya側が両店合算済み、_marco側はマルコのみ実労働時間
+  // 勤怠：_enya側が両店合算済み（日数もマージ済みリストでカウント済み）
   const totalActual        = salE.totalActual;   // 両店合算
   const marcoActual        = salM.totalActual;   // マルコのみ
   const enyaActual         = totalActual - marcoActual;
-  const workDays           = salE.workDays + salM.workDays;
+  const workDays           = salE.workDays;
 
   const { startDate, endDate, payDateStr } = getPayPeriod(year, month);
 
