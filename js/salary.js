@@ -86,20 +86,21 @@ function renderSalary(year, month) {
       </thead>
       <tbody>
       ${results.map(({ emp, sal }) => {
+        const adjId = emp.store === '両店' ? `${emp.id}_enya` : emp.id;
         return `<tr>
-        <td class="tl" style="cursor:pointer;color:#1a3a5c;font-weight:700;text-decoration:underline dotted" title="クリックして全項目編集" onclick="openEmpAdjDialog(${emp.id},${year},${month})">${emp.name}</td>
-        ${adjCell(emp.id,year,month,'basePay',sal.basePay)}
-        ${otSplitCells(emp.id,year,month,sal)}
-        ${adjCell(emp.id,year,month,'midnightPay',sal.midnightPay)}
-        ${adjCellHide(emp.id,year,month,'holidayLegalPay',sal.holidayLegalPay)}
+        <td class="tl" style="cursor:pointer;color:#1a3a5c;font-weight:700;text-decoration:underline dotted" title="クリックして全項目編集" onclick="openEmpAdjDialog('${adjId}',${year},${month})">${emp.name}</td>
+        ${adjCell(adjId,year,month,'basePay',sal.basePay)}
+        ${otSplitCells(adjId,year,month,sal)}
+        ${adjCell(adjId,year,month,'midnightPay',sal.midnightPay)}
+        ${adjCellHide(adjId,year,month,'holidayLegalPay',sal.holidayLegalPay)}
         <td class="col-hide">—</td>
-        ${adjCell(emp.id,year,month,'commute',sal.commute)}
-        ${adjCell(emp.id,year,month,'kenpo',sal.kenpo)}
-        ${adjCell(emp.id,year,month,'kosei',sal.kosei)}
-        ${adjCell(emp.id,year,month,'shienkin',sal.shienkin)}
-        ${adjCell(emp.id,year,month,'koyoHoken',sal.koyoHoken)}
-        ${adjCell(emp.id,year,month,'incomeTax',sal.incomeTax)}
-        ${adjCell(emp.id,year,month,'juminzei',sal.juminzei)}
+        ${adjCell(adjId,year,month,'commute',sal.commute)}
+        ${adjCell(adjId,year,month,'kenpo',sal.kenpo)}
+        ${adjCell(adjId,year,month,'kosei',sal.kosei)}
+        ${adjCell(adjId,year,month,'shienkin',sal.shienkin)}
+        ${adjCell(adjId,year,month,'koyoHoken',sal.koyoHoken)}
+        ${adjCell(adjId,year,month,'incomeTax',sal.incomeTax)}
+        ${adjCell(adjId,year,month,'juminzei',sal.juminzei)}
         <td><strong>¥${sal.netPay.toLocaleString()}</strong></td>
       </tr>`;}).join('')}
       </tbody>
@@ -357,6 +358,7 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">支給項目</div>
         ${adjRow(`${emp.id}_enya`,year,month,'basePay','基本給',basePay)}
+        ${emp.payType==='時給' && salE.baseHours>0?`<div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${hm(salE.baseHours)}×¥${salE.hourlyBase.toLocaleString()}（両店実働${hm(salE.totalActual)}−残業${hm(salE.monthOT)}）</div>`:''}
         ${fixedOTRows(empEnya, salE, `${emp.id}_enya`, year, month)}
         ${midnightPay>0?adjRow(`${emp.id}_enya`,year,month,'midnightPay','深夜手当（22時〜 25%）',midnightPay):''}
         ${holidayLegalPay>0?adjRow(`${emp.id}_enya`,year,month,'holidayLegalPay','法定休日手当（木曜 35%）',holidayLegalPay):''}
