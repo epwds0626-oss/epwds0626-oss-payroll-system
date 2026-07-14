@@ -218,10 +218,10 @@ function payslipHTML(emp, sal, year, month) {
         ${adjRow(emp.id,year,month,'koyoHoken','雇用保険料（0.5%）',sal.koyoHoken)}
         ${adjRow(emp.id,year,month,'incomeTax','所得税',sal.incomeTax)}
         ${adjRow(emp.id,year,month,'juminzei','住民税',sal.juminzei)}
-        ${sal.chutaikyoAmount>0?adjRow(emp.id,year,month,'chutaikyoAmount','中退共掛金',sal.chutaikyoAmount):''}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>控除合計</span><span>¥${sal.totalDeduction.toLocaleString()}</span>
         </div>
+        ${sal.chutaikyoAmount>0?`<div style="margin-top:8px;padding:6px 8px;background:#f0fdf4;border-radius:6px;font-size:11.5px;color:#166534;display:flex;justify-content:space-between"><span>（参考）中退共掛金 全額会社負担</span><span>¥${sal.chutaikyoAmount.toLocaleString()}</span></div>`:''}
       </div>
     </div>
     <div style="background:var(--primary);color:#fff;padding:10px 16px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:15px;font-weight:700">
@@ -375,10 +375,10 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
         ${adjRow(`${emp.id}_enya`,year,month,'koyoHoken','雇用保険料（0.5%）',koyoHoken)}
         ${adjRow(`${emp.id}_enya`,year,month,'incomeTax','所得税',incomeTax)}
         ${adjRow(`${emp.id}_enya`,year,month,'juminzei','住民税',juminzei)}
-        ${chutaikyoAmount>0?adjRow(`${emp.id}_enya`,year,month,'chutaikyoAmount','中退共掛金',chutaikyoAmount):''}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>控除合計</span><span>¥${totalDeduction.toLocaleString()}</span>
         </div>
+        ${chutaikyoAmount>0?`<div style="margin-top:8px;padding:6px 8px;background:#f0fdf4;border-radius:6px;font-size:11.5px;color:#166534;display:flex;justify-content:space-between"><span>（参考）中退共掛金 全額会社負担</span><span>¥${chutaikyoAmount.toLocaleString()}</span></div>`:''}
       </div>
     </div>
     <div style="background:var(--primary);color:#fff;padding:10px 16px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:15px;font-weight:700">
@@ -489,7 +489,7 @@ function openEmpAdjDialog(empId, year, month) {
           <input type="number" id="adjDlg_${item.key}" value="${item.val}"
             style="width:110px;border:1.5px solid ${isAdj?'#f59e0b':'#d1d5db'};border-radius:6px;padding:5px 8px;font-size:13px;text-align:right;box-sizing:border-box"
             onfocus="this.select()">
-          <button onclick="resetSingleField(${empId},${year},${month},'${item.key}')"
+          <button onclick="resetSingleField('${empId}',${year},${month},'${item.key}')"
             title="自動計算に戻す"
             style="background:${isAdj?'#fee2e2':'#f3f4f6'};color:${isAdj?'#dc2626':'#9ca3af'};border:none;border-radius:5px;padding:4px 8px;font-size:11px;cursor:pointer;white-space:nowrap">元に戻す</button>
         </div>`;
@@ -514,7 +514,7 @@ function openEmpAdjDialog(empId, year, month) {
         ※ 空欄または0は「自動計算値を使用」ではなく0円として保存されます。自動計算に戻すには「元に戻す」を押してください。
       </div>
       <div style="display:flex;gap:8px">
-        <button onclick="saveAllEmpAdj(${empId},${year},${month})"
+        <button onclick="saveAllEmpAdj('${empId}',${year},${month})"
           style="flex:1;background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;cursor:pointer;font-weight:700">💾 保存</button>
         <button onclick="document.getElementById('adjModal').remove()"
           style="background:#e5e7eb;color:#374151;border:none;border-radius:8px;padding:11px 16px;font-size:14px;cursor:pointer">キャンセル</button>
