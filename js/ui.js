@@ -101,15 +101,39 @@ function empDrop(e, targetId) {
 }
 function toggleCommuteType() {
   const type = document.querySelector('input[name="commuteType"]:checked')?.value;
-  const fixedGroup = document.getElementById('ef_commuteFixedGroup');
-  const dailyGroup = document.getElementById('ef_commuteDailyGroup');
-  if (!fixedGroup || !dailyGroup) return;
-  if (type === 'daily') {
-    fixedGroup.style.display = 'none';
-    dailyGroup.style.display = 'block';
+  const groups = {
+    fixed:    document.getElementById('ef_commuteFixedGroup'),
+    daily:    document.getElementById('ef_commuteDailyGroup'),
+    distance: document.getElementById('ef_commuteDistanceGroup'),
+  };
+  for (const [k, el] of Object.entries(groups)) {
+    if (el) el.style.display = (k === (type || 'fixed')) ? 'block' : 'none';
+  }
+  if (type === 'distance') updateCommuteDistanceUI();
+}
+
+// 【R8.7.14】会社（大洗町港中央9-4）から自宅までの経路をGoogleマップで開く
+// 表示された距離（km）を「通勤距離」に入力する運用
+function openCommuteMap() {
+  const addr = document.getElementById('ef_address')?.value?.trim();
+  if (!addr) { alert('先に「住所」を入力してください'); return; }
+  const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(COMPANY_ADDRESS)}&destination=${encodeURIComponent(addr)}&travelmode=driving`;
+  window.open(url, '_blank');
+}
+
+// 距離方式の試算・大洗町判定の注意書きを更新
+function updateCommuteDistanceUI() {
+  const note = document.getElementById('ef_commuteDistanceNote');
+  if (!note) return;
+  const addr = document.getElementById('ef_address')?.value || '';
+  const km = parseFloat(document.getElementById('ef_commuteKm')?.value) || 0;
+  if (addr.includes('大洗町')) {
+    note.innerHTML = '<span style="color:#b91c1c;font-weight:700">大洗町在住のため原則不支給（¥0で計算されます）</span>';
+  } else if (km > 0) {
+    const perDay = Math.round(km * 2 * COMMUTE_YEN_PER_KM);
+    note.textContent = `試算：${km}km×往復×${COMMUTE_YEN_PER_KM}円 = 1日 ¥${perDay.toLocaleString()} × 出勤日数（例：25日で ¥${(perDay*25).toLocaleString()}）`;
   } else {
-    fixedGroup.style.display = 'block';
-    dailyGroup.style.display = 'none';
+    note.textContent = '「🗺 距離を測る」でGoogleマップの経路距離を確認し、片道kmを入力してください';
   }
 }
 
