@@ -1461,7 +1461,11 @@ function getPrevMonthNetShakai(empId, year, month) {
     const emp = (empId && typeof empId === 'object') ? empId
       : employees.find(e => String(e.id) === String(empId));
     if (!emp) return 0;
-    const sal = calcSalaryWithAdj(emp, prevYear, prevMonth);
+    // 【修正 R8.7.14】両店スタッフは勤怠が _enya/_marco 側にあるため合算版で計算する
+    // （従来は素のIDで計算 → 勤怠ゼロ扱い → 前月手取り0円で賞与税率が狂っていた）
+    const sal = (emp.store === '両店')
+      ? calcSalaryWithAdjBoth(emp, prevYear, prevMonth)
+      : calcSalaryWithAdj(emp, prevYear, prevMonth);
     if (!sal) return 0;
     // 社保控除後 = 課税総支給 - 社保（通勤費除いた支給額から）
     return Math.max(0, sal.grossTotal - (sal.commute||0) - (sal.kenpo||0) - (sal.kosei||0) - (sal.shienkin||0));
