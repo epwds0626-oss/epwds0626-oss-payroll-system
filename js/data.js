@@ -342,6 +342,9 @@ function calcShakai(grossForShakai, birthDateStr = '', hyojunFixed = 0) {
 
 // 雇用保険料率（2025年度〜）: 一般事業 本人負担 5/1000
 const KOYO_RATE = 0.005;
+// 【R8.7.14】距離計算方式の交通費単価（円/km・往復それぞれに適用）と会社住所
+const COMMUTE_YEN_PER_KM = 10;
+const COMPANY_ADDRESS = '茨城県東茨城郡大洗町港中央9-4';
 
 // -------- 所得税計算 --------
 function calcIncomeTax(taxableGross, dependents = 0, taxType = '甲') {
@@ -1175,10 +1178,31 @@ function calcSalary(emp, year, month) {
   const positionAllowancePay = emp.positionAllowance || 0;
 
   // ── 通勤手当 ──────────────────────────────────────────
+  // 【追加 R8.7.14】距離計算方式（commuteType='distance'）
+  //   支給額 = 片道km × 2（往復） × 10円/km × 出勤日数
+  //   住所に「大洗町」を含むスタッフは原則不支給（例外は給与調整で個別対応）
+  //   ※片道2km未満は税法上全額課税だが、大洗町ルールにより実質発生しない想定。
+  //     2km以上の実費相当額（10円/km）は非課税限度額の範囲内。
   const baseWorkDays = isMarcoSide ? marcoOnlyWorkDays : workDays;
-  const actualCommute = emp.commuteType === 'daily'
-    ? (emp.commutePerDay || 0) * baseWorkDays
-    : (isMarcoSide ? 0 : (emp.commute || 0)); // _marco側は通勤手当なし（_enya側で計上）
+  let actualCommute, commuteNoteText;
+  if (emp.commuteType === 'distance') {
+    const isOaraiResident = String(emp.address || '').includes('大洗町');
+    const km = emp.commuteKm || 0;
+    if (isMarcoSide) {
+      actualCommute = 0; commuteNoteText = '（本店側で計上）';
+    } else if (isOaraiResident) {
+      actualCommute = 0; commuteNoteText = '大洗町在住のため不支給';
+    } else {
+      actualCommute = Math.round(km * 2 * COMMUTE_YEN_PER_KM * baseWorkDays);
+      commuteNoteText = `${km}km×往復×${COMMUTE_YEN_PER_KM}円×${baseWorkDays}日`;
+    }
+  } else if (emp.commuteType === 'daily') {
+    actualCommute = (emp.commutePerDay || 0) * baseWorkDays;
+    commuteNoteText = `${(emp.commutePerDay||0).toLocaleString()}円×${baseWorkDays}日`;
+  } else {
+    actualCommute = isMarcoSide ? 0 : (emp.commute || 0); // _marco側は通勤手当なし（_enya側で計上）
+    commuteNoteText = isMarcoSide ? '（本店側で計上）' : '月額固定';
+  }
 
   // 残業手当（_marco側はゼロ：_enya側で両店合算済み残業代を全額計上）
   const effectiveMonthOT      = isMarcoSide ? 0 : monthOT;
@@ -1268,7 +1292,7 @@ function calcSalary(emp, year, month) {
     holidayNonLegalPay:  0,
     holidayPay:          Math.round(holidayLegalPay),
     commute:    commuteAdj,
-    commuteNote: emp.commuteType === 'daily' ? `${(emp.commutePerDay||0).toLocaleString()}円×${baseWorkDays}日` : (isMarcoSide ? '（本店側で計上）' : '月額固定'),
+    commuteNote: commuteNoteText,
     kaigo: isKaigoTarget(emp.birthDate),
     grossTotal, kenpo, kosei, shienkin, koyoHoken, incomeTax, juminzei, chutaikyoAmount,
     totalDeduction:      Math.round(totalDeduction),
