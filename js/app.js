@@ -503,7 +503,7 @@ function employeeForm(emp, isNew) {
   <div class="form-row">
     <div class="form-group">
     <label>交通費の計算方式</label>
-    <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+    <div style="display:flex;gap:10px;align-items:center;margin-top:4px;flex-wrap:wrap">
       <label style="display:flex;align-items:center;gap:4px;font-weight:400;color:var(--text)">
         <input type="radio" name="commuteType" id="ef_commuteFixed" value="fixed"
           ${(emp.commuteType||'fixed')==='fixed'?'checked':''}
@@ -514,16 +514,29 @@ function employeeForm(emp, isNew) {
           ${emp.commuteType==='daily'?'checked':''}
           onchange="toggleCommuteType()"> 日額×出勤日数
       </label>
+      <label style="display:flex;align-items:center;gap:4px;font-weight:400;color:var(--text)">
+        <input type="radio" name="commuteType" id="ef_commuteDistance" value="distance"
+          ${emp.commuteType==='distance'?'checked':''}
+          onchange="toggleCommuteType()"> 距離計算（10円/km・往復）
+      </label>
     </div>
   </div>
   <div class="form-row">
-    <div class="form-group" id="ef_commuteFixedGroup">
+    <div class="form-group" id="ef_commuteFixedGroup" style="display:${(emp.commuteType||'fixed')==='fixed'?'block':'none'}">
       <label>交通費（月額固定・円）</label>
       <input type="number" id="ef_commute" value="${emp.commute||0}">
     </div>
-    <div class="form-group" id="ef_commuteDailyGroup" style="display:none">
+    <div class="form-group" id="ef_commuteDailyGroup" style="display:${emp.commuteType==='daily'?'block':'none'}">
       <label>交通費（1日あたり・円）</label>
       <input type="number" id="ef_commutePerDay" value="${emp.commutePerDay||0}">
+    </div>
+    <div class="form-group" id="ef_commuteDistanceGroup" style="display:${emp.commuteType==='distance'?'block':'none'}">
+      <label>通勤距離（片道・km）</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="number" id="ef_commuteKm" value="${emp.commuteKm||0}" step="0.1" min="0" style="flex:1" oninput="updateCommuteDistanceUI()">
+        <button type="button" class="btn-outline" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="openCommuteMap()">🗺 距離を測る</button>
+      </div>
+      <div id="ef_commuteDistanceNote" style="font-size:11px;color:#666;margin-top:4px"></div>
     </div>
   </div>
     <div class="form-group"><label>扶養人数</label><input type="number" id="ef_dep" value="${emp.dependents||0}" min="0"></div>
@@ -577,6 +590,9 @@ function employeeForm(emp, isNew) {
     </div>
   </div>
   <div class="form-row">
+    <div class="form-group"><label>住所（交通費の距離計算・大洗町判定に使用）</label><input type="text" id="ef_address" value="${emp.address||''}" placeholder="例：茨城県水戸市○○1-2-3" oninput="updateCommuteDistanceUI()"></div>
+  </div>
+  <div class="form-row">
     <div class="form-group"><label>電話番号</label><input type="text" id="ef_phone" value="${emp.phone||''}" placeholder="090-0000-0000"></div>
     <div class="form-group"><label>緊急連絡先</label><input type="text" id="ef_emergencyPhone" value="${emp.emergencyPhone||''}" placeholder="続柄・氏名・電話番号"></div>
   </div>
@@ -610,6 +626,7 @@ function saveEmployee(id, isNew) {
     commute: parseInt(get('ef_commute')?.value)||0,
     commuteType: document.querySelector('input[name="commuteType"]:checked')?.value || 'fixed',
     commutePerDay: parseInt(get('ef_commutePerDay')?.value)||0,
+    commuteKm: parseFloat(get('ef_commuteKm')?.value)||0,
     positionAllowance: parseInt(get('ef_positionAllowance')?.value)||0,
     fixedOTHours: parseInt(get('ef_fixedOTHours')?.value)||0,
     targetGross: parseInt(get('ef_targetGross')?.value)||0,
