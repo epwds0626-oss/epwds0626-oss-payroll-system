@@ -477,10 +477,11 @@ function calcSalaryWithAdj(emp, year, month) {
   }
 
   // 支給合計・控除合計・振込額を再計算
+  // 【修正 R8.7.14】中退共掛金は全額事業主負担のため控除合計に算入しない
   sal.grossTotal    = sal.basePay + sal.skillPay + sal.positionAllowancePay
     + sal.otPay + sal.midnightPay + sal.holidayLegalPay + sal.commute;
   sal.totalDeduction = sal.kenpo + sal.kosei + sal.shienkin + sal.koyoHoken
-    + sal.incomeTax + sal.juminzei + sal.chutaikyoAmount;
+    + sal.incomeTax + sal.juminzei;
   sal.netPay = Math.round(sal.grossTotal - sal.totalDeduction);
   return sal;
 }
@@ -1247,8 +1248,11 @@ function calcSalary(emp, year, month) {
   const incomeTax = (emp.type === '業務委託') ? 0 : calcIncomeTax(taxable, emp.dependents, emp.tax);
 
   const juminzei        = emp.juminzei || 0;
+  // 【修正 R8.7.14】中退共掛金は中小企業退職金共済法により全額事業主負担。
+  // 賃金からの控除は本人同意があっても不可（労基法24条 全額払い原則にも抵触）。
+  // 従来は控除合計に算入していた＝違法控除。金額は参考情報として保持するが控除しない。
   const chutaikyoAmount = (emp.chutaikyo === '加入') ? (emp.chutaikyoAmount || 0) : 0;
-  const totalDeduction  = kenpo + kosei + shienkin + koyoHoken + incomeTax + juminzei + chutaikyoAmount;
+  const totalDeduction  = kenpo + kosei + shienkin + koyoHoken + incomeTax + juminzei;
   const netPay          = Math.round(grossTotal - totalDeduction);
 
   return {
