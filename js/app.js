@@ -354,7 +354,15 @@ function renderEmployees() {
             <td>${emp.dept||'—'}</td>
             <td>${emp.payType}</td>
             <td>¥${(emp.payType==='月給'?emp.baseSalary:emp.hourlyWage).toLocaleString()}</td>
-            <td>¥${(emp.commute||0).toLocaleString()}</td>
+            <td>${
+              emp.commuteType==='distance'
+                ? (String(emp.address||'').includes('大洗町')
+                    ? '<span style="color:#b91c1c;font-size:11px">大洗町・不支給</span>'
+                    : `<span style="font-size:11px">${emp.commuteKm||0}km<br>¥${Math.round((emp.commuteKm||0)*2*COMMUTE_YEN_PER_KM).toLocaleString()}/日</span>`)
+                : emp.commuteType==='daily'
+                ? `<span style="font-size:11px">¥${(emp.commutePerDay||0).toLocaleString()}/日</span>`
+                : `¥${(emp.commute||0).toLocaleString()}`
+            }</td>
             <td><span class="badge ${(emp.paymentMethod||'振込')==='振込'?'badge-blue':'badge-yellow'}">${emp.paymentMethod||'振込'}</span></td>
             <td style="min-width:200px">${insuranceHtml}</td>
             <td>${emp.hireDate||'—'}</td>
@@ -533,7 +541,8 @@ function employeeForm(emp, isNew) {
     <div class="form-group" id="ef_commuteDistanceGroup" style="display:${emp.commuteType==='distance'?'block':'none'}">
       <label>通勤距離（片道・km）</label>
       <div style="display:flex;gap:8px;align-items:center">
-        <input type="number" id="ef_commuteKm" value="${emp.commuteKm||0}" step="0.1" min="0" style="flex:1" oninput="updateCommuteDistanceUI()">
+        <input type="number" id="ef_commuteKm" value="${emp.commuteKm||0}" step="0.1" min="0" style="width:90px;min-width:90px;flex:none;text-align:right" oninput="updateCommuteDistanceUI()">
+        <span style="font-size:12px;color:#666">km</span>
         <button type="button" class="btn-outline" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="openCommuteMap()">🗺 距離を測る</button>
       </div>
       <div id="ef_commuteDistanceNote" style="font-size:11px;color:#666;margin-top:4px"></div>
