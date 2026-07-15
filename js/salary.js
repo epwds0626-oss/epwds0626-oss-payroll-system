@@ -206,6 +206,7 @@ function payslipHTML(emp, sal, year, month) {
         ${sal.holidayLegalPay>0?adjRow(emp.id,year,month,'holidayLegalPay','法定休日手当（木曜 35%）',sal.holidayLegalPay):''}
         ${sal.monthHolidayNonLegal>0?`<div style="display:flex;justify-content:space-between;padding:3px 0;color:#999"><span>法定外休日（水曜）出勤 ${hm(sal.monthHolidayNonLegal)}</span><span>週OT分に含む</span></div>`:''}
         ${adjRow(emp.id,year,month,'commute','交通費',sal.commute)}
+        ${sal.commute>0 && sal.commuteNote?`<div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${sal.commuteNote}</div>`:''}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>支給合計</span><span>¥${sal.grossTotal.toLocaleString()}</span>
         </div>
@@ -363,6 +364,7 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
         ${midnightPay>0?adjRow(`${emp.id}_enya`,year,month,'midnightPay','深夜手当（22時〜 25%）',midnightPay):''}
         ${holidayLegalPay>0?adjRow(`${emp.id}_enya`,year,month,'holidayLegalPay','法定休日手当（木曜 35%）',holidayLegalPay):''}
         ${commute>0?adjRow(`${emp.id}_enya`,year,month,'commute','交通費',commute):''}
+        ${commute>0 && salE.commuteNote?`<div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${salE.commuteNote}</div>`:''}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>支給合計</span><span>¥${grossTotal.toLocaleString()}</span>
         </div>
