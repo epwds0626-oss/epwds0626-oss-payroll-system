@@ -1253,7 +1253,7 @@ function calcSalary(emp, year, month) {
     commuteAdj = Math.max(0, Math.round(needed));
   }
 
-  const grossTotal = Math.round(basePay + positionAllowanceAdj + otPay + midnightPay + holidayLegalPay + commuteAdj);
+  let grossTotal = Math.round(basePay + positionAllowanceAdj + otPay + midnightPay + holidayLegalPay + commuteAdj);
 
   // 社会保険
   let kenpo = 0, kosei = 0, shienkin = 0;
@@ -1267,9 +1267,27 @@ function calcSalary(emp, year, month) {
   if (emp.koyo === '加入') koyoHoken = Math.round(grossTotal * KOYO_RATE);
 
   // 所得税
-  // ※業務委託は給与所得ではないため、給与の源泉徴収税額表による所得税計算は行わない
-  const taxable   = grossTotal - commuteAdj - kenpo - kosei - shienkin - koyoHoken;
-  const incomeTax = (emp.type === '業務委託') ? 0 : calcIncomeTax(taxable, emp.dependents, emp.tax);
+  // ※業務委託は原則、給与の源泉徴収税額表の対象外（所得税0）
+  // 【追加 R8.7.19】業務委託でも所得税区分が「乙」のスタッフは乙欄で自動源泉し、
+  //   同額を交通費欄に補填として自動計上する（手取り＝時給×実働を維持する運用）。
+  //   月額課税支給88,000円未満の乙欄税額＝課税支給額×3.063%（1円未満切捨て）。
+  //   ※88,000円以上は月額表乙欄の階段税額への置き換えが必要（要税理士確認）。
+  const taxable = grossTotal - commuteAdj - kenpo - kosei - shienkin - koyoHoken;
+  let incomeTax;
+  if (emp.type === '業務委託') {
+    if (emp.tax === '乙') {
+      incomeTax = Math.floor(Math.max(0, taxable) * 0.03063);
+      if (incomeTax > 0) {
+        commuteAdj += incomeTax;                       // 源泉税相当を交通費で補填
+        grossTotal = Math.round(grossTotal + incomeTax);
+        commuteNoteText = (actualCommute > 0 ? commuteNoteText + '＋' : '') + '源泉税相当補填 ¥' + incomeTax.toLocaleString();
+      }
+    } else {
+      incomeTax = 0;
+    }
+  } else {
+    incomeTax = calcIncomeTax(taxable, emp.dependents, emp.tax);
+  }
 
   const juminzei        = emp.juminzei || 0;
   // 【修正 R8.7.14】中退共掛金は中小企業退職金共済法により全額事業主負担。
