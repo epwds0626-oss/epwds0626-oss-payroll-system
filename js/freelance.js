@@ -16,6 +16,17 @@ function getFreelancePeriod(empId, year, month) {
 
 // 指定期間の日次データを取得（両店スタッフ対応：旧キー・_enya・_marco を統合）
 // 戻り値：{ dateStr: rec }（同日に複数店舗の打刻がある場合は実働時間を合算）
+// 【修正 R8.7.19】日次支払額：給与明細（calcSalary）と同一ロジックで計算する。
+//   支払額 = 時給×実働 + 時給×25%×日8h超 + 時給×25%×(深夜＋深夜残業)
+//   （＝基本給を所定内、残業を125%で払うのと同額。従来は時給×実働の単純掛けで割増が漏れていた）
+//   ※週40h超の割増は日次表示では計上しない。該当が出た月は給与明細側の金額が正。
+function freelanceDayPay(emp, rec) {
+  const rate = emp.hourlyWage || 0;
+  const ot   = rec.dailyOT || 0;
+  const mid  = (rec.midnight || 0) + (rec.midnightOT || 0);
+  return Math.round(rate * (rec.actual || 0) + rate * 0.25 * ot + rate * 0.25 * mid);
+}
+
 function getFreelanceDailyData(empId, startDate, endDate) {
   const result = {};
   const start = new Date(startDate);
@@ -103,7 +114,7 @@ function renderFreelance(year, month) {
     let totalHours = 0, totalPay = 0, unpaidPay = 0;
     for (const [dateStr, rec] of Object.entries(dailyData)) {
       if (rec.actual > 0) {
-        const pay = Math.round((emp.hourlyWage||0) * rec.actual);
+        const pay = freelanceDayPay(emp, rec);
         totalHours += rec.actual;
         totalPay   += pay;
         if (!rec.freelancePaid) unpaidPay += pay;
@@ -190,7 +201,7 @@ function renderFreelanceDetail(empId) {
     const [dy, dm, dd] = dateStr.split('-').map(Number);
     const dow = new Date(dateStr).getDay();
 
-    const pay  = Math.round((emp.hourlyWage||0) * rec.actual);
+    const pay  = freelanceDayPay(emp, rec);
     const paid = rec.freelancePaid ? true : false;
     totalHours += rec.actual;
     totalPay   += pay;
