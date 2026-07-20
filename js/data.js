@@ -1246,14 +1246,24 @@ function calcSalary(emp, year, month) {
   //   残業代が targetGross を超えた場合は交通費=0（追払い発生）
   const skillPay = 0; // 職能給廃止
   const positionAllowanceAdj = 0; // 役職手当廃止
+
+  // 【修正 R8.7.20】丸めの流儀を「各行を丸めてから合計」に全経路で統一。
+  // 従来は素の計算＝実数合計後に丸め／調整適用後＝丸めた各行の合計、と流儀が
+  // 混在しており、端数の重なりで支給合計が目標総支給から1円ずれることがあった。
+  const otPayR       = Math.round(otPay);
+  const midnightPayR = Math.round(midnightPay);
+  const holidayPayR  = Math.round(holidayLegalPay);
+  const basePayR     = Math.round(basePay);
+
   let commuteAdj = actualCommute;
   if (emp.payType === '月給' && emp.targetGross > 0 && !isMarcoSide) {
-    const otTotal = Math.round(otPay + midnightPay + holidayLegalPay);
-    const needed = emp.targetGross - emp.baseSalary - otTotal;
-    commuteAdj = Math.max(0, Math.round(needed));
+    const otTotal = otPayR + midnightPayR + holidayPayR;
+    commuteAdj = Math.max(0, emp.targetGross - emp.baseSalary - otTotal);
+    // 注釈も調整の実態に合わせる（距離式のままだと金額と説明が食い違う）
+    commuteNoteText = '目標総支給（¥' + emp.targetGross.toLocaleString() + '）による調整';
   }
 
-  let grossTotal = Math.round(basePay + positionAllowanceAdj + otPay + midnightPay + holidayLegalPay + commuteAdj);
+  let grossTotal = basePayR + positionAllowanceAdj + otPayR + midnightPayR + holidayPayR + commuteAdj;
 
   // 社会保険
   let kenpo = 0, kosei = 0, shienkin = 0;
@@ -1298,17 +1308,17 @@ function calcSalary(emp, year, month) {
   const netPay          = Math.round(grossTotal - totalDeduction);
 
   return {
-    basePay:             Math.round(basePay),
+    basePay:             basePayR,
     baseHours,           // 時給者の基本給対象時間（h）明細の内訳表示用。月給者は0
     skillPay, skillPayNote: '',
     positionAllowancePay: positionAllowanceAdj,
-    otPay:               Math.round(otPay),
-    midnightPay:         Math.round(midnightPay),
+    otPay:               otPayR,
+    midnightPay:         midnightPayR,
     midnightOnlyPay:     Math.round(midnightOnlyPay),
     midnightOTPay:       Math.round(midnightOTPay),
-    holidayLegalPay:     Math.round(holidayLegalPay),
+    holidayLegalPay:     holidayPayR,
     holidayNonLegalPay:  0,
-    holidayPay:          Math.round(holidayLegalPay),
+    holidayPay:          holidayPayR,
     commute:    commuteAdj,
     commuteNote: commuteNoteText,
     kaigo: isKaigoTarget(emp.birthDate),
