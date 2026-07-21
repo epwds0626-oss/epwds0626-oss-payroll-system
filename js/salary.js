@@ -17,6 +17,7 @@ function renderSalary(year, month) {
     acc.commute  += sal.commute;
     acc.kenpo    += sal.kenpo;
     acc.kosei    += sal.kosei;
+    acc.shienkin += sal.shienkin || 0;
     acc.koyo     += sal.koyoHoken;
     acc.income   += sal.incomeTax;
     acc.jumin    += sal.juminzei;
