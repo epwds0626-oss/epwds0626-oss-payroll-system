@@ -176,6 +176,11 @@ function savePunchEditor(empId, dateStr, dy, dm) {
 
   db.ref(`payroll/attendance/${ym}/${empId}/${dateStr}`).update(updated)
     .then(function() {
+      // 打刻管理ページから編集した場合はそのページを再描画
+      if (typeof currentPage !== 'undefined' && currentPage === 'timecard_manage') {
+        renderPage('timecard_manage');
+        return;
+      }
       // 保存後に現在選択中のスタッフのまま再描画
       const y = parseInt(document.getElementById('targetYear')?.value || dy);
       const m = parseInt(document.getElementById('targetMonth')?.value || dm);
