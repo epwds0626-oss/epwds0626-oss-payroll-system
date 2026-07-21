@@ -69,6 +69,7 @@ function renderPage(page) {
     case 'dashboard':   container.innerHTML = renderDashboard(y,m);   break;
     case 'employees':   container.innerHTML = renderEmployees();       break;
     case 'attendance':  container.innerHTML = renderAttendance(y,m);  break;
+    case 'timecard_manage': container.innerHTML = renderTimecardManage(y,m); break;
     case 'weekly':      container.innerHTML = renderWeekly(y,m);      break;
     case 'monthly':     container.innerHTML = renderMonthly(y,m);     break;
     case 'salary':      container.innerHTML = renderSalary(y,m);      break;
