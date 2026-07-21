@@ -342,6 +342,15 @@ function calcShakai(grossForShakai, birthDateStr = '', hyojunFixed = 0) {
 
 // 雇用保険料率（2025年度〜）: 一般事業 本人負担 5/1000
 const KOYO_RATE = 0.005;
+
+// 雇用保険料の端数処理（源泉控除の原則）
+// 50銭以下 → 切り捨て、50銭1厘以上 → 切り上げ
+// ※四捨五入と異なり、端数がちょうど50銭のときは切り捨てる
+function calcKoyoHoken(amount) {
+  const rin = Math.round(amount * KOYO_RATE * 1000); // 厘（0.001円）単位に丸めてFP誤差を除去
+  const yen = Math.floor(rin / 1000);
+  return (rin - yen * 1000 <= 500) ? yen : yen + 1;
+}
 // 【R8.7.14】距離計算方式の交通費単価（円/km・往復それぞれに適用）と会社住所
 const COMMUTE_YEN_PER_KM = 10;
 const COMPANY_ADDRESS = '茨城県東茨城郡大洗町港中央9-4';
@@ -1274,7 +1283,7 @@ function calcSalary(emp, year, month) {
 
   // 雇用保険
   let koyoHoken = 0;
-  if (emp.koyo === '加入') koyoHoken = Math.round(grossTotal * KOYO_RATE);
+  if (emp.koyo === '加入') koyoHoken = calcKoyoHoken(grossTotal);
 
   // 所得税
   // ※業務委託は原則、給与の源泉徴収税額表の対象外（所得税0）
@@ -1494,7 +1503,7 @@ function calcBonusDeductions(emp, bonusAmount, prevMonthGross = 0, prevMonthNetS
 
   // 雇用保険
   let koyoHoken = 0;
-  if (emp.koyo === '加入') koyoHoken = Math.round(bonusAmount * KOYO_RATE);
+  if (emp.koyo === '加入') koyoHoken = calcKoyoHoken(bonusAmount);
 
   // 賞与所得税（社保控除後の賞与額に税率を乗じる）
   const bonusAfterShakai = bonusAmount - kenpo - kosei - shienkin - koyoHoken;
