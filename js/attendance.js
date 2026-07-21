@@ -179,6 +179,9 @@ function savePunchEditor(empId, dateStr, dy, dm) {
       // 打刻管理ページから編集した場合はそのページを再描画
       if (typeof currentPage !== 'undefined' && currentPage === 'timecard_manage') {
         renderPage('timecard_manage');
+        // 個人別一覧モーダルを開いていた場合は最新データで再表示
+        const ctx = window._tcmDetailCtx;
+        if (ctx && typeof tcmOpenDetail === 'function') tcmOpenDetail(ctx.empId, ctx.year, ctx.month);
         return;
       }
       // 保存後に現在選択中のスタッフのまま再描画
