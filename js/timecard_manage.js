@@ -219,19 +219,26 @@ function tcmOpenEditor(empId, dateStr, year, month) {
 // マトリクスをCSV出力（1行＝スタッフ×日）
 function exportTimecardManageCSV(year, month) {
   const dates  = tcmDates(year, month);
-  const header = ['氏名','店舗','日付','曜日','出勤','退勤','休憩(分)','実働(h)','残業(h)','深夜(h)','有給','欠勤','打刻漏れ'];
+  const header = ['氏名','店舗','日付','曜日','出勤','休憩1入','休憩1戻','休憩2入','休憩2戻','休憩3入','休憩3戻','退勤','休憩計(分)','実働(h)','残業(h)','深夜(h)','有給','欠勤','打刻漏れ'];
   const rowsCsv = [];
+  const r2 = v => Math.round((v || 0) * 100) / 100;
   for (const emp of activeEmployeesExpanded()) {
     if (_tcmStore !== '全店' && tcmRowStore(emp) !== _tcmStore) continue;
     const map = tcmEmpMap(emp.id, year, month);
     for (const d of dates) {
       const r = map[d];
       if (!r) continue;
+      const brs = (r.breaks || []).filter(b => b.start || b.end);
+      while (brs.length < 3) brs.push({});
       const brMins = r.breakMins || (r.breaks || []).reduce((s, b) => s + (b.minutes || 0), 0);
       rowsCsv.push([
         emp.name, tcmRowStore(emp), d.replace(/-/g,'/'), DOW_NAMES[new Date(d).getDay()],
-        r.punchIn || '', r.punchOut || '', Math.round(brMins) || 0,
-        r.actual || 0, r.dailyOT || 0, r.midnight || 0,
+        r.punchIn || '',
+        brs[0].start || '', brs[0].end || '',
+        brs[1].start || '', brs[1].end || '',
+        brs[2].start || '', brs[2].end || '',
+        r.punchOut || '', Math.round(brMins) || 0,
+        r2(r.actual), r2(r.dailyOT), r2(r.midnight),
         r.paidLeave ? 1 : 0, r.absent ? 1 : 0, tcmIsMiss(r) ? '⚠' : ''
       ]);
     }
@@ -381,18 +388,24 @@ function tcmOpenDetail(empId, year, month) {
 function exportTcmDetailCSV(empId, year, month) {
   const emp = activeEmployeesExpanded().find(e => String(e.id) === String(empId));
   if (!emp) return;
-  const header = ['日付','曜日','出勤','休憩入','休憩戻','退勤','休憩(分)','実働(h)','残業(h)','深夜(h)','有給','欠勤'];
+  const header = ['日付','曜日','出勤','休憩1入','休憩1戻','休憩2入','休憩2戻','休憩3入','休憩3戻','退勤','休憩計(分)','実働(h)','残業(h)','深夜(h)','有給','欠勤'];
   const map = tcmEmpMap(empId, year, month);
   const rows = [];
+  const r2 = v => Math.round((v || 0) * 100) / 100;
   for (const d of tcmDates(year, month)) {
     const r = map[d];
     if (!r) continue;
     const brs = (r.breaks || []).filter(b => b.start || b.end);
+    while (brs.length < 3) brs.push({});
     const brMins = r.breakMins || (r.breaks || []).reduce((s,b) => s + (b.minutes||0), 0);
     rows.push([
       d.replace(/-/g,'/'), DOW_NAMES[new Date(d).getDay()],
-      r.punchIn || '', brs.map(b=>b.start||'').join(' / '), brs.map(b=>b.end||'').join(' / '), r.punchOut || '',
-      Math.round(brMins) || 0, r.actual || 0, r.dailyOT || 0, r.midnight || 0,
+      r.punchIn || '',
+      brs[0].start || '', brs[0].end || '',
+      brs[1].start || '', brs[1].end || '',
+      brs[2].start || '', brs[2].end || '',
+      r.punchOut || '',
+      Math.round(brMins) || 0, r2(r.actual), r2(r.dailyOT), r2(r.midnight),
       r.paidLeave ? 1 : 0, r.absent ? 1 : 0
     ]);
   }
