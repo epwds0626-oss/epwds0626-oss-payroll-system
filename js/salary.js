@@ -253,12 +253,24 @@ function payslipHTML(emp, sal, year, month) {
 // 固定残業手当の明細行を生成（パターンA：固定残業行＋超過残業行）
 // emp: 従業員マスタ、sal: calcSalary結果、empIdStr: adjRow用ID文字列
 function fixedOTRows(emp, sal, empIdStr, year, month) {
+  // 【追加 R8.7.24】残業手当合計（otPay）に手動調整が入っている場合の警告行。
+  // 内訳行は時間ベースの計算値を表示する一方、支給合計は調整後のotPayで
+  // 計算されるため、調整が見えないと内訳と合計が食い違って見える。
+  // ここで明示的に表示し、クリックで編集・解除できるようにする。
+  const _adj = getAdj(year, month, empIdStr);
+  const otAdjWarn = _adj.otPay !== undefined ? `
+    <div style="display:flex;justify-content:space-between;padding:4px 6px;margin:2px 0;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;cursor:pointer;font-size:12px"
+      title="クリックして編集・解除" onclick="openAdjInput('${empIdStr}',${year},${month},'otPay',${sal.otPay})">
+      <span style="color:#92400e;font-weight:700">⚠ 残業手当合計に手動調整あり（合計は下記内訳でなくこの額で計算）</span>
+      <span style="color:#d97706;font-weight:700">¥${(sal.otPay||0).toLocaleString()}</span>
+    </div>` : '';
   const fixedH = emp.fixedOTHours || 0;
   if (!fixedH || emp.payType !== '月給') {
     // 固定残業なし：従来表示（端数差異を出さないため〜60h側は合計との差分で確定）
     const ot60oPay = sal.ot60over  > 0 ? Math.round(sal.ot60over * sal.hourlyBase * 1.50) : 0;
     const ot60Pay  = sal.ot60under > 0 ? Math.max(0, (sal.otPay || 0) - ot60oPay) : 0;
     return `
+      ${otAdjWarn}
       ${ot60Pay > 0 ? `
         <div style="display:flex;justify-content:space-between;padding:3px 0">
           <span>残業手当（〜60h 125%）</span><span>¥${ot60Pay.toLocaleString()}</span>
@@ -301,6 +313,7 @@ function fixedOTRows(emp, sal, empIdStr, year, month) {
     : '';
 
   return `
+    ${otAdjWarn}
     <div style="display:flex;justify-content:space-between;padding:3px 0">
       <span>固定残業（${fixedH}h×¥${h.toLocaleString()}×125%）</span><span>¥${fixedOTPay.toLocaleString()}</span>
     </div>
