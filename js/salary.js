@@ -15,6 +15,7 @@ function renderSalary(year, month) {
     acc.midnight += sal.midnightPay;
     acc.holiday  += sal.holidayPay;
     acc.commute  += sal.commute;
+    acc.chousei  += sal.chouseikin || 0;
     acc.kenpo    += sal.kenpo;
     acc.kosei    += sal.kosei;
     acc.shienkin += sal.shienkin || 0;
@@ -24,7 +25,7 @@ function renderSalary(year, month) {
     acc.deduct   += sal.totalDeduction;
     acc.net      += sal.netPay;
     return acc;
-  }, { gross:0,base:0,otPay:0,midnight:0,holiday:0,commute:0,kenpo:0,kosei:0,shienkin:0,koyo:0,income:0,jumin:0,deduct:0,net:0 });
+  }, { gross:0,base:0,otPay:0,midnight:0,holiday:0,commute:0,chousei:0,kenpo:0,kosei:0,shienkin:0,koyo:0,income:0,jumin:0,deduct:0,net:0 });
 
   // 残業手当の60h超（150%）部分の合計（フッター表示用）
   // 手動調整済みスタッフは分割せず〜60h列に合計表示するため加算しない
@@ -79,7 +80,7 @@ function renderSalary(year, month) {
         <tr>
           <th class="tl">氏名</th>
           <th>基本給<br>/時給計</th><th>残業<br>(〜60h)</th><th class="col-hide">残業<br>(60h超)</th>
-          <th>深夜</th><th class="col-hide">法定休日<br>35%</th><th class="col-hide">法定外休日<br>(週OT分)</th><th>交通費</th>
+          <th>深夜</th><th class="col-hide">法定休日<br>35%</th><th class="col-hide">法定外休日<br>(週OT分)</th><th>交通費</th><th>調整金</th>
           <th>健保</th><th>厚年</th><th>子育<br>支援金</th>
           <th>雇保</th><th>所得税</th><th>住民税</th>
           <th>差引<br>振込額</th>
@@ -96,6 +97,7 @@ function renderSalary(year, month) {
         ${adjCellHide(adjId,year,month,'holidayLegalPay',sal.holidayLegalPay)}
         <td class="col-hide">—</td>
         ${adjCell(adjId,year,month,'commute',sal.commute)}
+        ${adjCell(adjId,year,month,'chouseikin',sal.chouseikin||0)}
         ${adjCell(adjId,year,month,'kenpo',sal.kenpo)}
         ${adjCell(adjId,year,month,'kosei',sal.kosei)}
         ${adjCell(adjId,year,month,'shienkin',sal.shienkin)}
@@ -114,6 +116,7 @@ function renderSalary(year, month) {
         <td class="col-hide">¥${totals.holiday.toLocaleString()}</td>
         <td class="col-hide">—</td>
         <td>¥${totals.commute.toLocaleString()}</td>
+        <td>${totals.chousei ? `¥${totals.chousei.toLocaleString()}` : '—'}</td>
         <td>¥${totals.kenpo.toLocaleString()}</td>
         <td>¥${totals.kosei.toLocaleString()}</td>
         <td>¥${(totals.shienkin||0).toLocaleString()}</td>
@@ -128,10 +131,10 @@ function renderSalary(year, month) {
 }
 
 function exportSalaryCSV(year, month) {
-  const header = ['氏名','雇用区分','基本給/時給計','残業手当','深夜手当','休日手当','交通費','支給合計','健保','厚年','子育支援金','雇保','所得税','住民税','控除合計','振込額'];
+  const header = ['氏名','雇用区分','基本給/時給計','残業手当','深夜手当','休日手当','交通費','調整金','支給合計','健保','厚年','子育支援金','雇保','所得税','住民税','控除合計','振込額'];
   const rows = activeEmployees().map(emp => {
     const s = calcSalaryWithAdjBoth(emp, year, month);
-    return [emp.name, emp.type, s.basePay, s.otPay, s.midnightPay, s.holidayPay, s.commute, s.grossTotal, s.kenpo, s.kosei, s.shienkin||0, s.koyoHoken, s.incomeTax, s.juminzei, s.totalDeduction, s.netPay];
+    return [emp.name, emp.type, s.basePay, s.otPay, s.midnightPay, s.holidayPay, s.commute, s.chouseikin||0, s.grossTotal, s.kenpo, s.kosei, s.shienkin||0, s.koyoHoken, s.incomeTax, s.juminzei, s.totalDeduction, s.netPay];
   });
   const csv = [header,...rows].map(r=>r.join(',')).join('\n');
   dlFile(`給与計算_${year}年${month}月.csv`, csv, 'text/csv');
@@ -539,6 +542,7 @@ function openEmpAdjDialog(empId, year, month) {
       { key: 'midnightPay',      label: '深夜手当',            val: sal.midnightPay },
       { key: 'holidayLegalPay',  label: '法定休日手当',        val: sal.holidayLegalPay },
       { key: 'commute',          label: '交通費',              val: sal.commute },
+      { key: 'chouseikin',       label: '調整金',              val: sal.chouseikin||0 },
     ]},
     { section: '控除', items: [
       { key: 'kenpo',            label: '健康保険料',          val: sal.kenpo },
@@ -1103,6 +1107,7 @@ function printSelectedSalary(year, month) {
       <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.midnightPay)}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.holidayLegalPay)}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.commute)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.chouseikin||0)}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:700">${fmt(s.grossTotal)}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.kenpo)}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(s.kosei)}</td>
@@ -1124,6 +1129,7 @@ function printSelectedSalary(year, month) {
     acc.mid    += s.midnightPay;
     acc.hol    += s.holidayLegalPay || 0;
     acc.com    += s.commute;
+    acc.cho    += s.chouseikin || 0;
     acc.gross  += s.grossTotal;
     acc.kenpo  += s.kenpo;
     acc.kosei  += s.kosei;
@@ -1134,7 +1140,7 @@ function printSelectedSalary(year, month) {
     acc.deduct += s.totalDeduction;
     acc.net    += s.netPay;
     return acc;
-  }, {base:0,ot:0,mid:0,hol:0,com:0,gross:0,kenpo:0,kosei:0,shien:0,koyo:0,income:0,jumin:0,deduct:0,net:0});
+  }, {base:0,ot:0,mid:0,hol:0,com:0,cho:0,gross:0,kenpo:0,kosei:0,shien:0,koyo:0,income:0,jumin:0,deduct:0,net:0});
 
   const fmt2 = v => v ? `¥${v.toLocaleString()}` : '—';
   const prevYear  = month === 1 ? year - 1 : year;
@@ -1171,7 +1177,7 @@ function printSelectedSalary(year, month) {
   </div>
   <table>
     <thead><tr>
-      <th>氏名</th><th>基本給/時給計</th><th>残業(〜60h)</th><th>深夜</th><th>法定休日</th><th>交通費</th>
+      <th>氏名</th><th>基本給/時給計</th><th>残業(〜60h)</th><th>深夜</th><th>法定休日</th><th>交通費</th><th>調整金</th>
       <th>支給合計</th><th>健保</th><th>厚年</th><th>子育支援</th><th>雇保</th><th>所得税</th><th>住民税</th><th>振込額</th>
     </tr></thead>
     <tbody>${rows}</tbody>
@@ -1182,6 +1188,7 @@ function printSelectedSalary(year, month) {
       <td>${fmt2(totals.mid)}</td>
       <td>${fmt2(totals.hol)}</td>
       <td>${fmt2(totals.com)}</td>
+      <td>${fmt2(totals.cho)}</td>
       <td>¥${totals.gross.toLocaleString()}</td>
       <td>${fmt2(totals.kenpo)}</td>
       <td>${fmt2(totals.kosei)}</td>
