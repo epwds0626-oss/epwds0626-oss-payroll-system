@@ -141,6 +141,7 @@ function exportSalaryCSV(year, month) {
 function renderPayslip(year, month) {
   // 給与計算ページを経由しなくても調整値（salaryAdj）が反映されるよう、ここでも購読する
   subscribeAdj(year, month);
+  subscribePayslipComments(year, month);
   // 給与明細のセレクトは展開前（両店スタッフも1行）
   const empOptions = activeEmployees().map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
   return `
@@ -208,6 +209,7 @@ function payslipHTML(emp, sal, year, month) {
         ${sal.holidayLegalPay>0?adjRow(emp.id,year,month,'holidayLegalPay','法定休日手当（木曜 35%）',sal.holidayLegalPay):''}
         ${sal.monthHolidayNonLegal>0?`<div style="display:flex;justify-content:space-between;padding:3px 0;color:#999"><span>法定外休日（水曜）出勤 ${hm(sal.monthHolidayNonLegal)}</span><span>週OT分に含む</span></div>`:''}
         ${adjRow(emp.id,year,month,'commute','交通費',sal.commute)}
+        ${adjRow(emp.id,year,month,'chouseikin','調整金',sal.chouseikin||0)}
         ${sal.commute>0 && sal.commuteNote?`<div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${sal.commuteNote}</div>`:''}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>支給合計</span><span>¥${sal.grossTotal.toLocaleString()}</span>
@@ -248,7 +250,51 @@ function payslipHTML(emp, sal, year, month) {
         <div>欠勤：${sal.absentDays}日</div>
       </div>
     </div>
+    ${payslipCommentSection(emp.id, year, month)}
   </div>`;
+}
+
+
+// ===== 給与明細コメント欄 =====
+// Firebase: payroll/payslipComment/{ym}/{empId} = テキスト
+let payslipComments = {}; // { ym: { empId: text } }
+let _pscSubYm = null;
+function subscribePayslipComments(year, month) {
+  const ym = `${year}-${String(month).padStart(2,'0')}`;
+  if (_pscSubYm === ym) return;
+  _pscSubYm = ym;
+  db.ref(`payroll/payslipComment/${ym}`).on('value', s => {
+    payslipComments[ym] = s.val() || {};
+  });
+}
+function getPayslipComment(year, month, empId) {
+  const ym = `${year}-${String(month).padStart(2,'0')}`;
+  return (payslipComments[ym] || {})[String(empId)] || '';
+}
+function savePayslipComment(year, month, empId) {
+  const ta = document.getElementById(`pscTa_${empId}`);
+  if (!ta) return;
+  const ym = `${year}-${String(month).padStart(2,'0')}`;
+  const text = ta.value.trim();
+  if (!payslipComments[ym]) payslipComments[ym] = {};
+  payslipComments[ym][String(empId)] = text;
+  db.ref(`payroll/payslipComment/${ym}/${empId}`).set(text || null)
+    .then(() => { const b = document.getElementById(`pscBtn_${empId}`); if (b) { b.textContent = '✓ 保存済み'; setTimeout(() => { b.textContent = '保存'; }, 1500); } });
+}
+// 明細下部のコメントセクション（画面では編集可、印刷ではテキストのみ）
+function payslipCommentSection(empId, year, month) {
+  const text = getPayslipComment(year, month, empId);
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return `
+    <div style="margin-top:14px;border-top:1px dashed #c9d4e0;padding-top:10px">
+      <div style="font-weight:700;font-size:12px;color:#1a3a5c;margin-bottom:4px">備考・コメント</div>
+      ${text ? `<div class="psc-text" style="font-size:12px;line-height:1.7;background:#fffdf5;border:1px solid #ede5c8;border-radius:6px;padding:8px 10px;white-space:pre-wrap">${esc(text)}</div>` : ''}
+      <div class="psc-edit" style="margin-top:6px">
+        <textarea id="pscTa_${empId}" rows="2" placeholder="例：未払賃金の精算分を含む／賞与査定対象月 など"
+          style="width:100%;box-sizing:border-box;border:1px solid #dce3ec;border-radius:6px;padding:7px 10px;font-family:inherit;font-size:12px;resize:vertical">${esc(text)}</textarea>
+        <button id="pscBtn_${empId}" class="btn-outline" style="margin-top:4px" onclick="savePayslipComment(${year},${month},'${empId}')">保存</button>
+      </div>
+    </div>`;
 }
 
 // 固定残業手当の明細行を生成（パターンA：固定残業行＋超過残業行）
@@ -379,6 +425,7 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
         ${midnightPay>0?adjRow(`${emp.id}_enya`,year,month,'midnightPay','深夜手当（22時〜 25%）',midnightPay):''}
         ${holidayLegalPay>0?adjRow(`${emp.id}_enya`,year,month,'holidayLegalPay','法定休日手当（木曜 35%）',holidayLegalPay):''}
         ${commute>0?adjRow(`${emp.id}_enya`,year,month,'commute','交通費',commute):''}
+        ${adjRow(`${emp.id}_enya`,year,month,'chouseikin','調整金',(salE.chouseikin||0))}
         ${commute>0 && salE.commuteNote?`<div style="padding:1px 0 3px 12px;font-size:11px;color:#888">${salE.commuteNote}</div>`:''}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>支給合計</span><span>¥${grossTotal.toLocaleString()}</span>
@@ -417,6 +464,7 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
         内訳：本店勤務 ${hm(enyaActual)}　／　内マルコ勤務 ${hm(marcoActual)}
       </div>
     </div>
+    ${payslipCommentSection(emp.id, year, month)}
   </div>`;
 }
 
@@ -424,7 +472,9 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
 function adjCellHide(empId, year, month, field, value) {
   const adj = getAdj(year, month, empId);
   const isAdj = adj[field] !== undefined;
-  const disp = value > 0 ? `¥${value.toLocaleString()}` : '—';
+  const disp = value > 0 ? `¥${value.toLocaleString()}`
+    : value < 0 ? `<span style="color:#dc2626">-¥${Math.abs(value).toLocaleString()}</span>`
+    : '—';
   const style = isAdj ? 'color:#d97706;font-weight:700;cursor:pointer' : 'cursor:pointer';
   return `<td class="col-hide" style="${style}" title="クリックして編集"
     onclick="openAdjInput('${empId}',${year},${month},'${field}',${value})">${disp}</td>`;
@@ -448,7 +498,9 @@ function otSplitCells(empId, year, month, sal) {
 function adjCell(empId, year, month, field, value) {
   const adj = getAdj(year, month, empId);
   const isAdj = adj[field] !== undefined;
-  const disp = value > 0 ? `¥${value.toLocaleString()}` : '—';
+  const disp = value > 0 ? `¥${value.toLocaleString()}`
+    : value < 0 ? `<span style="color:#dc2626">-¥${Math.abs(value).toLocaleString()}</span>`
+    : '—';
   const style = isAdj ? 'color:#d97706;font-weight:700;cursor:pointer' : 'cursor:pointer';
   return `<td style="${style}" title="クリックして編集"
     onclick="openAdjInput('${empId}',${year},${month},'${field}',${value})">${disp}</td>`;
@@ -458,7 +510,9 @@ function adjCell(empId, year, month, field, value) {
 function adjRow(empId, year, month, field, label, value) {
   const adj = getAdj(year, month, empId);
   const isAdj = adj[field] !== undefined;
-  const disp = value > 0 ? `¥${value.toLocaleString()}` : '—';
+  const disp = value > 0 ? `¥${value.toLocaleString()}`
+    : value < 0 ? `<span style="color:#dc2626">-¥${Math.abs(value).toLocaleString()}</span>`
+    : '—';
   const adjBadge = isAdj ? ' <span style="font-size:10px;background:#fef3c7;color:#d97706;border-radius:3px;padding:0 3px">調整</span>' : '';
   const style = isAdj ? 'color:#d97706;font-weight:700' : '';
   return `<div style="display:flex;justify-content:space-between;padding:3px 0;cursor:pointer" title="クリックして編集"
@@ -631,6 +685,7 @@ function printAllPayslips(year, month) {
     body{font-family:'Noto Sans JP',sans-serif;font-size:12px}
     .slip{max-width:680px;margin:0 auto 40px;padding:20px;border:1px solid #ccc;page-break-after:always}
     @media print{.slip{break-after:page}}
+    .psc-edit{display:none}
   </style></head><body>`);
   for (const emp of activeEmployees()) {
     if (emp.store === '両店') {
@@ -698,6 +753,7 @@ function printSelectedPayslips(year, month) {
     body{font-family:'Noto Sans JP',sans-serif;font-size:12px}
     .slip{max-width:680px;margin:0 auto 40px;padding:20px;border:1px solid #ccc;page-break-after:always}
     @media print{.slip{break-after:page}}
+    .psc-edit{display:none}
   </style></head><body>`);
   for (const id of selected) {
     const emp = employees.find(e => e.id === id);
