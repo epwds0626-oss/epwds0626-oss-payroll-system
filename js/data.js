@@ -481,7 +481,7 @@ function calcSalaryWithAdj(emp, year, month) {
 
   // 各項目に調整値を上書き
   const fields = ['basePay','skillPay','otPay','midnightPay',
-    'holidayLegalPay','commute','kenpo','kosei','shienkin','koyoHoken',
+    'holidayLegalPay','commute','chouseikin','kenpo','kosei','shienkin','koyoHoken',
     'incomeTax','juminzei','chutaikyoAmount'];
   sal.positionAllowancePay = 0; // 役職手当廃止（調整データが残っていても無視）
   for (const f of fields) {
@@ -491,7 +491,8 @@ function calcSalaryWithAdj(emp, year, month) {
   // 支給合計・控除合計・振込額を再計算
   // 【修正 R8.7.14】中退共掛金は全額事業主負担のため控除合計に算入しない
   sal.grossTotal    = sal.basePay + sal.skillPay + sal.positionAllowancePay
-    + sal.otPay + sal.midnightPay + sal.holidayLegalPay + sal.commute;
+    + sal.otPay + sal.midnightPay + sal.holidayLegalPay + sal.commute
+    + (sal.chouseikin || 0);
   sal.totalDeduction = sal.kenpo + sal.kosei + sal.shienkin + sal.koyoHoken
     + sal.incomeTax + sal.juminzei;
   sal.netPay = Math.round(sal.grossTotal - sal.totalDeduction);
