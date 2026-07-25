@@ -152,6 +152,7 @@ function renderPayslip(year, month) {
     <select id="payslipEmpSel" onchange="renderPayslipDetail(${year},${month})" style="border:1px solid #dce3ec;border-radius:6px;padding:6px 12px;font-family:inherit;font-size:13px">
       ${empOptions}
     </select>
+    <button class="btn-outline" style="margin-left:8px" onclick="openPayslipPrintSelector(${year},${month})">🖨 スタッフ選択印刷</button>
     <button class="btn-outline" style="margin-left:8px" onclick="printAllPayslips(${year},${month})">全員分 一括印刷</button>
     <button class="btn-outline" style="margin-left:8px;background:#fef3c7;border-color:#f59e0b;color:#92400e" onclick="openTargetGrossModal(${year},${month})">💰 月別目標支給設定</button>
   </div>
@@ -635,11 +636,81 @@ function printAllPayslips(year, month) {
     if (emp.store === '両店') {
       const empE = { ...emp, id: `${emp.id}_enya`,  name: `${emp.name}【本店】` };
       const empM = { ...emp, id: `${emp.id}_marco`, name: `${emp.name}【マルコ】` };
-      const salE = calcSalary(empE, year, month);
-      const salM = calcSalary(empM, year, month);
+      const salE = calcSalaryWithAdj(empE, year, month);
+      const salM = calcSalaryWithAdj(empM, year, month);
       w.document.write(`<div class="slip">${payslipHTMLBoth(emp, salE, salM, year, month).replace(/class="card[^"]*"/g,'')}</div>`);
     } else {
-      const sal = calcSalary(emp, year, month);
+      const sal = calcSalaryWithAdj(emp, year, month);
+      w.document.write(`<div class="slip">${payslipHTML(emp, sal, year, month).replace(/class="card[^"]*"/g,'')}</div>`);
+    }
+  }
+  w.document.write('</body></html>');
+  w.document.close();
+  w.print();
+}
+
+// ===== 給与明細：スタッフ選択印刷 =====
+function openPayslipPrintSelector(year, month) {
+  const existing = document.getElementById('payslipPrintModal');
+  if (existing) existing.remove();
+
+  // 両店スタッフは1枚に合算されるため展開前リストで選択
+  const checkboxes = activeEmployees().map(emp => `
+    <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid #f0f3f7;cursor:pointer">
+      <input type="checkbox" value="${emp.id}" class="pspChk" checked>
+      <span style="font-weight:600;color:#1a3a5c">${emp.name}</span>
+      <span style="font-size:11px;color:#8a94a3">${emp.store || ''}</span>
+    </label>`).join('');
+
+  const modal = document.createElement('div');
+  modal.id = 'payslipPrintModal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,25,35,0.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:420px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,0.3)">
+      <div style="background:#1a3a5c;color:#fff;padding:13px 18px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:800;font-size:15px">🖨 明細を印刷するスタッフを選択</div>
+        <button onclick="document.getElementById('payslipPrintModal').remove()"
+          style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer">✕</button>
+      </div>
+      <div style="display:flex;gap:8px;padding:10px 18px;border-bottom:1px solid #eef1f5">
+        <button class="btn-outline" onclick="document.querySelectorAll('.pspChk').forEach(c=>c.checked=true)">全選択</button>
+        <button class="btn-outline" onclick="document.querySelectorAll('.pspChk').forEach(c=>c.checked=false)">全解除</button>
+      </div>
+      <div style="overflow:auto;flex:1">${checkboxes}</div>
+      <div style="display:flex;gap:8px;padding:12px 18px;border-top:1px solid #eef1f5">
+        <button onclick="printSelectedPayslips(${year},${month})"
+          style="flex:1;background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;cursor:pointer;font-weight:700;font-family:inherit">🖨 印刷</button>
+        <button onclick="document.getElementById('payslipPrintModal').remove()"
+          style="background:#f3f4f6;border:none;border-radius:8px;padding:11px 18px;font-size:14px;cursor:pointer;font-family:inherit">キャンセル</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function printSelectedPayslips(year, month) {
+  const selected = [...document.querySelectorAll('.pspChk:checked')].map(c => parseInt(c.value));
+  document.getElementById('payslipPrintModal').remove();
+  if (!selected.length) return;
+
+  const w = window.open('', '_blank');
+  w.document.write(`<html><head><meta charset="UTF-8"><title>給与明細 ${year}年${month}月</title>
+  <style>
+    body{font-family:'Noto Sans JP',sans-serif;font-size:12px}
+    .slip{max-width:680px;margin:0 auto 40px;padding:20px;border:1px solid #ccc;page-break-after:always}
+    @media print{.slip{break-after:page}}
+  </style></head><body>`);
+  for (const id of selected) {
+    const emp = employees.find(e => e.id === id);
+    if (!emp) continue;
+    // 画面表示と同じく調整（salaryAdj）を反映した計算を使う
+    if (emp.store === '両店') {
+      const empE = { ...emp, id: `${emp.id}_enya`,  name: `${emp.name}【本店】` };
+      const empM = { ...emp, id: `${emp.id}_marco`, name: `${emp.name}【マルコ】` };
+      const salE = calcSalaryWithAdj(empE, year, month);
+      const salM = calcSalaryWithAdj(empM, year, month);
+      w.document.write(`<div class="slip">${payslipHTMLBoth(emp, salE, salM, year, month).replace(/class="card[^"]*"/g,'')}</div>`);
+    } else {
+      const sal = calcSalaryWithAdj(emp, year, month);
       w.document.write(`<div class="slip">${payslipHTML(emp, sal, year, month).replace(/class="card[^"]*"/g,'')}</div>`);
     }
   }
