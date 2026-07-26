@@ -444,6 +444,7 @@ const db = firebase.database();
 const FB = {
   employees:  () => db.ref('payroll/employees'),
   attendance: () => db.ref('payroll/attendance'),
+  timecard:   () => db.ref('timecard'), // 打刻キオスクのライブデータ
   paidLeave:  () => db.ref('payroll/paidLeave'),
   article36:  () => db.ref('payroll/article36'),
   salaryAdj:  (ym) => db.ref(`payroll/salaryAdj/${ym}`),
@@ -453,6 +454,7 @@ const FB = {
 // -------- State --------
 let employees  = [];
 let attendance = {};
+let timecardLive = {}; // 打刻キオスク(timecard/)のライブ打刻（取込前でも表示に反映）
 let paidLeave  = {};
 let article36  = {};
 let salaryAdj  = {}; // 給与調整値 { ym: { empId: { field: value } } }
@@ -667,6 +669,17 @@ function initFirebaseData() {
   FB.attendance().on('value', snap => {
     attendance = snap.val() || {};
     if (!_fbLoaded) onLoad(); else if (currentPage === 'attendance' || currentPage === 'weekly' || currentPage === 'monthly' || currentPage === 'freelance') refreshCurrentPageData();
+  });
+
+  // 【追加 R8.7.26】打刻キオスクのライブ購読。
+  // 従来は admin/firebase-sync.html の「給与システムへ取込」を手動実行するまで
+  // 勤怠に反映されなかった（新規スタッフの打刻が見えない原因）。
+  FB.timecard().on('value', snap => {
+    timecardLive = snap.val() || {};
+    if (_fbLoaded) {
+      if (currentPage === 'timecard_manage') renderPage('timecard_manage');
+      else if (['attendance','weekly','monthly','salary','payslip'].includes(currentPage)) refreshCurrentPageData();
+    }
   });
 
   FB.paidLeave().on('value', snap => {
@@ -1010,6 +1023,23 @@ function getExtendedDailyList(empId, year, month, noMerge) {
             _merged: true,
           };
         }
+      }
+    }
+
+    // 【追加 R8.7.26】打刻キオスク(timecard/)のライブ打刻を補完表示。
+    // 優先順位: payroll/attendance の既存レコード（手動編集・取込済み）＞ ライブ打刻。
+    // 既にその日付のレコードがある場合は追加しない（二重計上防止）。
+    // 両店スタッフはキオスクが素の数値IDで打刻するため baseId で参照する。
+    {
+      const liveKey  = bothStore ? baseId : empId;
+      const liveData = (timecardLive[ym] && (timecardLive[ym][liveKey] || timecardLive[ym][String(liveKey)])) || {};
+      for (const [date, rec] of Object.entries(liveData)) {
+        const d = new Date(date);
+        if (d < rangeStart || d > rangeEnd) continue;
+        if (!rec || !rec.in) continue;
+        if (rec.in === rec.out) continue; // 無効データ
+        if (list.findIndex(r => r.date === date) !== -1) continue;
+        list.push({ date, ...recomputeRec({ ...rec, source: 'timecard', _live: true }) });
       }
     }
   }
