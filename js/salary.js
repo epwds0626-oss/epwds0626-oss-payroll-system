@@ -885,9 +885,22 @@ function _renderSubtotalBar(year, month, empIds) {
 
   const sel = empIds.map(id => {
     const emp = activeEmployeesExpanded().find(e => String(e.id) === String(id));
-    return emp ? { emp, sal: calcSalaryWithAdj(emp, year, month) } : null;
+    if (!emp) return null;
+    const sal = calcSalaryWithAdj(emp, year, month);
+    // 【修正 R8.7.25】両店スタッフの【マルコ】行は人件費配分の参考行。
+    // 社保・税などの控除は【本店】行（両店合算）で全額計算済みのため、
+    // ここで控除を集計すると二重計上＆最低等級での誤計算になり振込額が
+    // マイナスに見える。マルコ行は支給（人件費）のみ集計し控除は0扱い。
+    const isMarcoRef = String(id).includes('_marco');
+    if (isMarcoRef) {
+      sal.kenpo = 0; sal.kosei = 0; sal.shienkin = 0; sal.koyoHoken = 0;
+      sal.incomeTax = 0; sal.juminzei = 0; sal.totalDeduction = 0;
+      sal.netPay = sal.grossTotal;
+    }
+    return { emp, sal, isMarcoRef };
   }).filter(Boolean);
   if (!sel.length) return;
+  const hasMarcoRef = sel.some(x => x.isMarcoRef);
 
   const t = sel.reduce((acc, { sal }) => {
     acc.gross   += sal.grossTotal;
@@ -905,6 +918,9 @@ function _renderSubtotalBar(year, month, empIds) {
 
   const names = sel.map(({emp}) => emp.name).join('・');
   const count = sel.length;
+  const marcoNote = hasMarcoRef
+    ? `<div style="font-size:10.5px;color:#92400e;background:#fef3c7;border-radius:6px;padding:5px 8px;margin-top:8px">※ 両店スタッフの【マルコ】行は人件費配分（支給のみ）。控除・振込額は【本店】行に含まれています。</div>`
+    : '';
 
   const panel = document.createElement('div');
   panel.id = 'subtotalFloat';
@@ -972,7 +988,8 @@ function _renderSubtotalBar(year, month, empIds) {
         <div style="font-size:10px;color:#9ca3af">住民税</div>
         <div style="font-size:12px;font-weight:600;color:#374151">¥${t.jumin.toLocaleString()}</div>
       </div>
-    </div>`;
+    </div>
+    ${marcoNote}`;
 
   document.body.appendChild(panel);
 
