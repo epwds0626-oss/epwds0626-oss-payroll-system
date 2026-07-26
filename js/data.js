@@ -495,6 +495,21 @@ function calcSalaryWithAdj(emp, year, month) {
   sal.grossTotal    = sal.basePay + sal.skillPay + sal.positionAllowancePay
     + sal.otPay + sal.midnightPay + sal.holidayLegalPay + sal.commute
     + (sal.chouseikin || 0);
+
+  // 【追加 R8.7.26】調整金は課税手当のため、所得税の課税対象額に含めて再計算する。
+  //   calcSalary 本体の grossTotal には調整金が入らない（調整金は salaryAdj で
+  //   後付け）ため、調整金込みの課税対象額で所得税を計算し直さないと、調整金分の
+  //   源泉が漏れる（例：タオ 調整金¥11,842 が課税されず所得税が1ランク過少）。
+  //   課税対象額の作り方は calcSalary の給与欄（通勤費=非課税、社保・雇保を控除）
+  //   に合わせ、そこへ調整金を上乗せする。
+  //   ・所得税が手動調整されている場合（adj.incomeTax）は本人の指定を尊重し上書きしない
+  //   ・業務委託（乙欄 or 対象外）は本体の別ロジックで確定済みのため再計算しない
+  if (adj.incomeTax === undefined && emp.type !== '業務委託') {
+    const taxable = sal.grossTotal - sal.commute
+      - sal.kenpo - sal.kosei - sal.shienkin - sal.koyoHoken;
+    sal.incomeTax = calcIncomeTax(Math.max(0, taxable), emp.dependents, emp.tax);
+  }
+
   sal.totalDeduction = sal.kenpo + sal.kosei + sal.shienkin + sal.koyoHoken
     + sal.incomeTax + sal.juminzei;
   sal.netPay = Math.round(sal.grossTotal - sal.totalDeduction);
