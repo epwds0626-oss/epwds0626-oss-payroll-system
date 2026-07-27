@@ -516,7 +516,7 @@ function calcSalaryWithAdj(emp, year, month) {
 
   // 【追加 R8.8】手動調整後の値で「今月分の差額」を再計算して表示を一致させる。
   //   （calcSettlementPay も同じ調整後ロジックで差額を積むため、表示と精算が整合する）
-  if ((sal.targetShortfall || 0) >= 0 && emp.payType === '月給') {
+  if ((sal.targetShortfall || 0) >= 0 && emp.payType === '月給' && isShortfallTarget(emp)) {
     const _ym = `${year}-${String(month).padStart(2,'0')}`;
     const monthlyTG = (targetGrossHistory[String(emp.id)] || {})[_ym];
     const targetGross = (monthlyTG !== undefined) ? monthlyTG : (emp.targetGross || 0);
@@ -1187,6 +1187,15 @@ function getMonthSummary(empId, year, month, noMerge) {
 // ============================================================
 const SHORTFALL_START_YM = 202608; // 差額積立の開始（支給月）
 
+// 【追加 R8.8】差額精算の対象スタッフ（社員ID）。ここに載っている月給者だけが
+//   交通費調整の廃止＋目標差額の賞与精算の対象になる。対象を変える時はこの配列を編集する。
+//   現状: 青木(1)・原(2)・小沼(3)・圷(22)
+const SHORTFALL_TARGET_IDS = [1, 2, 3, 22];
+function isShortfallTarget(emp) {
+  const baseId = getBaseId(emp && emp.id); // 両店の _enya/_marco も本体IDに正規化
+  return SHORTFALL_TARGET_IDS.includes(baseId);
+}
+
 // 精算月か？（3月・9月支給）
 function isSettlementMonth(month) { return month === 3 || month === 9; }
 
@@ -1220,6 +1229,9 @@ function invalidateShortfallCache() { _shortfallCache = {}; }
 function calcMonthShortfall(emp, year, month) {
   const key = `${emp.id}|${year}-${month}`;
   if (_shortfallCache[key] !== undefined) return _shortfallCache[key];
+
+  // 対象スタッフ以外は差額精算なし
+  if (!isShortfallTarget(emp)) { _shortfallCache[key] = 0; return 0; }
 
   // その月に目標総支給が設定された月給者でのみ差額が発生する
   const _ym = `${year}-${String(month).padStart(2,'0')}`;
@@ -1264,6 +1276,7 @@ function calcSettlementPay(emp, year, month) {
 function calcSettlementBonus(emp, year, month) {
   if (!isSettlementMonth(month)) return { amount: 0, breakdown: [] };
   if (emp.payType !== '月給') return { amount: 0, breakdown: [] };
+  if (!isShortfallTarget(emp)) return { amount: 0, breakdown: [] };
   const target = (emp.store === '両店')
     ? { ...emp, id: `${emp.id}_enya` }   // 目標総支給調整は本店側に乗る
     : emp;
@@ -1466,7 +1479,9 @@ function calcSalary(emp, year, month, opts) {
   //   2026年8月支給分~ : 交通費は実費のまま。目標総支給までの差額は
   //     targetShortfall として明細に表示（総支給には含めない）。差額は9月・3月に支払う。
   const _payYM = year * 100 + month;
-  const _newCommuteMode = _payYM >= 202608; // 支給月2026-08以降
+  // 新モード（交通費調整廃止＋差額を賞与精算）は対象スタッフのみ。
+  // 対象外スタッフは2026年8月以降も従来どおり交通費で目標総支給まで調整する。
+  const _newCommuteMode = (_payYM >= 202608) && isShortfallTarget(emp);
   let targetShortfall = 0;
   let targetShortfallNote = '';
 
