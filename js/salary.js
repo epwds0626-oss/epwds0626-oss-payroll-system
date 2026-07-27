@@ -131,10 +131,10 @@ function renderSalary(year, month) {
 }
 
 function exportSalaryCSV(year, month) {
-  const header = ['氏名','雇用区分','基本給/時給計','残業手当','深夜手当','休日手当','交通費','調整金','支給合計','健保','厚年','子育支援金','雇保','所得税','住民税','控除合計','振込額'];
+  const header = ['氏名','雇用区分','基本給/時給計','残業手当','深夜手当','休日手当','交通費','調整金','今月差額','支給合計','健保','厚年','子育支援金','雇保','所得税','住民税','控除合計','振込額'];
   const rows = activeEmployees().map(emp => {
     const s = calcSalaryWithAdjBoth(emp, year, month);
-    return [emp.name, emp.type, s.basePay, s.otPay, s.midnightPay, s.holidayPay, s.commute, s.chouseikin||0, s.grossTotal, s.kenpo, s.kosei, s.shienkin||0, s.koyoHoken, s.incomeTax, s.juminzei, s.totalDeduction, s.netPay];
+    return [emp.name, emp.type, s.basePay, s.otPay, s.midnightPay, s.holidayPay, s.commute, s.chouseikin||0, s.targetShortfall||0, s.grossTotal, s.kenpo, s.kosei, s.shienkin||0, s.koyoHoken, s.incomeTax, s.juminzei, s.totalDeduction, s.netPay];
   });
   const csv = [header,...rows].map(r=>r.join(',')).join('\n');
   dlFile(`給与計算_${year}年${month}月.csv`, csv, 'text/csv');
@@ -217,6 +217,7 @@ function payslipHTML(emp, sal, year, month) {
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>支給合計</span><span>¥${sal.grossTotal.toLocaleString()}</span>
         </div>
+        ${shortfallNotice(sal)}
       </div>
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">控除項目</div>
@@ -378,6 +379,16 @@ function payRow(label, amount) {
   return `<div style="display:flex;justify-content:space-between;padding:3px 0"><span>${label}</span><span>¥${amount.toLocaleString()}</span></div>`;
 }
 
+// 当月の目標総支給までの差額の注記（表示のみ・9月/3月に賞与として支払）
+function shortfallNotice(sal) {
+  const sf = sal.targetShortfall || 0;
+  if (sf <= 0) return '';
+  return `<div style="margin-top:6px;padding:6px 8px;border:1px dashed #f59e0b;border-radius:6px;background:#fffbeb">`
+    + `<div style="display:flex;justify-content:space-between;font-weight:700;color:#92400e">`
+    + `<span>目標総支給までの差額（今月分・支給合計には含みません）</span><span>¥${sf.toLocaleString()}</span></div>`
+    + `<div style="font-size:11px;color:#92400e;margin-top:2px">${sal.targetShortfallNote}</div></div>`;
+}
+
 // 両店スタッフ用：1枚の明細に合算して表示
 function payslipHTMLBoth(emp, salE, salM, year, month) {
   const empEnya = { ...emp, id: `${emp.id}_enya` }; // fixedOTRows用
@@ -433,6 +444,7 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>支給合計</span><span>¥${grossTotal.toLocaleString()}</span>
         </div>
+        ${shortfallNotice(salE)}
       </div>
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">控除項目</div>
