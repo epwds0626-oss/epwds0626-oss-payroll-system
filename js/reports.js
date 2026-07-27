@@ -358,7 +358,7 @@ function buildWageLedgerHTML(year, month, emps) {
         <th rowspan="2">雇用<br>形態</th><th rowspan="2">出勤<br>日数</th>
         <th rowspan="2">実労働<br>時間</th><th rowspan="2">時間外<br>労働時間</th>
         <th rowspan="2">深夜<br>時間</th><th rowspan="2">休日<br>時間</th>
-        <th colspan="5">支給額</th>
+        <th colspan="6">支給額</th>
         <th colspan="6">控除額</th>
         <th rowspan="2">差引<br>支給額</th>
       </tr>
