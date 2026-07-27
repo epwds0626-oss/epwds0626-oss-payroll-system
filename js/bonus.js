@@ -64,9 +64,19 @@ function renderBonus(year, month) {
 function renderBonusRow(emp, year, month) {
   const key = `bonus_${year}_${month}_${emp.id}`;
   const saved = getBonusData(emp.id, year, month);
-  const amount = saved ? saved.bonusAmount : 0;
 
-  // 事前計算（保存済み金額があれば）
+  // 【追加 R8.8-賞与】9月・3月は目標総支給の差額精算を賞与として自動計上する。
+  //   ・保存済みの賞与額があればそれを優先（手入力の上書きを尊重）
+  //   ・未保存かつ差額>0なら差額を賞与額の初期値としてプリセット
+  const settle = (typeof calcSettlementBonus === 'function')
+    ? calcSettlementBonus(emp, year, month)
+    : { amount: 0, breakdown: [] };
+  const autoFill = (!saved || saved.bonusAmount === undefined) && settle.amount > 0;
+  const amount = saved && saved.bonusAmount !== undefined
+    ? saved.bonusAmount
+    : (autoFill ? settle.amount : 0);
+
+  // 事前計算（保存済み金額 or 自動計上分があれば）
   let calc = { kenpo:0, kosei:0, shienkin:0, koyoHoken:0, incomeTax:0, totalDeduction:0, netPay:0 };
   if (amount > 0) {
     const prevNet = getPrevMonthNetShakai(emp.id, year, month);
@@ -75,17 +85,21 @@ function renderBonusRow(emp, year, month) {
 
   const shakaiTotal = calc.kenpo + calc.kosei + calc.shienkin;
   const isBoth = emp.store === '両店';
+  const bd = (settle.breakdown||[]).map(b=>`${b.y}年${b.m}月 ¥${b.amount.toLocaleString()}`).join('／');
+  const settleBadge = settle.amount > 0
+    ? `<div style="font-size:10px;color:#166534;margin-top:2px" title="${bd}">目標差額精算（${(settle.breakdown||[]).length}か月）${autoFill?' 自動計上':''}</div>`
+    : '';
 
   return `<tr id="bonusRow_${emp.id}" style="border-bottom:1px solid #f3f4f6">
     <td style="padding:6px"><input type="checkbox" id="bonusChk_${emp.id}" style="width:15px;height:15px"></td>
-    <td style="padding:6px;font-weight:600">${emp.name}${isBoth?'<span style="font-size:10px;color:#6366f1;margin-left:3px">両店</span>':''}</td>
+    <td style="padding:6px;font-weight:600">${emp.name}${isBoth?'<span style="font-size:10px;color:#6366f1;margin-left:3px">両店</span>':''}${settleBadge}</td>
     <td style="padding:6px;color:#6b7280;font-size:12px">${emp.type}</td>
     <td style="padding:6px;font-size:12px">${emp.store||''}</td>
     <td style="padding:6px;text-align:right">
       <input type="number" id="bonusAmt_${emp.id}" value="${amount||''}"
         min="0" step="1000" placeholder="0"
         oninput="bonusCalcRow(${emp.id},${year},${month})"
-        style="width:110px;text-align:right;border:1px solid #d1d5db;border-radius:6px;padding:4px 8px;font-size:13px">
+        style="width:110px;text-align:right;border:1px solid #d1d5db;border-radius:6px;padding:4px 8px;font-size:13px${autoFill?';background:#f0fdf4':''}">
     </td>
     <td style="padding:6px;text-align:right" id="bonusShakai_${emp.id}">${shakaiTotal>0?'¥'+shakaiTotal.toLocaleString():'-'}</td>
     <td style="padding:6px;text-align:right" id="bonusKoyo_${emp.id}">${calc.koyoHoken>0?'¥'+calc.koyoHoken.toLocaleString():'-'}</td>
@@ -163,7 +177,13 @@ function bonusSaveAll() {
     if (amount > 0) {
       const prevNet = getPrevMonthNetShakai(emp.id, year, month);
       const calc = calcBonusDeductions(emp, amount, 0, prevNet);
-      saveBonusData(emp.id, year, month, { bonusAmount: amount, prevMonthNetShakai: prevNet, ...calc, savedAt: new Date().toISOString() });
+      // 目標差額精算の内訳（9月・3月のみ）を記録として付与
+      const settle = (typeof calcSettlementBonus === 'function')
+        ? calcSettlementBonus(emp, year, month) : { amount:0, breakdown:[] };
+      const meta = settle.amount > 0
+        ? { settlementAmount: settle.amount, settlementBreakdown: settle.breakdown, kind: '目標差額精算' }
+        : {};
+      saveBonusData(emp.id, year, month, { bonusAmount: amount, prevMonthNetShakai: prevNet, ...calc, ...meta, savedAt: new Date().toISOString() });
       count++;
     }
   });
@@ -197,6 +217,16 @@ function bonusShowSlip(empId, year, month) {
   const shakaiTotal = calc.kenpo + calc.kosei + calc.shienkin;
   const payDate = new Date(year, month, 0); // 末日
   const payDateStr = `${year}年${month}月${payDate.getDate()}日`;
+
+  // 目標差額精算（9月・3月）の内訳
+  const settle = (typeof calcSettlementBonus === 'function')
+    ? calcSettlementBonus(emp, year, month) : { amount:0, breakdown:[] };
+  const settleNote = settle.amount > 0
+    ? `<div style="font-size:11px;color:#166534;margin-top:4px;padding:6px 8px;background:#f0fdf4;border-radius:4px">`
+      + `目標総支給までの差額精算（対象：`
+      + (settle.breakdown||[]).map(b=>`${b.y}年${b.m}月 ¥${b.amount.toLocaleString()}`).join('／')
+      + `／計 ¥${settle.amount.toLocaleString()}）</div>`
+    : '';
 
   const html = `
 <div id="bonusSlipModal" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
@@ -235,6 +265,7 @@ function bonusShowSlip(empId, year, month) {
           <span style="font-weight:700">🎯 インセンティブ賞与</span>
           <span style="font-weight:700;font-size:16px">¥${amount.toLocaleString()}</span>
         </div>
+        ${settleNote}
       </div>
 
       <!-- 控除 -->
