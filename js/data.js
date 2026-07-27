@@ -513,6 +513,22 @@ function calcSalaryWithAdj(emp, year, month) {
   sal.totalDeduction = sal.kenpo + sal.kosei + sal.shienkin + sal.koyoHoken
     + sal.incomeTax + sal.juminzei;
   sal.netPay = Math.round(sal.grossTotal - sal.totalDeduction);
+
+  // 【追加 R8.8】手動調整後の値で「今月分の差額」を再計算して表示を一致させる。
+  //   （calcSettlementPay も同じ調整後ロジックで差額を積むため、表示と精算が整合する）
+  if ((sal.targetShortfall || 0) >= 0 && emp.payType === '月給') {
+    const _ym = `${year}-${String(month).padStart(2,'0')}`;
+    const monthlyTG = (targetGrossHistory[String(emp.id)] || {})[_ym];
+    const targetGross = (monthlyTG !== undefined) ? monthlyTG : (emp.targetGross || 0);
+    if (targetGross > 0 && (year * 100 + month) >= SHORTFALL_START_YM) {
+      const sf = Math.max(0, targetGross - sal.basePay - sal.otPay
+        - sal.midnightPay - sal.holidayLegalPay - sal.commute);
+      sal.targetShortfall = sf;
+      sal.targetShortfallNote = sf > 0
+        ? '目標総支給（¥' + targetGross.toLocaleString() + '）までの差額。9月・3月に賞与としてまとめて支払います。'
+        : '';
+    }
+  }
   return sal;
 }
 
@@ -521,6 +537,8 @@ let _adjUnsub = null;
 let _adjSubYm = null; // 購読中の年月（再購読ループ防止）
 function subscribeAdj(year, month) {
   const ym = `${year}-${String(month).padStart(2,'0')}`;
+  // 精算月なら対象期間の過去月調整を先読み（同じ精算月では一度だけ実行）
+  preloadSettlementAdj(year, month);
   // 同じ月を既に購読中なら何もしない
   // （renderPayslip等がページ再描画のたびに呼んでも、購読の張り直し→
   //   Firebaseの即時value発火→再描画→再購読…の無限ループにならない）
@@ -533,10 +551,40 @@ function subscribeAdj(year, month) {
     // 値が変わった時だけ再描画（初回購読の即時発火で中身が同じなら再描画しない）
     const changed = JSON.stringify(salaryAdj[ym] || {}) !== JSON.stringify(val);
     salaryAdj[ym] = val;
+    if (changed) invalidateShortfallCache();
     if (changed && _fbLoaded && ['salary','payslip','dashboard'].includes(currentPage)) refreshCurrentPageData();
   };
   ref.on('value', handler);
   _adjUnsub = () => { ref.off('value', handler); _adjSubYm = null; };
+}
+
+// 【追加 R8.8】精算月（9月・3月）を表示する際、対象期間の各ソース月の給与調整を
+//   Firebaseから先読みして salaryAdj に載せる。subscribeAdj は表示中の1か月分しか
+//   購読しないため、これを行わないと過去月の手動調整が精算額に反映されない。
+//   期間中の各月を once で取得し、完了後に一度だけ再描画する。
+let _preloadedSettleKey = null;
+function preloadSettlementAdj(year, month) {
+  if (!isSettlementMonth(month)) return;
+  const key = `${year}-${month}`;
+  if (_preloadedSettleKey === key) return; // 同じ精算月は一度だけ
+  _preloadedSettleKey = key;
+  const period = settlementPeriod(year, month);
+  let pending = 0, anyLoaded = false;
+  for (const { y, m } of period) {
+    const ym = `${y}-${String(m).padStart(2,'0')}`;
+    if (ym === `${year}-${String(month).padStart(2,'0')}`) continue; // 当月はsubscribeAdjが担当
+    if (salaryAdj[ym] !== undefined) continue; // 既にメモリにあるならスキップ
+    pending++;
+    FB.salaryAdj(ym).once('value').then(snap => {
+      salaryAdj[ym] = snap.val() || {};
+      anyLoaded = true;
+      invalidateShortfallCache();
+      if (--pending === 0 && anyLoaded && _fbLoaded
+          && ['salary','payslip','dashboard'].includes(currentPage)) {
+        refreshCurrentPageData();
+      }
+    }).catch(() => { pending--; });
+  }
 }
 
 // 在籍中スタッフのみ
@@ -683,6 +731,7 @@ function initFirebaseData() {
 
   FB.attendance().on('value', snap => {
     attendance = snap.val() || {};
+    invalidateShortfallCache();
     if (!_fbLoaded) onLoad(); else if (currentPage === 'attendance' || currentPage === 'weekly' || currentPage === 'monthly' || currentPage === 'freelance') refreshCurrentPageData();
   });
 
@@ -691,6 +740,7 @@ function initFirebaseData() {
   // 勤怠に反映されなかった（新規スタッフの打刻が見えない原因）。
   FB.timecard().on('value', snap => {
     timecardLive = snap.val() || {};
+    invalidateShortfallCache();
     if (_fbLoaded) {
       if (currentPage === 'timecard_manage') renderPage('timecard_manage');
       else if (['attendance','weekly','monthly','salary','payslip'].includes(currentPage)) refreshCurrentPageData();
@@ -708,6 +758,7 @@ function initFirebaseData() {
   });
   FB.targetGrossHistory().on('value', snap => {
     targetGrossHistory = snap.val() || {};
+    invalidateShortfallCache();
   });
 }
 
@@ -1123,8 +1174,108 @@ function getMonthSummary(empId, year, month, noMerge) {
   };
 }
 
+// ============================================================
+// 目標総支給 差額の精算（9月・3月支給でまとめ払い）
+// ------------------------------------------------------------
+//   2026年8月支給分から、交通費調整を廃止し、目標総支給までの差額を
+//   各月 targetShortfall として積み立て、9月・3月支給でまとめて支払う。
+//   ・9月精算の対象期間 : 同年4月〜9月支給
+//   ・3月精算の対象期間 : 前年10月〜当年3月支給
+//   （新モード開始が2026年8月支給のため、初回2026年9月精算は
+//     4〜7月に差額が存在せず、実質8月・9月の2か月分になる）
+//   ・精算月S自身の差額も、そのSの精算に含める（当月上乗せで支払い）
+// ============================================================
+const SHORTFALL_START_YM = 202608; // 差額積立の開始（支給月）
+
+// 精算月か？（3月・9月支給）
+function isSettlementMonth(month) { return month === 3 || month === 9; }
+
+// 精算月(year,month)が対象とする期間 [{y,m}...] を返す（Sを含む）
+function settlementPeriod(year, month) {
+  const out = [];
+  let startY, startM, endY = year, endM = month;
+  if (month === 9) { startY = year;     startM = 4;  }   // 4月〜9月
+  else if (month === 3) { startY = year - 1; startM = 10; } // 前年10月〜3月
+  else return out;
+  let y = startY, m = startM;
+  while (y < endY || (y === endY && m <= endM)) {
+    const ym = y * 100 + m;
+    if (ym >= SHORTFALL_START_YM) out.push({ y, m }); // 新モード開始前は差額なし＝除外
+    m++; if (m > 12) { m = 1; y++; }
+  }
+  return out;
+}
+
+// 指定(emp,year,month)のその月単体の差額を返す（精算上乗せを含めない生の差額）
+// 精算月は同じ月を複数回プローブするため、簡易メモ化して重い勤怠集計の反復を避ける。
+// キャッシュは勤怠・目標総支給・給与調整が変わると無効化する必要があるため、
+// invalidateShortfallCache() を Firebase 更新購読から呼ぶ。
+//
+// 【重要】手動の給与調整（salaryAdj: basePay/otPay/交通費等の上書き）は
+//   差額の計算根拠に影響する。probe（calcSalary）は調整を適用しないため、
+//   ここで調整を反映した実効値から差額を再計算する。
+//   差額 = 目標総支給 − 調整後(基本給＋残業＋深夜＋法定休日) − 調整後交通費
+let _shortfallCache = {};
+function invalidateShortfallCache() { _shortfallCache = {}; }
+function calcMonthShortfall(emp, year, month) {
+  const key = `${emp.id}|${year}-${month}`;
+  if (_shortfallCache[key] !== undefined) return _shortfallCache[key];
+
+  // その月に目標総支給が設定された月給者でのみ差額が発生する
+  const _ym = `${year}-${String(month).padStart(2,'0')}`;
+  const monthlyTG = (targetGrossHistory[String(emp.id)] || {})[_ym];
+  const targetGross = (monthlyTG !== undefined) ? monthlyTG : (emp.targetGross || 0);
+  if (emp.payType !== '月給' || targetGross <= 0) { _shortfallCache[key] = 0; return 0; }
+
+  // probe＝精算上乗せを含まない当月計算（交通費は実費のまま）
+  const s = calcSalary(emp, year, month, { _shortfallProbe: true });
+
+  // 手動調整を反映（差額に影響する支給項目のみ）
+  const adj = getAdj(year, month, emp.id) || {};
+  const basePay  = adj.basePay        !== undefined ? adj.basePay        : s.basePay;
+  const otPay    = adj.otPay          !== undefined ? adj.otPay          : s.otPay;
+  const midPay   = adj.midnightPay    !== undefined ? adj.midnightPay    : s.midnightPay;
+  const holPay   = adj.holidayLegalPay!== undefined ? adj.holidayLegalPay: s.holidayLegalPay;
+  const commute  = adj.commute        !== undefined ? adj.commute        : s.commute;
+
+  const v = Math.max(0, targetGross - basePay - otPay - midPay - holPay - commute);
+  _shortfallCache[key] = v;
+  return v;
+}
+
+// 精算月(year,month)で支払うべき差額合計を返す
+function calcSettlementPay(emp, year, month) {
+  if (!isSettlementMonth(month)) return { total: 0, breakdown: [] };
+  const period = settlementPeriod(year, month);
+  let total = 0;
+  const breakdown = [];
+  for (const { y, m } of period) {
+    const sf = calcMonthShortfall(emp, y, m);
+    if (sf > 0) { total += sf; breakdown.push({ y, m, amount: sf }); }
+  }
+  return { total, breakdown };
+}
+
+// 【追加 R8.8-賞与】精算差額を「賞与」として支払うための金額・内訳を返す。
+//   ・両店スタッフは目標総支給調整が _enya 側にあるため _enya の実効empで計算する
+//   ・月給者のみ対象（役員報酬・業務委託・時給者は対象外）
+//   ・9月精算＝当年4〜9月／3月精算＝前年10〜3月（開始2026年8月支給）
+//   戻り値: { amount, breakdown:[{y,m,amount}] }
+function calcSettlementBonus(emp, year, month) {
+  if (!isSettlementMonth(month)) return { amount: 0, breakdown: [] };
+  if (emp.payType !== '月給') return { amount: 0, breakdown: [] };
+  const target = (emp.store === '両店')
+    ? { ...emp, id: `${emp.id}_enya` }   // 目標総支給調整は本店側に乗る
+    : emp;
+  const st = calcSettlementPay(target, year, month);
+  return { amount: st.total, breakdown: st.breakdown };
+}
+
 // 給与計算本体
-function calcSalary(emp, year, month) {
+// opts._shortfallProbe: true のとき、精算月の差額上乗せをスキップする
+//   （精算額を求めるために各月を再計算する際の無限再帰防止）
+function calcSalary(emp, year, month, opts) {
+  opts = opts || {};
 
   // 月別targetGrossHistory を参照（マスタのtargetGrossより優先）
   const _ym = `${year}-${String(month).padStart(2,'0')}`;
@@ -1310,15 +1461,41 @@ function calcSalary(emp, year, month) {
   const holidayPayR  = Math.round(holidayLegalPay);
   const basePayR     = Math.round(basePay);
 
+  // 【変更 R8.8】2026年8月支給分から、交通費での目標総支給調整を廃止。
+  //   ~2026年7月支給分: 従来どおり 交通費=targetGross-基本給-残業代等 で調整。
+  //   2026年8月支給分~ : 交通費は実費のまま。目標総支給までの差額は
+  //     targetShortfall として明細に表示（総支給には含めない）。差額は9月・3月に支払う。
+  const _payYM = year * 100 + month;
+  const _newCommuteMode = _payYM >= 202608; // 支給月2026-08以降
+  let targetShortfall = 0;
+  let targetShortfallNote = '';
+
   let commuteAdj = actualCommute;
   if (emp.payType === '月給' && emp.targetGross > 0 && !isMarcoSide) {
     const otTotal = otPayR + midnightPayR + holidayPayR;
-    commuteAdj = Math.max(0, emp.targetGross - emp.baseSalary - otTotal);
-    // 注釈も調整の実態に合わせる（距離式のままだと金額と説明が食い違う）
-    commuteNoteText = '目標総支給（¥' + emp.targetGross.toLocaleString() + '）による調整';
+    if (_newCommuteMode) {
+      // 交通費は実費のまま。差額は表示のみ（9月・3月に支払）
+      targetShortfall = Math.max(0, emp.targetGross - basePayR - otTotal - actualCommute);
+      if (targetShortfall > 0) {
+        targetShortfallNote = '目標総支給（¥' + emp.targetGross.toLocaleString()
+          + '）までの差額。9月・3月に賞与としてまとめて支払います。';
+      }
+    } else {
+      commuteAdj = Math.max(0, emp.targetGross - emp.baseSalary - otTotal);
+      // 注釈も調整の実態に合わせる（距離式のままだと金額と説明が食い違う）
+      commuteNoteText = '目標総支給（¥' + emp.targetGross.toLocaleString() + '）による調整';
+    }
   }
 
   let grossTotal = basePayR + positionAllowanceAdj + otPayR + midnightPayR + holidayPayR + commuteAdj;
+
+  // ── 目標総支給 差額の精算 ─────────────────────────────────
+  //   【変更 R8.8-賞与】差額は月給に上乗せせず、9月・3月に「賞与」として支払う
+  //   （賞与の社保料率・賞与源泉税で計算。住民税は賞与に課さない）。
+  //   月給側は上乗せしない＝ここでは総支給を変えない。精算額の算定・表示は
+  //   calcSettlementPay / 賞与画面（bonus.js）が担当する。
+  const settlementPay = 0;         // 月給側には計上しない（賞与で支払う）
+  const settlementBreakdown = [];  // 互換のため空で保持
 
   // 社会保険
   let kenpo = 0, kosei = 0, shienkin = 0;
@@ -1376,6 +1553,10 @@ function calcSalary(emp, year, month) {
     holidayPay:          holidayPayR,
     commute:    commuteAdj,
     commuteNote: commuteNoteText,
+    targetShortfall,          // 当月の目標総支給までの差額（表示のみ・9月/3月に支払）
+    targetShortfallNote,
+    settlementPay,            // 精算月に上乗せ支払した差額合計（9月/3月のみ>0）
+    settlementBreakdown,      // 精算の内訳 [{y,m,amount}]
     kaigo: isKaigoTarget(emp.birthDate),
     grossTotal, kenpo, kosei, shienkin, koyoHoken, incomeTax, juminzei, chutaikyoAmount,
     totalDeduction:      Math.round(totalDeduction),
