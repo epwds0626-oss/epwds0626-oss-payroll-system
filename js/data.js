@@ -1607,26 +1607,148 @@ function getMonthWorkingDays(year, month) {
   return count;
 }
 
-// 有給付与計算（労基法 39条準拠）
-function calcPaidLeaveGrant(hireDateStr) {
-  if (!hireDateStr) return [];
-  const hire = new Date(hireDateStr);
-  const grants = [];
-  // 継続勤務年数別付与日数
-  const grantTable = [
-    { months:6, days:10 }, { months:18, days:11 }, { months:30, days:12 },
-    { months:42, days:14 }, { months:54, days:16 }, { months:66, days:18 },
-    { months:78, days:20 },
-  ];
+// ============================================================
+// 有給付与計算（労基法39条・就業規則第16条準拠）
+// ------------------------------------------------------------
+// 【R8.8 改修】従来はフルタイム(週5日)一律付与だったため、パートの
+//   比例付与に未対応だった。以下を反映：
+//   ① 週所定労働日数による比例付与（就業規則第16条の表）
+//   ② 出勤率8割判定（判定期間の出勤日数÷所定労働日数＜80%なら付与0）
+//   ③ 週所定日数の区分は、契約が不明確なため判定期間の実績
+//      （年間出勤日数）から推定
+// ============================================================
+
+// 継続勤務月数 → 付与テーブルのインデックス（6,18,30,42,54,66,78ヶ月）
+const PL_MILESTONES = [6, 18, 30, 42, 54, 66, 78];
+
+// 斉一的付与の基準日（月/日）。就業規則第16条3項：毎年10月1日に統一。
+const PL_BASE_MONTH = 10, PL_BASE_DAY = 1;
+
+// 比例付与表 [区分] = [6ヶ月,1年6,2年6,3年6,4年6,5年6,6年6以上]
+const PL_GRANT_TABLE = {
+  full: [10, 11, 12, 14, 16, 18, 20], // 週5日以上/週30h以上=正社員同様
+  d4:   [7,  8,  9,  10, 12, 13, 15], // 週4日 (年169〜216日)
+  d3:   [5,  6,  6,  8,  9,  10, 11], // 週3日 (年121〜168日)
+  d2:   [3,  4,  4,  5,  6,  6,  7],  // 週2日 (年73〜120日)
+  d1:   [1,  2,  2,  2,  3,  3,  3],  // 週1日 (年48〜72日)
+};
+
+// 年間所定労働日数（実績）→ 区分キー
+function plCategoryByAnnualDays(annualDays) {
+  if (annualDays >= 217) return 'full';
+  if (annualDays >= 169) return 'd4';
+  if (annualDays >= 121) return 'd3';
+  if (annualDays >= 73)  return 'd2';
+  if (annualDays >= 48)  return 'd1';
+  return null; // 48日未満は比例付与対象外
+}
+
+// 指定期間[start,end]（Date）の実出勤日数・欠勤日数を、給与月サマリを積み上げて集計。
+// 給与期間は前月21日〜当月20日。期間に重なる給与月をすべて合算する。
+// 出勤率8割判定の所定労働日数は「出勤日数＋欠勤日数」で近似する（契約所定が不明確なため）。
+function plAggregateWorkDays(empId, start, end) {
+  let workDays = 0, absentDays = 0, monthsCounted = 0;
+  const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+  const stop = new Date(end.getFullYear(), end.getMonth(), 1);
+  while (cur <= stop) {
+    const y = cur.getFullYear(), m = cur.getMonth() + 1;
+    try {
+      const s = getMonthSummary(empId, y, m);
+      workDays   += (s.workDays || 0) + (s.paidDays || 0); // 有給取得日も出勤扱い
+      absentDays += (s.absentDays || 0);
+      monthsCounted++;
+    } catch (e) { /* データ無い月はスキップ */ }
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  return { workDays, absentDays, monthsCounted };
+}
+
+// 継続勤務月数から、斉一的付与での付与日を返す。
+// 雇入れ日＋継続勤務月数が到来した「直後の基準日(10/1)」に付与する。
+// ただし初回(6ヶ月)は、雇入れから6ヶ月経過日以降で最初に来る基準日。
+function plUnifiedGrantDate(hire, months) {
+  const legal = new Date(hire);
+  legal.setMonth(legal.getMonth() + months);
+  // legal以降で最初の 10/1
+  let y = legal.getFullYear();
+  let cand = new Date(y, PL_BASE_MONTH - 1, PL_BASE_DAY);
+  if (cand < legal) cand = new Date(y + 1, PL_BASE_MONTH - 1, PL_BASE_DAY);
+  return cand;
+}
+
+/**
+ * 有給付与スケジュールを計算する（斉一的付与・比例付与・8割判定）。
+ * @param {object|string} empArg - 従業員オブジェクト（推奨）。文字列(hireDate)も可だが
+ *   その場合は実績参照不可のため full 区分・8割判定なしで計算。
+ * @returns {Array} [{date, days, months, category, rate, judged, skipped}]
+ */
+function calcPaidLeaveGrant(empArg) {
+  const emp = (typeof empArg === 'string') ? { hireDate: empArg, id: null } : (empArg || {});
+  if (!emp.hireDate) return [];
+  const hire = new Date(emp.hireDate);
   const today = new Date();
-  for (const g of grantTable) {
-    const grantDate = new Date(hire);
-    grantDate.setMonth(grantDate.getMonth() + g.months);
-    if (grantDate <= today) {
-      grants.push({ date: grantDate.toISOString().slice(0,10), days: g.days, months: g.months });
+  const canJudge = emp.id != null;
+
+  const grants = [];
+  let prevDate = null;
+  // 6年6ヶ月(78ヶ月)以降は毎年、最終ブラケット(index 6)で付与し続ける。
+  let i = 0;
+  let months = PL_MILESTONES[0];
+  while (true) {
+    const bracketIdx = Math.min(i, PL_GRANT_TABLE.full.length - 1);
+    const grantDate = plUnifiedGrantDate(hire, months);
+    if (grantDate > today) break;
+    const gStr = grantDate.toISOString().slice(0,10);
+    if (prevDate === gStr) {
+      i++;
+      months = (i < PL_MILESTONES.length) ? PL_MILESTONES[i] : months + 12;
+      continue;
     }
+    prevDate = gStr;
+
+    // 判定期間：付与日の直前1年（初回は雇入れ〜付与日で最長1年）
+    const periodEnd = new Date(grantDate);
+    const periodStart = new Date(grantDate);
+    periodStart.setFullYear(periodStart.getFullYear() - 1);
+    const effStart = (i === 0 && hire > periodStart) ? new Date(hire) : periodStart;
+    const periodMonths = Math.max(1, Math.round((periodEnd - effStart) / (1000*60*60*24*30.44)));
+
+    let category = 'full';
+    let rate = 1;
+    let judged = false;
+
+    if (canJudge) {
+      const agg = plAggregateWorkDays(emp.id, effStart, periodEnd);
+      if (agg.monthsCounted > 0) {
+        judged = true;
+        // 区分：判定期間の出勤日数を年換算して所定日数区分を推定
+        const annualDays = Math.round(agg.workDays / periodMonths * 12);
+        category = plCategoryByAnnualDays(annualDays) || 'd1';
+        // 8割判定：出勤率 = 出勤日数 ÷（出勤日数＋欠勤日数）。
+        //   所定を「出勤＋欠勤」で近似するため、欠勤が2割超のときのみ8割を割る。
+        const denom = agg.workDays + agg.absentDays;
+        rate = denom > 0 ? agg.workDays / denom : 1;
+      }
+    }
+
+    if (judged && rate < 0.8) {
+      grants.push({ date: gStr, days: 0, months, category,
+        rate: Math.round(rate*1000)/10, judged, skipped: true });
+    } else {
+      grants.push({ date: gStr, days: PL_GRANT_TABLE[category][bracketIdx], months, category,
+        rate: judged ? Math.round(rate*1000)/10 : null, judged });
+    }
+
+    i++;
+    months = (i < PL_MILESTONES.length) ? PL_MILESTONES[i] : months + 12;
+    if (i > 60) break; // 安全弁
   }
   return grants;
+}
+
+// 区分キー→表示ラベル
+function plCategoryLabel(cat) {
+  return { full:'週5日相当', d4:'週4日', d3:'週3日', d2:'週2日', d1:'週1日' }[cat] || cat;
 }
 
 // 有給残日数取得
