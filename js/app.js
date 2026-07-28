@@ -104,10 +104,10 @@ function renderDashboard(year, month) {
   const paidAlerts = [];
   for (const emp of employees) {
     if (!emp.hireDate) continue;
-    const grants = calcPaidLeaveGrant(emp.hireDate);
-    const totalGrant = grants.reduce((s,g)=>s+g.days,0);
-    if (totalGrant >= 10) {
-      const { balance, used } = getPaidLeaveBalance(emp.id);
+    const grants = calcPaidLeaveGrant(emp);
+    // 5日取得義務は「1回の付与が10日以上」の者が対象（比例付与で10日未満の者は対象外）
+    const hasObligation = grants.some(g => !g.skipped && g.days >= 10);
+    if (hasObligation) {
       const usedThisYear = (paidLeave[emp.id]?.used||[]).filter(u=>u.date.startsWith(String(year))).reduce((s,u)=>s+u.days,0);
       if (usedThisYear < 5) paidAlerts.push({ name: emp.name, used: usedThisYear });
     }
