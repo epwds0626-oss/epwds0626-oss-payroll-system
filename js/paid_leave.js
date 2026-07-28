@@ -67,33 +67,42 @@ function renderPaidLeave() {
   </div>
 
   <div class="card">
-    <div class="card-title">有給付与スケジュール（入社日ベース自動計算）</div>
+    <div class="card-title">有給付与スケジュール（入社日ベース自動計算・比例付与＋出勤率8割判定）</div>
     <div class="table-wrap"><table>
       <thead><tr>
         <th class="tl">氏名</th><th>入社日</th><th>継続勤務</th>
-        <th>付与回</th><th>付与日</th><th>付与日数</th><th>状態</th>
+        <th>付与回</th><th>付与日</th><th>週所定<br>区分</th><th>出勤率</th><th>付与日数</th><th>状態</th>
       </tr></thead>
       <tbody>
       ${activeEmployees().filter(e=>e.hireDate).flatMap(emp => {
-        const grants = calcPaidLeaveGrant(emp.hireDate);
+        const grants = calcPaidLeaveGrant(emp);
         const monthLabels = ['6ヶ月','1年6ヶ月','2年6ヶ月','3年6ヶ月','4年6ヶ月','5年6ヶ月','6年6ヶ月以上'];
         return grants.map((g,i)=>{
           const today = new Date();
           const gDate = new Date(g.date);
           const isPast = gDate <= today;
           const existing = (paidLeave[emp.id]?.grants||[]).find(x=>x.date===g.date);
+          const rateStr = g.rate!=null ? `${g.rate}%` : '—';
+          const rateBadge = g.skipped
+            ? `<span class="badge badge-red">${rateStr}<br>8割未満</span>`
+            : rateStr;
+          const statusBadge = g.skipped
+            ? '<span class="badge badge-red">付与なし(8割未満)</span>'
+            : (isPast
+                ? (existing
+                    ? '<span class="badge badge-green">付与済</span>'
+                    : '<span class="badge badge-red">未付与</span>')
+                : '<span class="badge badge-gray">未到来</span>');
           return `<tr>
             <td class="tl">${i===0?emp.name:''}</td>
             <td>${i===0?emp.hireDate:''}</td>
             <td>${monthLabels[i]||''}</td>
             <td>${i+1}回目</td>
             <td>${g.date}</td>
-            <td>${g.days}日</td>
-            <td>${isPast
-              ? existing
-                ? '<span class="badge badge-green">付与済</span>'
-                : '<span class="badge badge-red">未付与</span>'
-              : '<span class="badge badge-gray">未到来</span>'}</td>
+            <td>${g.judged?plCategoryLabel(g.category):'—'}</td>
+            <td>${rateBadge}</td>
+            <td><strong>${g.days}日</strong></td>
+            <td>${statusBadge}</td>
           </tr>`;
         });
       }).join('')}
@@ -168,20 +177,31 @@ function openGrantModal(empId) {
 
 function renderGrantModal(empId) {
   const emp     = employees.find(e=>e.id===empId);
-  const auto    = calcPaidLeaveGrant(emp.hireDate||'');
+  const auto    = calcPaidLeaveGrant(emp);
   const granted = paidLeave[empId]?.grants || [];
   const defaultDays = Math.min(auto.length ? auto[auto.length-1].days : 10, 20);
 
   // 削除チェックボックス付きの行を構築
   const autoRows = auto.map(g => {
     const already = granted.find(x => x.date === g.date);
+    const catStr = g.judged ? `${plCategoryLabel(g.category)}` : '';
+    const rateStr = g.rate!=null ? ` 出勤率${g.rate}%` : '';
+    if (g.skipped) {
+      return `
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #eee;background:#fef2f2">
+      <span style="width:16px"></span>
+      <span style="min-width:100px">${g.date}</span>
+      <span style="min-width:40px">0日</span>
+      <span style="color:#dc2626;font-size:12px;flex:1">出勤率8割未満のため付与なし（${g.rate}%）</span>
+    </div>`;
+    }
     if (already) {
       return `
     <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #eee">
       <input type="checkbox" class="del-chk" data-date="${g.date}" style="width:16px;height:16px;cursor:pointer">
       <span style="min-width:100px">${g.date}</span>
       <span style="min-width:40px">${already.days}日</span>
-      <span style="color:#059669;font-size:12px;flex:1">✅ 付与済</span>
+      <span style="color:#059669;font-size:12px;flex:1">✅ 付与済 <span style="color:#666">${catStr}${rateStr}</span></span>
     </div>`;
     } else {
       return `
@@ -189,7 +209,7 @@ function renderGrantModal(empId) {
       <span style="width:16px"></span>
       <span style="min-width:100px">${g.date}</span>
       <span style="min-width:40px">${g.days}日</span>
-      <span style="flex:1"></span>
+      <span style="flex:1;font-size:12px;color:#666">${catStr}${rateStr}</span>
       <button class="btn-success btn-sm" onclick="grantAuto(${empId},'${g.date}',${g.days})">この日付で付与</button>
     </div>`;
     }
@@ -277,11 +297,12 @@ function grantPaidLeaveAll() {
   let count = 0;
   for (const emp of activeEmployees()) {
     if (!emp.hireDate) continue;
-    const grants = calcPaidLeaveGrant(emp.hireDate);
+    const grants = calcPaidLeaveGrant(emp);
     for (const g of grants) {
+      if (g.skipped || g.days <= 0) continue; // 8割未満は付与レコードを作らない
       if (!paidLeave[emp.id]) paidLeave[emp.id] = { grants:[], used:[] };
       if (!paidLeave[emp.id].grants.find(x=>x.date===g.date)) {
-        paidLeave[emp.id].grants.push({ date: g.date, days: g.days });
+        paidLeave[emp.id].grants.push({ date: g.date, days: g.days, category: g.category, rate: g.rate });
         count++;
       }
     }
