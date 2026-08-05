@@ -1719,16 +1719,24 @@ function calcPaidLeaveGrant(empArg) {
 
     if (canJudge) {
       const agg = plAggregateWorkDays(emp.id, effStart, periodEnd);
-      if (agg.monthsCounted > 0) {
-        judged = true;
-        // 区分：判定期間の出勤日数を年換算して所定日数区分を推定
-        const annualDays = Math.round(agg.workDays / periodMonths * 12);
-        category = plCategoryByAnnualDays(annualDays) || 'd1';
-        // 8割判定：出勤率 = 出勤日数 ÷（出勤日数＋欠勤日数）。
-        //   所定を「出勤＋欠勤」で近似するため、欠勤が2割超のときのみ8割を割る。
-        const denom = agg.workDays + agg.absentDays;
-        rate = denom > 0 ? agg.workDays / denom : 1;
+      // 判定期間に実出勤が全く無い場合は、勤怠データ欠損の可能性が高い。
+      // 実績で区分を決めると誤って週1日になるため「判定不能」とし、
+      // この付与は自動生成しない（未判定フラグを立て手動確認に回す）。
+      if (agg.workDays <= 0) {
+        grants.push({ date: gStr, days: 0, months, category: null,
+          rate: null, judged: false, skipped: true, nodata: true });
+        i++;
+        months = (i < PL_MILESTONES.length) ? PL_MILESTONES[i] : months + 12;
+        if (i > 60) break;
+        continue;
       }
+      judged = true;
+      // 区分：判定期間の出勤日数を年換算して所定日数区分を推定
+      const annualDays = Math.round(agg.workDays / periodMonths * 12);
+      category = plCategoryByAnnualDays(annualDays) || 'd1';
+      // 8割判定：出勤率 = 出勤日数 ÷（出勤日数＋欠勤日数）
+      const denom = agg.workDays + agg.absentDays;
+      rate = denom > 0 ? agg.workDays / denom : 1;
     }
 
     if (judged && rate < 0.8) {
