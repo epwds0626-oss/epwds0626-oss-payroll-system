@@ -36,13 +36,16 @@ function renderPaidLeave() {
         const used5 = ((paidLeave[emp.id]?.used)||[])
           .filter(u => {
             const uy = parseInt(u.date.slice(0,4));
-            // 年度（4月〜3月）で判定
             const uyear = u.date.slice(5,7) >= '04' ? uy : uy - 1;
             return uyear === year;
           })
           .reduce((s,u)=>s+u.days, 0);
-        const totalGrant = pl.grants.reduce((s,g)=>s+g.days,0);
-        const need5 = totalGrant >= 10;
+        // 有効付与（未失効・付与済）の合計＝残枠の元になる付与のみ
+        const activeGrant = pl.activeGrants.reduce((s,g)=>s+g.days,0);
+        const totalUsed = pl.used.reduce((s,u)=>s+u.days,0);
+        // 5日取得義務：直近付与（最新の付与日）が10日以上のとき対象
+        const latestGrant = (pl.grants||[]).slice().sort((a,b)=>a.date<b.date?1:-1)[0];
+        const need5 = latestGrant && latestGrant.days >= 10;
         const ok5   = used5 >= 5;
         const badge = !need5 ? '' : ok5
           ? '<span class="badge badge-green">✓ 達成</span>'
@@ -51,8 +54,8 @@ function renderPaidLeave() {
           <td class="tl">${emp.name}</td>
           <td>${emp.type}</td>
           <td>${emp.hireDate||'—'}</td>
-          <td>${totalGrant}日</td>
-          <td>${pl.used.reduce((s,u)=>s+u.days,0)}日</td>
+          <td>${activeGrant}日${pl.expired>0?`<span style="font-size:10px;color:#999"> (失効${pl.expired}日)</span>`:''}</td>
+          <td>${totalUsed}日</td>
           <td><strong>${pl.balance}日</strong></td>
           <td>${used5}日</td>
           <td>${badge}</td>
@@ -127,9 +130,10 @@ function openPLDetail(empId) {
   openModal(`
   <div class="modal-title">🌿 ${emp.name} の有給記録</div>
   <div style="display:flex;gap:16px;margin-bottom:12px;font-size:13px">
-    <div>付与累計：<strong>${pl.grants.reduce((s,g)=>s+g.days,0)}日</strong></div>
+    <div>有効付与：<strong>${pl.activeGrants.reduce((s,g)=>s+g.days,0)}日</strong></div>
     <div>取得済：<strong>${pl.used.reduce((s,u)=>s+u.days,0)}日</strong></div>
     <div>残：<strong style="color:var(--success)">${pl.balance}日</strong></div>
+    ${pl.expired>0?`<div style="color:#999">時効失効：${pl.expired}日</div>`:''}
   </div>
   <div style="font-weight:700;margin-bottom:8px;color:var(--primary)">取得記録</div>
   <table><thead><tr><th>日付</th><th>日数</th><th>理由</th><th></th></tr></thead>
@@ -319,8 +323,10 @@ function exportPaidLeaveCSV(year) {
     const used5 = ((paidLeave[emp.id]?.used)||[])
       .filter(u=>{ const uy=parseInt(u.date.slice(0,4)); const uyear=u.date.slice(5,7)>='04'?uy:uy-1; return uyear===year; })
       .reduce((s,u)=>s+u.days,0);
-    const totalGrant = pl.grants.reduce((s,g)=>s+g.days,0);
-    return [emp.name, emp.hireDate||'', totalGrant, pl.used.reduce((s,u)=>s+u.days,0), pl.balance, used5, totalGrant>=10?(used5>=5?'達成':'未達'):'—'];
+    const activeGrant = pl.activeGrants.reduce((s,g)=>s+g.days,0);
+    const latestGrant = (pl.grants||[]).slice().sort((a,b)=>a.date<b.date?1:-1)[0];
+    const need5 = latestGrant && latestGrant.days >= 10;
+    return [emp.name, emp.hireDate||'', activeGrant, pl.used.reduce((s,u)=>s+u.days,0), pl.balance, used5, need5?(used5>=5?'達成':'未達'):'—'];
   });
   const csv = [header,...rows].map(r=>r.join(',')).join('\n');
   dlFile(`有給管理簿_${year}年度.csv`, csv, 'text/csv');
