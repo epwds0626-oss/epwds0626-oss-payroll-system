@@ -10,6 +10,7 @@ function renderPaidLeave() {
     <div class="section-title">🌿 有給管理簿 ― ${year}年度</div>
     <div style="display:flex;gap:8px">
       <button class="btn-accent" onclick="grantPaidLeaveAll()">一括付与チェック</button>
+      <button class="btn-danger" onclick="rebuildPaidLeaveAll()">付与を再構築（クリア＆再付与）</button>
       <button class="btn-outline" onclick="exportPaidLeaveCSV(${year})">CSV出力（労基提出用）</button>
     </div>
   </div>
@@ -86,16 +87,20 @@ function renderPaidLeave() {
           const isPast = gDate <= today;
           const existing = (paidLeave[emp.id]?.grants||[]).find(x=>x.date===g.date);
           const rateStr = g.rate!=null ? `${g.rate}%` : '—';
-          const rateBadge = g.skipped
-            ? `<span class="badge badge-red">${rateStr}<br>8割未満</span>`
-            : rateStr;
-          const statusBadge = g.skipped
-            ? '<span class="badge badge-red">付与なし(8割未満)</span>'
-            : (isPast
-                ? (existing
-                    ? '<span class="badge badge-green">付与済</span>'
-                    : '<span class="badge badge-red">未付与</span>')
-                : '<span class="badge badge-gray">未到来</span>');
+          const rateBadge = g.nodata
+            ? '<span class="badge badge-gray">勤怠データ無</span>'
+            : (g.skipped
+              ? `<span class="badge badge-red">${rateStr}<br>8割未満</span>`
+              : rateStr);
+          const statusBadge = g.nodata
+            ? '<span class="badge badge-gray">要手動確認（実績なし）</span>'
+            : (g.skipped
+              ? '<span class="badge badge-red">付与なし(8割未満)</span>'
+              : (isPast
+                  ? (existing
+                      ? '<span class="badge badge-green">付与済</span>'
+                      : '<span class="badge badge-red">未付与</span>')
+                  : '<span class="badge badge-gray">未到来</span>'));
           return `<tr>
             <td class="tl">${i===0?emp.name:''}</td>
             <td>${i===0?emp.hireDate:''}</td>
@@ -313,6 +318,31 @@ function grantPaidLeaveAll() {
   }
   saveLS('paidLeave', paidLeave);
   showToast(`${count}件の付与レコードを追加しました`);
+  renderPage('paid_leave');
+}
+
+// 【追加 R8.8】付与レコードを全クリアして、正しい比例付与＋8割判定で全員分を
+//   再生成する。旧ロジック（一律10日付与や重複付与）で汚れたデータを一掃する用。
+//   取得記録(used)は保持する。取り消せないため二重確認する。
+function rebuildPaidLeaveAll() {
+  if (!confirm('全従業員の「付与レコード」を一度すべて削除し、入社日・勤務実績から正しい比例付与（8割判定込み）で付与し直します。\n\n※ 取得記録は保持されます。\n※ この操作は取り消せません。\n\n実行しますか？')) return;
+  if (!confirm('本当に実行しますか？（付与レコードが再構築されます）')) return;
+
+  let empCount = 0, grantCount = 0;
+  for (const emp of activeEmployees()) {
+    if (!emp.hireDate) continue;
+    const used = (paidLeave[emp.id] && paidLeave[emp.id].used) ? paidLeave[emp.id].used : [];
+    const newGrants = [];
+    for (const g of calcPaidLeaveGrant(emp)) {
+      if (g.skipped || g.days <= 0) continue;
+      newGrants.push({ date: g.date, days: g.days, category: g.category, rate: g.rate });
+      grantCount++;
+    }
+    paidLeave[emp.id] = { grants: newGrants, used };
+    empCount++;
+  }
+  saveLS('paidLeave', paidLeave);
+  showToast(`${empCount}名・${grantCount}件で付与レコードを再構築しました`);
   renderPage('paid_leave');
 }
 
