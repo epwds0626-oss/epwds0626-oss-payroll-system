@@ -1752,12 +1752,52 @@ function plCategoryLabel(cat) {
 }
 
 // 有給残日数取得
-function getPaidLeaveBalance(empId) {
+// 有給残日数の計算（労基法39条：付与から2年で時効消滅）
+// ------------------------------------------------------------
+// 【R8.8 修正】従来は全付与の単純合計から全取得を引くだけで、時効消滅を
+//   適用していなかったため、長期勤続者で残日数が異常累積（101日等）し、
+//   取得超過でマイナス残（-3日）も発生していた。
+//   正しくは：①各付与は付与日から2年で失効 ②取得は古い付与から先に消化(FIFO)
+//   ③基準日(通常は今日)時点で有効な付与の残合計を返す。
+function getPaidLeaveBalance(empId, asOf) {
   const pl = paidLeave[empId];
-  if (!pl) return { balance: 0, grants: [], used: [] };
-  const totalGrant = (pl.grants || []).reduce((s,g)=>s+g.days,0);
-  const totalUsed  = (pl.used  || []).reduce((s,u)=>s+u.days,0);
-  return { balance: totalGrant - totalUsed, grants: pl.grants||[], used: pl.used||[] };
+  if (!pl) return { balance: 0, grants: [], used: [], activeGrants: [], expired: 0 };
+  const base = asOf ? new Date(asOf) : new Date();
+
+  // 付与を日付順に並べ、各付与に「残枠」を持たせる
+  const grants = (pl.grants || []).slice().sort((a,b)=> (a.date<b.date?-1:1));
+  const used   = (pl.used   || []).slice().sort((a,b)=> (a.date<b.date?-1:1));
+
+  // 各付与の失効日 = 付与日 + 2年
+  const buckets = grants.map(g => {
+    const exp = new Date(g.date); exp.setFullYear(exp.getFullYear() + 2);
+    return { date: g.date, days: g.days, remaining: g.days, expire: exp, category: g.category, rate: g.rate };
+  });
+
+  // 取得をFIFOで消化：取得日時点で有効な最古の付与から引く
+  for (const u of used) {
+    let need = u.days;
+    const uDate = new Date(u.date);
+    for (const b of buckets) {
+      if (need <= 0) break;
+      if (new Date(b.date) > uDate) continue;      // まだ付与されていない
+      if (b.expire <= uDate) continue;             // 取得時点で既に失効
+      const take = Math.min(b.remaining, need);
+      b.remaining -= take; need -= take;
+    }
+    // need>0 の残りは付与外取得（欠勤/特別休暇等）。残枠は減らさない。
+  }
+
+  // 基準日時点で有効（未失効）な付与の残合計
+  let balance = 0, expired = 0;
+  const activeGrants = [];
+  for (const b of buckets) {
+    if (b.expire <= base) { expired += b.remaining; continue; } // 失効分
+    if (new Date(b.date) > base) continue;                      // 未到来
+    balance += b.remaining;
+    if (b.remaining > 0) activeGrants.push({ date: b.date, days: b.days, remaining: b.remaining, expire: b.expire.toISOString().slice(0,10) });
+  }
+  return { balance, grants: pl.grants || [], used: pl.used || [], activeGrants, expired };
 }
 
 // ３６協定チェック（月80h / 年720h）
