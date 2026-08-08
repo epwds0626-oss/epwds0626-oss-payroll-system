@@ -249,10 +249,16 @@ function buildWageLedgerHTML(year, month, emps) {
   const allData = emps.map(emp => {
     const s   = getMonthSummary(emp.store === '両店' ? `${emp.id}_enya` : emp.id, year, month);
     const sal = calcSalaryWithAdjBoth(emp, year, month);
-    return { emp, s, sal };
+    const ot  = otBreakdown(emp, sal); // 残業内訳（固定/週/残業/60h超）※明細と共通【R8.8.8】
+    return { emp, s, sal, ot };
   });
 
-  const tableRows = allData.map(({ emp, s, sal }) => `
+  // 残業内訳セル（上段=時間・下段=金額、0は「—」）
+  const otCell = (h, pay) => (pay > 0 || h > 0)
+    ? `<span style="color:#666;font-size:8.5px">${hm(Math.round(h*60)/60)}</span><br>${pay.toLocaleString()}`
+    : '—';
+
+  const tableRows = allData.map(({ emp, s, sal, ot }) => `
     <tr>
       <td class="tl">${emp.name}</td><td>—</td><td>${emp.type}</td>
       <td>${s.workDays}</td>
@@ -261,11 +267,15 @@ function buildWageLedgerHTML(year, month, emps) {
       <td>${s.monthMidnight>0?hm(Math.round(s.monthMidnight*60)/60):'—'}</td>
       <td>${s.monthHoliday>0?hm(Math.round(s.monthHoliday*60)/60):'—'}</td>
       <td>${sal.basePay.toLocaleString()}</td>
-      <td>${sal.otPay>0?sal.otPay.toLocaleString():'—'}</td>
+      <td>${otCell(ot.fixedH, ot.fixedPay)}</td>
+      <td>${otCell(ot.weekH, ot.weekPay)}</td>
+      <td>${otCell(ot.dailyH, ot.dailyPay)}</td>
+      <td>${otCell(ot.over60H, ot.over60Pay)}</td>
       <td>${sal.midnightPay>0?sal.midnightPay.toLocaleString():'—'}</td>
       <td>${sal.holidayPay>0?sal.holidayPay.toLocaleString():'—'}</td>
       <td>${sal.commute.toLocaleString()}</td>
       <td>${(sal.chouseikin||0)!==0?(sal.chouseikin||0).toLocaleString():'—'}</td>
+      <td><strong>${sal.grossTotal.toLocaleString()}</strong></td>
       <td>${sal.kenpo>0?sal.kenpo.toLocaleString():'—'}</td>
       <td>${sal.kosei>0?sal.kosei.toLocaleString():'—'}</td>
       <td>${sal.shienkin>0?sal.shienkin.toLocaleString():'—'}</td>
@@ -275,11 +285,14 @@ function buildWageLedgerHTML(year, month, emps) {
       <td><strong>${sal.netPay.toLocaleString()}</strong></td>
     </tr>`).join('');
 
-  const t = { workDays:0, actual:0, ot:0, mid:0, hol:0, base:0, otP:0, midP:0, holP:0, comm:0, cho:0, kenpo:0, kosei:0, shienkin:0, koyo:0, income:0, jumin:0, net:0 };
-  for (const { s, sal } of allData) {
+  const t = { workDays:0, actual:0, ot:0, mid:0, hol:0, base:0, fixP:0, weekP:0, dailyP:0, over60P:0, gross:0, midP:0, holP:0, comm:0, cho:0, kenpo:0, kosei:0, shienkin:0, koyo:0, income:0, jumin:0, net:0 };
+  for (const { s, sal, ot } of allData) {
     t.workDays+=s.workDays; t.actual+=s.totalActual; t.ot+=s.monthOT;
     t.mid+=s.monthMidnight; t.hol+=s.monthHoliday;
-    t.base+=sal.basePay; t.otP+=sal.otPay; t.midP+=sal.midnightPay;
+    t.base+=sal.basePay;
+    t.fixP+=ot.fixedPay; t.weekP+=ot.weekPay; t.dailyP+=ot.dailyPay; t.over60P+=ot.over60Pay;
+    t.gross+=sal.grossTotal;
+    t.midP+=sal.midnightPay;
     t.holP+=sal.holidayPay; t.comm+=sal.commute; t.cho+=(sal.chouseikin||0);
     t.kenpo+=sal.kenpo; t.kosei+=sal.kosei; t.shienkin+=(sal.shienkin||0);
     t.koyo+=sal.koyoHoken; t.income+=sal.incomeTax; t.jumin+=sal.juminzei; t.net+=sal.netPay;
@@ -291,14 +304,20 @@ function buildWageLedgerHTML(year, month, emps) {
       ${emp.name}
     </label>`).join('');
 
-  const tableRowsData = allData.map(({ emp, s, sal }, i) => ({
+  const tableRowsData = allData.map(({ emp, s, sal, ot }, i) => ({
     idx: i, name: emp.name, type: emp.type,
     workDays: s.workDays,
     actual: hm(Math.round(s.totalActual*60)/60),
     ot: s.monthOT>0?hm(Math.round(s.monthOT*60)/60):'—',
     mid: s.monthMidnight>0?hm(Math.round(s.monthMidnight*60)/60):'—',
     hol: s.monthHoliday>0?hm(Math.round(s.monthHoliday*60)/60):'—',
-    basePay: sal.basePay, otPay: sal.otPay, midP: sal.midnightPay,
+    basePay: sal.basePay,
+    fixH: hm(Math.round(ot.fixedH*60)/60),  fixP: ot.fixedPay,
+    weekHt: hm(Math.round(ot.weekH*60)/60), weekP: ot.weekPay,
+    dailyHt: hm(Math.round(ot.dailyH*60)/60), dailyP: ot.dailyPay,
+    over60Ht: hm(Math.round(ot.over60H*60)/60), over60P: ot.over60Pay,
+    gross: sal.grossTotal,
+    midP: sal.midnightPay,
     holP: sal.holidayPay, comm: sal.commute, cho: sal.chouseikin||0,
     kenpo: sal.kenpo, kosei: sal.kosei, shienkin: sal.shienkin||0,
     koyo: sal.koyoHoken, income: sal.incomeTax, jumin: sal.juminzei,
@@ -358,12 +377,12 @@ function buildWageLedgerHTML(year, month, emps) {
         <th rowspan="2">雇用<br>形態</th><th rowspan="2">出勤<br>日数</th>
         <th rowspan="2">実労働<br>時間</th><th rowspan="2">時間外<br>労働時間</th>
         <th rowspan="2">深夜<br>時間</th><th rowspan="2">休日<br>時間</th>
-        <th colspan="6">支給額</th>
+        <th colspan="10">支給額</th>
         <th colspan="6">控除額</th>
         <th rowspan="2">差引<br>支給額</th>
       </tr>
       <tr>
-        <th>基本給</th><th>残業</th><th>深夜</th><th>休日</th><th>交通費</th><th>調整金</th>
+        <th>基本給</th><th>固定<br>残業</th><th>週残業</th><th>残業</th><th>60h超<br>残業</th><th>深夜</th><th>休日</th><th>交通費</th><th>調整金</th><th>総支給額</th>
         <th>健保</th><th>厚年</th><th>子育<br>支援金</th><th>雇保</th><th>所得税</th><th>住民税</th>
       </tr>
     </thead>
@@ -373,10 +392,15 @@ function buildWageLedgerHTML(year, month, emps) {
       <td>${t.workDays}</td><td>${hm(Math.round(t.actual*60)/60)}</td>
       <td>${hm(Math.round(t.ot*60)/60)}</td><td>${hm(Math.round(t.mid*60)/60)}</td>
       <td>${hm(Math.round(t.hol*60)/60)}</td>
-      <td>${t.base.toLocaleString()}</td><td>${t.otP.toLocaleString()}</td>
+      <td>${t.base.toLocaleString()}</td>
+      <td>${t.fixP?t.fixP.toLocaleString():'—'}</td>
+      <td>${t.weekP?t.weekP.toLocaleString():'—'}</td>
+      <td>${t.dailyP?t.dailyP.toLocaleString():'—'}</td>
+      <td>${t.over60P?t.over60P.toLocaleString():'—'}</td>
       <td>${t.midP.toLocaleString()}</td><td>${t.holP.toLocaleString()}</td>
       <td>${t.comm.toLocaleString()}</td>
       <td>${t.cho?t.cho.toLocaleString():'—'}</td>
+      <td><strong>${t.gross.toLocaleString()}</strong></td>
       <td>${t.kenpo.toLocaleString()}</td><td>${t.kosei.toLocaleString()}</td>
       <td>${t.shienkin.toLocaleString()}</td>
       <td>${t.koyo.toLocaleString()}</td><td>${t.income.toLocaleString()}</td>
@@ -391,6 +415,7 @@ function buildWageLedgerHTML(year, month, emps) {
   <script>
     const ROWS = ${JSON.stringify(tableRowsData)};
     function fmt(v){ return v>0?v.toLocaleString():'—'; }
+    function otc(ht, pay){ return pay>0 ? '<span style="color:#666;font-size:8.5px">'+ht+'</span><br>'+pay.toLocaleString() : '—'; }
     function filterTable(){
       const checked = new Set([...document.querySelectorAll('.empChk:checked')].map(c=>+c.dataset.idx));
       const rows = ROWS.filter(r=>checked.has(r.idx));
@@ -400,9 +425,11 @@ function buildWageLedgerHTML(year, month, emps) {
           <td>\${r.workDays}</td><td>\${r.actual}</td><td>\${r.ot}</td>
           <td>\${r.mid}</td><td>\${r.hol}</td>
           <td>\${r.basePay.toLocaleString()}</td>
-          <td>\${fmt(r.otPay)}</td><td>\${fmt(r.midP)}</td><td>\${fmt(r.holP)}</td>
+          <td>\${otc(r.fixH,r.fixP)}</td><td>\${otc(r.weekHt,r.weekP)}</td><td>\${otc(r.dailyHt,r.dailyP)}</td><td>\${otc(r.over60Ht,r.over60P)}</td>
+          <td>\${fmt(r.midP)}</td><td>\${fmt(r.holP)}</td>
           <td>\${r.comm.toLocaleString()}</td>
           <td>\${r.cho?r.cho.toLocaleString():'—'}</td>
+          <td><strong>\${r.gross.toLocaleString()}</strong></td>
           <td>\${fmt(r.kenpo)}</td><td>\${fmt(r.kosei)}</td><td>\${fmt(r.shienkin)}</td>
           <td>\${fmt(r.koyo)}</td><td>\${fmt(r.income)}</td><td>\${fmt(r.jumin)}</td>
           <td><strong>\${r.net.toLocaleString()}</strong></td>
@@ -444,10 +471,13 @@ function exportWageLedgerCSV(year, month) {
   const store = document.getElementById('wageLedgerStore')?.value || '';
   const emps = getWageLedgerEmps(year, month, store);
   const header = ['氏名','雇用形態','店舗','出勤日数','実労働時間','時間外労働時間','深夜時間','休日時間',
-    '基本給','残業手当','深夜手当','休日手当','交通費','調整金','健保','厚年','子育て支援金','雇保','所得税','住民税','差引支給額'];
+    '基本給',
+    '固定残業時間','固定残業手当','週残業時間','週残業手当','残業時間','残業手当','60h超残業時間','60h超残業手当',
+    '深夜手当','休日手当','交通費','調整金','総支給額','健保','厚年','子育て支援金','雇保','所得税','住民税','差引支給額'];
   const rows = emps.map(emp => {
     const s   = getMonthSummary(emp.store === '両店' ? `${emp.id}_enya` : emp.id, year, month);
     const sal = calcSalaryWithAdjBoth(emp, year, month);
+    const ot  = otBreakdown(emp, sal);
     return [
       emp.name, emp.type, emp.store,
       s.workDays,
@@ -455,7 +485,12 @@ function exportWageLedgerCSV(year, month) {
       s.monthOT>0?hm(Math.round(s.monthOT*60)/60):'0h',
       s.monthMidnight>0?hm(Math.round(s.monthMidnight*60)/60):'0h',
       s.monthHoliday>0?hm(Math.round(s.monthHoliday*60)/60):'0h',
-      sal.basePay, sal.otPay, sal.midnightPay, sal.holidayPay, sal.commute, sal.chouseikin||0,
+      sal.basePay,
+      hm(Math.round(ot.fixedH*60)/60), ot.fixedPay,
+      hm(Math.round(ot.weekH*60)/60), ot.weekPay,
+      hm(Math.round(ot.dailyH*60)/60), ot.dailyPay,
+      hm(Math.round(ot.over60H*60)/60), ot.over60Pay,
+      sal.midnightPay, sal.holidayPay, sal.commute, sal.chouseikin||0, sal.grossTotal,
       sal.kenpo, sal.kosei, sal.shienkin||0, sal.koyoHoken, sal.incomeTax, sal.juminzei, sal.netPay
     ];
   });
