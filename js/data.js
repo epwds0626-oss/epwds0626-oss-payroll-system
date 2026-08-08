@@ -1189,8 +1189,10 @@ const SHORTFALL_START_YM = 202608; // 差額積立の開始（支給月）
 
 // 【追加 R8.8】差額精算の対象スタッフ（社員ID）。ここに載っている月給者だけが
 //   交通費調整の廃止＋目標差額の賞与精算の対象になる。対象を変える時はこの配列を編集する。
-//   現状: 青木(1)・原(2)・小沼(3)・圷(22)
-const SHORTFALL_TARGET_IDS = [1, 2, 3, 22];
+//   現状: 青木(1)・原(2)・小沼(3)・圷(25)
+//   【修正 R8.8】旧[1,2,3,22]は誤り。id:22は澤さん（パート・時給・差額精算対象外）、
+//   圷さんの正しいIDは25。人違いにより圷が対象から漏れ旧方式（交通費張付き）に落ちていた。
+const SHORTFALL_TARGET_IDS = [1, 2, 3, 25];
 function isShortfallTarget(emp) {
   const baseId = getBaseId(emp && emp.id); // 両店の _enya/_marco も本体IDに正規化
   return SHORTFALL_TARGET_IDS.includes(baseId);
@@ -1485,20 +1487,27 @@ function calcSalary(emp, year, month, opts) {
   let targetShortfall = 0;
   let targetShortfallNote = '';
 
+  // 【修正 R8.8】交通費ブロックは月別targetGrossHistoryを優先（他経路と流儀を統一）。
+  //   マスタのemp.targetGrossは対象4名で0のため、これを直参照すると門番・調整が壊れる。
+  const _ymCommute = `${year}-${String(month).padStart(2,'0')}`;
+  const _monthlyTGc = (targetGrossHistory[String(emp.id)] || {})[_ymCommute]
+    ?? (targetGrossHistory[String(getBaseId(emp.id))] || {})[_ymCommute];
+  const _effTargetGross = (_monthlyTGc !== undefined) ? _monthlyTGc : (emp.targetGross || 0);
+
   let commuteAdj = actualCommute;
-  if (emp.payType === '月給' && emp.targetGross > 0 && !isMarcoSide) {
+  if (emp.payType === '月給' && _effTargetGross > 0 && !isMarcoSide) {
     const otTotal = otPayR + midnightPayR + holidayPayR;
     if (_newCommuteMode) {
       // 交通費は実費のまま。差額は表示のみ（9月・3月に支払）
-      targetShortfall = Math.max(0, emp.targetGross - basePayR - otTotal - actualCommute);
+      targetShortfall = Math.max(0, _effTargetGross - basePayR - otTotal - actualCommute);
       if (targetShortfall > 0) {
-        targetShortfallNote = '目標総支給（¥' + emp.targetGross.toLocaleString()
+        targetShortfallNote = '目標総支給（¥' + _effTargetGross.toLocaleString()
           + '）までの差額。9月・3月に賞与としてまとめて支払います。';
       }
     } else {
-      commuteAdj = Math.max(0, emp.targetGross - emp.baseSalary - otTotal);
+      commuteAdj = Math.max(0, _effTargetGross - emp.baseSalary - otTotal);
       // 注釈も調整の実態に合わせる（距離式のままだと金額と説明が食い違う）
-      commuteNoteText = '目標総支給（¥' + emp.targetGross.toLocaleString() + '）による調整';
+      commuteNoteText = '目標総支給（¥' + _effTargetGross.toLocaleString() + '）による調整';
     }
   }
 
