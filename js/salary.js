@@ -301,6 +301,51 @@ function payslipCommentSection(empId, year, month) {
     </div>`;
 }
 
+// ============================================================
+// 残業内訳の共通計算（明細・賃金台帳で共有）【R8.8.8追加】
+// fixedOTRows と同一ロジックで、固定残業／週残業／残業(日8h超)／60h超
+// の「時間」と「金額」を返す。表示側はこれを使うだけにして二重管理を防ぐ。
+// 返り値の金額合計は sal.otPay と一致する（丸め差は日8h超分で吸収）。
+// ------------------------------------------------------------
+function otBreakdown(emp, sal) {
+  const h       = sal.hourlyBase || 0;
+  const fixedH  = emp.fixedOTHours || 0;
+  const hasFixed = fixedH > 0 && emp.payType === '月給';
+  const totalOT = sal.monthOT || 0;
+
+  if (!hasFixed) {
+    // 固定残業なし：全残業を「残業(日8h超〜60h 125%)」と「60h超150%」に分ける
+    const over60H  = Math.max(0, totalOT - 60);
+    const over60P  = over60H > 0 ? Math.round(over60H * h * 1.50) : 0;
+    const dailyH   = Math.max(0, totalOT - over60H);
+    const dailyP   = Math.max(0, (sal.otPay || 0) - over60P); // 残余で丸め吸収
+    return {
+      fixedH: 0,       fixedPay: 0,
+      weekH:  0,       weekPay:  0,
+      dailyH: dailyH,  dailyPay: dailyP,
+      over60H: over60H, over60Pay: over60P,
+    };
+  }
+
+  const fixedOTPay = Math.round(fixedH * h * 1.25);
+  const over60H    = Math.max(0, totalOT - 60);                     // 150%対象
+  const band125H   = Math.max(0, Math.min(totalOT, 60) - fixedH);   // 固定超過〜60hの125%帯
+  const weekH      = Math.min(sal.monthWeekOT || 0, band125H);      // 週残業（125%）
+  const dailyH     = Math.max(0, band125H - weekH);                 // 日8h超由来の125%
+
+  const excessPayTotal = totalOT > fixedH ? Math.max(0, (sal.otPay || 0) - fixedOTPay) : 0;
+  const over60Pay = over60H > 0 ? Math.round(over60H * h * 1.50) : 0;
+  const weekPay   = weekH   > 0 ? Math.round(weekH   * h * 1.25) : 0;
+  const dailyPay  = Math.max(0, excessPayTotal - over60Pay - weekPay); // 残余で丸め吸収
+
+  return {
+    fixedH: fixedH,   fixedPay: fixedOTPay,
+    weekH:  weekH,    weekPay:  weekPay,
+    dailyH: dailyH,   dailyPay: dailyPay,
+    over60H: over60H, over60Pay: over60Pay,
+  };
+}
+
 // 固定残業手当の明細行を生成（パターンA：固定残業行＋超過残業行）
 // emp: 従業員マスタ、sal: calcSalary結果、empIdStr: adjRow用ID文字列
 function fixedOTRows(emp, sal, empIdStr, year, month) {
@@ -337,24 +382,12 @@ function fixedOTRows(emp, sal, empIdStr, year, month) {
   }
 
   const h = sal.hourlyBase;
-  const fixedOTPay = Math.round(fixedH * h * 1.25);
-
-  // ---- 社員向け内訳（固定 → 週残業125% → 日8h超分125% → 60h超150%）【R8.7.14変更】----
-  // 月60h超150%のしきい値は「固定分も含めた実残業合計」で判定（労基法）。
-  // 〜60hの125%帯はまず週40h超に割り当て、残りを日8h超分として表示する
-  // （どの時間を帯に入れるかは表示上の整理であり、支給総額は変わらない）。
-  // 0時間の行は表示しない。
-  const totalOT = sal.monthOT; // 日8h超＋週40h超の合計（60h判定はこの合計で行う）
-  const over60H = Math.max(0, totalOT - 60);                          // 150%対象
-  const band125H = Math.max(0, Math.min(totalOT, 60) - fixedH);       // 固定超過〜60hの125%帯
-  const weekH   = Math.min(sal.monthWeekOT || 0, band125H);           // 週残業（独立行・125%）
-  const dailyH  = Math.max(0, band125H - weekH);                      // 日8h超由来の125%分
-
-  // 端数差異を出さないため、合計は計算済み残業手当から確定し内訳行に配分する
-  const excessPayTotal = totalOT > fixedH ? Math.max(0, (sal.otPay || 0) - fixedOTPay) : 0;
-  const over60Pay = over60H > 0 ? Math.round(over60H * h * 1.50) : 0;
-  const weekPay   = weekH   > 0 ? Math.round(weekH   * h * 1.25) : 0;
-  const dailyPay  = Math.max(0, excessPayTotal - over60Pay - weekPay); // 残余で丸め吸収
+  // ---- 内訳は共通関数 otBreakdown で計算（明細・賃金台帳で共有）【R8.8.8】----
+  const _b = otBreakdown(emp, sal);
+  const fixedOTPay = _b.fixedPay;
+  const totalOT = sal.monthOT;
+  const over60H = _b.over60H, weekH = _b.weekH, dailyH = _b.dailyH;
+  const over60Pay = _b.over60Pay, weekPay = _b.weekPay, dailyPay = _b.dailyPay;
 
   const line = (label, sub, pay) => pay > 0
     ? `<div style="display:flex;justify-content:space-between;padding:3px 0">
