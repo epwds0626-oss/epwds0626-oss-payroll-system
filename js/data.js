@@ -1914,15 +1914,23 @@ function calcBonusTax(bonusAmount, prevMonthNetShakai, dependents = 0, taxType =
 function calcBonusDeductions(emp, bonusAmount, prevMonthGross = 0, prevMonthNetShakai = 0) {
   if (bonusAmount <= 0) return { kenpo:0, kosei:0, shienkin:0, koyoHoken:0, incomeTax:0, totalDeduction:0, netPay:0 };
 
-  // 社会保険（賞与標準額：千円未満切捨て）
+  // 社会保険（賞与は「標準賞与額＝賞与額の千円未満切捨て」に料率を直接乗じる）
+  // ※月額用の標準報酬等級表(getHyojunKenpo/calcShakai)は通さない。
+  //   通すと標準賞与額が月額等級に丸め上げられ、社保が過大になる（旧バグ）。
+  //   例）標準賞与額76,000→等級表で78,000に化けていた／124,000→126,000。
+  //   料率は令和8年度・協会けんぽ茨城支部：
+  //     健保9.52%（本人4.76%）／介護込11.14%（本人5.57%）／
+  //     子育て支援金0.23%（本人0.115%）／厚年18.30%（本人9.15%）
   let kenpo = 0, kosei = 0, shienkin = 0;
   if (emp.shakai === '加入') {
-    const hyojun = Math.floor(bonusAmount / 1000) * 1000;
-    const s = calcShakai(hyojun, emp.birthDate, emp.hyojunHoshu || 0);
-    kenpo = s.kenpo; kosei = s.kosei; shienkin = s.shienkin;
+    const hyojun = Math.floor(bonusAmount / 1000) * 1000; // 標準賞与額（千円未満切捨て）
+    const kaigo  = isKaigoTarget(emp.birthDate);          // 40〜64歳のみ介護保険上乗せ
+    kenpo    = Math.round(hyojun * (kaigo ? KENPO_KAIGO_RATE : KENPO_RATE));
+    kosei    = Math.round(hyojun * KOSEI_RATE);
+    shienkin = Math.round(hyojun * SHIENKIN_RATE);
   }
 
-  // 雇用保険
+  // 雇用保険（賞与額そのものに料率。標準賞与額ではない）
   let koyoHoken = 0;
   if (emp.koyo === '加入') koyoHoken = calcKoyoHoken(bonusAmount);
 
