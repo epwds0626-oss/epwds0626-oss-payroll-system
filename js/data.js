@@ -1522,13 +1522,24 @@ function calcSalary(emp, year, month, opts) {
   const settlementBreakdown = [];  // 互換のため空で保持
 
   // 社会保険
+  // 【修正 R8.9】標準報酬月額は定時決定／随時改定で年1回決まる固定値であり、
+  //   各月の残業込み総支給(grossTotal)で毎月再判定してはならない。従来はここで
+  //   grossTotalを渡していたため、残業の多い月に等級が跳ね上がり社会保険料が
+  //   過大になっていた（小沼氏の是正精算で判明）。判定基準は app.js ダッシュボード
+  //   と同一の安定値に統一する：① 標準報酬月額(決定通知書) ② 目標総支給 ③ 基本給
+  //   （時給者は hourlyWage×173h、いずれも無い場合のみ従来どおり総支給）。
+  //   ※雇用保険は実際の賃金（残業込み総支給）に課すため grossTotal のままで正しい。
   let kenpo = 0, kosei = 0, shienkin = 0;
   if (emp.shakai === '加入') {
-    const s = calcShakai(grossTotal, emp.birthDate, emp.hyojunHoshu || 0);
+    const shakaiBase = emp.hyojunHoshu > 0 ? emp.hyojunHoshu
+      : (emp.payType === '月給' && emp.targetGross > 0 ? emp.targetGross
+        : (emp.payType === '月給' ? emp.baseSalary
+          : (emp.hourlyWage > 0 ? emp.hourlyWage * 173 : grossTotal)));
+    const s = calcShakai(shakaiBase, emp.birthDate, emp.hyojunHoshu || 0);
     kenpo = s.kenpo; kosei = s.kosei; shienkin = s.shienkin;
   }
 
-  // 雇用保険
+  // 雇用保険（実際の賃金＝残業込み総支給に課す。社保と異なり毎月変動して正しい）
   let koyoHoken = 0;
   if (emp.koyo === '加入') koyoHoken = calcKoyoHoken(grossTotal);
 
