@@ -617,7 +617,7 @@ function calcTargetGross() {
   const fixedOTH   = parseFloat(document.getElementById('ef_fixedOTHours')?.value) || 0;
   const commute    = parseInt(document.getElementById('ef_commute')?.value) || 0;
   if (baseSalary <= 0 || fixedOTH <= 0) return;
-  const MONTHLY_HOURS = 173.3;
+  const MONTHLY_HOURS = 173.8; // 【修正 R8.10】本体計算（calcSalary）と統一
   const hourly = baseSalary / MONTHLY_HOURS;
   const fixedOTPay = Math.round(fixedOTH * hourly * 1.25);
   const target = baseSalary + fixedOTPay + commute;
