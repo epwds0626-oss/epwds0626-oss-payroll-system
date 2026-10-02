@@ -1208,15 +1208,19 @@ const BASE_SALARY_HISTORY = {
   3:  { '2000-01': 190000, '2026-10': 200000 }, // 小沼
   25: { '2000-01': 190000, '2026-10': 200000 }, // 圷
 };
-function getEffectiveBaseSalary(emp, year, month) {
+// 返り値: その月に有効な { base, key }（履歴なし・該当なしは key=null でマスタ値）
+function getEffectiveBaseSalaryEntry(emp, year, month) {
   const hist = BASE_SALARY_HISTORY[getBaseId(emp && emp.id)];
-  if (!hist) return emp.baseSalary;
+  if (!hist) return { base: emp.baseSalary, key: null };
   const ym = `${year}-${String(month).padStart(2,'0')}`;
   let best = null;
   for (const k of Object.keys(hist)) {
     if (k <= ym && (best === null || k > best)) best = k;
   }
-  return best === null ? emp.baseSalary : hist[best];
+  return best === null ? { base: emp.baseSalary, key: null } : { base: hist[best], key: best };
+}
+function getEffectiveBaseSalary(emp, year, month) {
+  return getEffectiveBaseSalaryEntry(emp, year, month).base;
 }
 
 // 【追加 R8.10】固定残業代の下限保証を、目標総支給の履歴がある月にも適用する開始月。
@@ -1339,9 +1343,17 @@ function calcSalary(emp, year, month, opts) {
 
   // 【追加 R8.10】その月に有効な基本給を適用（BASE_SALARY_HISTORY）。
   //   以降の基本給・残業単価・固定残業代・交通費調整・社保判定はすべてこの値を使う。
-  const _effBase = getEffectiveBaseSalary(emp, year, month);
-  if (_effBase !== emp.baseSalary) {
-    emp = Object.assign({}, emp, { baseSalary: _effBase });
+  //   【修正 R8.10】月給者でもマスタに hourlyWage（旧基本給ベースの残業単価、例 ¥1,097）が
+  //   入っていると残業単価がそちらで固定され、基本給を上げても固定残業代が旧額のままになる。
+  //   改定後の履歴（'2000-01' 以外）が効く月は、残業単価を新基本給÷月平均時間（円未満四捨五入）で
+  //   計算し直す。'2000-01'（改定前）の月は従来の単価のまま＝過去の支払いを再現。
+  const _effEntry = getEffectiveBaseSalaryEntry(emp, year, month);
+  if (_effEntry.key !== null && emp.payType === '月給') {
+    const _patch = { baseSalary: _effEntry.base };
+    if (_effEntry.key !== '2000-01') {
+      _patch.hourlyWage = Math.round(_effEntry.base / (emp.monthlyHours || 173.8));
+    }
+    emp = Object.assign({}, emp, _patch);
   }
 
   // fixedOTHours は targetGross を変えない（手動設定優先）
