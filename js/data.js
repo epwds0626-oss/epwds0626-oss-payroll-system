@@ -1193,6 +1193,39 @@ const SHORTFALL_START_YM = 202608; // 差額積立の開始（支給月）
 //   【修正 R8.8】旧[1,2,3,22]は誤り。id:22は澤さん（パート・時給・差額精算対象外）、
 //   圷さんの正しいIDは25。人違いにより圷が対象から漏れ旧方式（交通費張付き）に落ちていた。
 const SHORTFALL_TARGET_IDS = [1, 2, 3, 25];
+
+// 【追加 R8.10】基本給の月別履歴（最低賃金改定 R8.10.18 = 1,136円 対応）
+//   マスタの baseSalary は1つしか持てず、書き換えると過去月の再計算（明細再印刷・
+//   賃金台帳・差額精算）まで新額で計算し直されてしまう。そこで「適用開始月 → 基本給」
+//   の履歴を持ち、各月はその月以前で最も新しい適用開始月の額を使う。
+//   月キーは給与計算月（'2026-10' = 2026/9/21〜10/20 の期間）。
+//   '2000-01' は「改定前のすべての月」を表す（過去月を従来額のまま固定するため）。
+//   履歴の無いスタッフ・履歴より前の月はマスタの baseSalary を使う。
+//   次回改定時はここに新しい適用開始月を追記する（マスタも同額に更新してよい）。
+const BASE_SALARY_HISTORY = {
+  1:  { '2000-01': 190000, '2026-10': 200000 }, // 青木
+  2:  { '2000-01': 190000, '2026-10': 200000 }, // 原
+  3:  { '2000-01': 190000, '2026-10': 200000 }, // 小沼
+  25: { '2000-01': 190000, '2026-10': 200000 }, // 圷
+};
+function getEffectiveBaseSalary(emp, year, month) {
+  const hist = BASE_SALARY_HISTORY[getBaseId(emp && emp.id)];
+  if (!hist) return emp.baseSalary;
+  const ym = `${year}-${String(month).padStart(2,'0')}`;
+  let best = null;
+  for (const k of Object.keys(hist)) {
+    if (k <= ym && (best === null || k > best)) best = k;
+  }
+  return best === null ? emp.baseSalary : hist[best];
+}
+
+// 【追加 R8.10】固定残業代の下限保証を、目標総支給の履歴がある月にも適用する開始月。
+//   従来は月別targetGrossHistoryがある月に fixedOTHours を0に上書きしており、
+//   労働条件通知書に「固定残業代40時間分」と記載があるのに、実残業が40h未満の月は
+//   実績分しか残業代が計上されていなかった。過去月は実際の支払いどおりに再現する
+//   必要があるため（賃金台帳・明細の整合）、修正はこの月以降のみに適用する。
+//   過去月の不足分は未払賃金として別途精算する（社労士確認中）。
+const FIXED_OT_GUARANTEE_FIX_YM = 202610;
 function isShortfallTarget(emp) {
   const baseId = getBaseId(emp && emp.id); // 両店の _enya/_marco も本体IDに正規化
   return SHORTFALL_TARGET_IDS.includes(baseId);
@@ -1296,7 +1329,19 @@ function calcSalary(emp, year, month, opts) {
   const _ym = `${year}-${String(month).padStart(2,'0')}`;
   const _monthlyTG = (targetGrossHistory[String(emp.id)] || {})[_ym];
   if (_monthlyTG !== undefined) {
-    emp = Object.assign({}, emp, { targetGross: _monthlyTG, fixedOTHours: 0 });
+    // 【修正 R8.10】FIXED_OT_GUARANTEE_FIX_YM 以降は fixedOTHours を残す（固定残業代の下限保証を効かせる）。
+    //   それより前の月は実際の支払いを再現するため従来どおり0に上書き。
+    const _keepFixedOT = (year * 100 + month) >= FIXED_OT_GUARANTEE_FIX_YM;
+    emp = Object.assign({}, emp, _keepFixedOT
+      ? { targetGross: _monthlyTG }
+      : { targetGross: _monthlyTG, fixedOTHours: 0 });
+  }
+
+  // 【追加 R8.10】その月に有効な基本給を適用（BASE_SALARY_HISTORY）。
+  //   以降の基本給・残業単価・固定残業代・交通費調整・社保判定はすべてこの値を使う。
+  const _effBase = getEffectiveBaseSalary(emp, year, month);
+  if (_effBase !== emp.baseSalary) {
+    emp = Object.assign({}, emp, { baseSalary: _effBase });
   }
 
   // fixedOTHours は targetGross を変えない（手動設定優先）
