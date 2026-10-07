@@ -1219,6 +1219,25 @@ function getEffectiveBaseSalaryEntry(emp, year, month) {
   }
   return best === null ? { base: emp.baseSalary, key: null } : { base: hist[best], key: best };
 }
+// 【追加 R8.10.7】月給者の残業単価の月別履歴（基本給履歴と同じキー・同じ探し方）。
+//   ～2026年8月：¥1,097（実際の支払単価）／2026年9月：¥1,093（190,000÷173.8）／
+//   2026年10月～：¥1,151（200,000÷173.8）。ここに無いスタッフ・月は 基本給÷173.8 で算出。
+const OT_RATE_HISTORY = {
+  1:  { '2000-01': 1097, '2026-09': 1093, '2026-10': 1151 }, // 青木
+  2:  { '2000-01': 1097, '2026-09': 1093, '2026-10': 1151 }, // 原
+  3:  { '2000-01': 1097, '2026-09': 1093, '2026-10': 1151 }, // 小沼
+  25: { '2000-01': 1097, '2026-09': 1093, '2026-10': 1151 }, // 圷
+};
+function getEffectiveOTRate(emp, year, month) {
+  const hist = OT_RATE_HISTORY[getBaseId(emp && emp.id)];
+  if (!hist) return null;
+  const ym = `${year}-${String(month).padStart(2,'0')}`;
+  let best = null;
+  for (const k of Object.keys(hist)) {
+    if (k <= ym && (best === null || k > best)) best = k;
+  }
+  return best === null ? null : hist[best];
+}
 function getEffectiveBaseSalary(emp, year, month) {
   return getEffectiveBaseSalaryEntry(emp, year, month).base;
 }
@@ -1352,9 +1371,11 @@ function calcSalary(emp, year, month, opts) {
   //   基本給190,000のまま単価だけ¥1,151で計算されていた（正：190,000÷173.8＝¥1,093）。
   const _effEntry = getEffectiveBaseSalaryEntry(emp, year, month);
   if (_effEntry.key !== null && emp.payType === '月給') {
+    //   【修正 R8.10.7】単価は OT_RATE_HISTORY を優先（8月以前¥1,097／9月¥1,093／10月～¥1,151）。
+    const _rate = getEffectiveOTRate(emp, year, month);
     emp = Object.assign({}, emp, {
       baseSalary: _effEntry.base,
-      hourlyWage: Math.round(_effEntry.base / (emp.monthlyHours || 173.8)),
+      hourlyWage: _rate !== null ? _rate : Math.round(_effEntry.base / (emp.monthlyHours || 173.8)),
     });
   }
 
