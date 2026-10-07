@@ -1347,13 +1347,15 @@ function calcSalary(emp, year, month, opts) {
   //   入っていると残業単価がそちらで固定され、基本給を上げても固定残業代が旧額のままになる。
   //   改定後の履歴（'2000-01' 以外）が効く月は、残業単価を新基本給÷月平均時間（円未満四捨五入）で
   //   計算し直す。'2000-01'（改定前）の月は従来の単価のまま＝過去の支払いを再現。
+  //   【修正 R8.10.7】改定前（'2000-01'）の月もマスタの hourlyWage を使わず、その月の基本給から
+  //   残業単価を算出する。マスタを新基本給（200,000）・新単価（¥1,151）に更新すると、過去月が
+  //   基本給190,000のまま単価だけ¥1,151で計算されていた（正：190,000÷173.8＝¥1,093）。
   const _effEntry = getEffectiveBaseSalaryEntry(emp, year, month);
   if (_effEntry.key !== null && emp.payType === '月給') {
-    const _patch = { baseSalary: _effEntry.base };
-    if (_effEntry.key !== '2000-01') {
-      _patch.hourlyWage = Math.round(_effEntry.base / (emp.monthlyHours || 173.8));
-    }
-    emp = Object.assign({}, emp, _patch);
+    emp = Object.assign({}, emp, {
+      baseSalary: _effEntry.base,
+      hourlyWage: Math.round(_effEntry.base / (emp.monthlyHours || 173.8)),
+    });
   }
 
   // fixedOTHours は targetGross を変えない（手動設定優先）
