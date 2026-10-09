@@ -291,14 +291,43 @@ const KENPO_KAIGO_RATE = 0.0557; // 健保（介護あり・40〜64歳）(9.52+1
 const KOSEI_RATE       = 0.0915; // 厚生年金 18.30%÷2（変更なし）
 const SHIENKIN_RATE    = 0.00115; // 子ども・子育て支援金（0.23%÷2）2026年5月納付分〜
 
-// 年齢から介護保険対象かどうかを判定（40歳以上65歳未満）
-function isKaigoTarget(birthDateStr) {
+// 【追加 R8.10.9】法令準拠の計算修正（端数処理・賞与税率表・雇保再計算・休日/深夜の判定など）を
+//   適用する開始月（給与支給月）。これより前の月は「実際に支払った計算」を再現するため従来ロジックのまま。
+const LEGAL_FIX_YM = 202610;
+function legalFixOn(year, month) { return !year || (year * 100 + month) >= LEGAL_FIX_YM; }
+
+// 【追加 R8.10.9】給与から控除する被保険者負担分の端数処理（協会けんぽ・年金機構の原則）
+//   50銭以下切捨て／50銭超切上げ（四捨五入と違い、ちょうど50銭は切捨て）。
+//   例）標準報酬190,000×0.115%＝218.5 → 218円（従来の四捨五入では219円）
+function roundDeduction(x) {
+  const rin = Math.round(x * 1000);           // 厘単位に丸めて浮動小数の誤差を除去
+  const yen = Math.floor(rin / 1000);
+  return (rin - yen * 1000 <= 500) ? yen : yen + 1;
+}
+
+// 【追加 R8.10.9】社会保険料の徴収月ずれ（翌月徴収＝当月支給の給与から前月分の保険料を控除）。
+//   介護保険の対象月判定に使う。当月徴収の会社は 0 にする。
+const SHAKAI_COLLECT_LAG = 1;
+
+// 介護保険の対象か（40歳到達月〜65歳到達月の前月の保険料が対象）
+//   【修正 R8.10.9】従来は「今日の年齢」で判定しており、過去月を開くと現在の年齢で
+//   計算し直され、また40歳・65歳の到達月の判定もずれていた。
+//   year/month（給与支給月）を渡すと、その給与で控除する保険料の月で判定する。
+//   到達日＝誕生日の前日。到達日がその保険料月の末日以前なら40歳到達済み。
+function isKaigoTarget(birthDateStr, year, month, lag = SHAKAI_COLLECT_LAG) {
   if (!birthDateStr) return false;
   const birth = new Date(birthDateStr);
-  const today = new Date();
-  const age   = today.getFullYear() - birth.getFullYear()
-    - (today < new Date(today.getFullYear(), birth.getMonth(), birth.getDate()) ? 1 : 0);
-  return age >= 40 && age < 65;
+  if (isNaN(birth)) return false;
+  let pm;   // 保険料月の末日
+  if (year && month) {
+    let y = year, m = month - lag;
+    while (m < 1) { m += 12; y--; }
+    pm = new Date(y, m, 0);
+  } else {
+    pm = new Date();
+  }
+  const reach = age => { const d = new Date(birth.getFullYear() + age, birth.getMonth(), birth.getDate()); d.setDate(d.getDate() - 1); return d; };
+  return reach(40) <= pm && reach(65) > pm;
 }
 
 // 健保・厚年 標準報酬月額等級表（報酬月額 → 標準報酬月額）
@@ -327,16 +356,24 @@ function getHyojunKenpo(reportMonthly) {
 
 // 社会保険料計算（標準報酬月額ベース）
 // hyojunFixed: 従業員マスタの固定標準報酬月額（設定済みの場合はこちらを優先）
-function calcShakai(grossForShakai, birthDateStr = '', hyojunFixed = 0) {
+// 【追加 R8.10.9】厚生年金の標準報酬月額は1〜32等級（下限88,000円・上限650,000円）。
+//   健保の等級表（下限58,000円・上限1,390,000円）をそのまま使うと範囲外で厚年が誤る。
+function clampKoseiHyojun(h) { return Math.min(650000, Math.max(88000, h)); }
+
+function calcShakai(grossForShakai, birthDateStr = '', hyojunFixed = 0, year, month) {
   // 固定値があればそれを使う・なければ等級表で判定
   const hyojun = hyojunFixed > 0
     ? hyojunFixed
     : getHyojunKenpo(grossForShakai);
-  const kaigo  = isKaigoTarget(birthDateStr);
-  const kenpo  = Math.round(hyojun * (kaigo ? KENPO_KAIGO_RATE : KENPO_RATE));
-  const kosei  = Math.round(hyojun * KOSEI_RATE);
+  const kaigo  = isKaigoTarget(birthDateStr, year, month);
+  // 【修正 R8.10.9】端数は50銭以下切捨て（従来は四捨五入）。厚年は等級の上下限を適用。
+  //   LEGAL_FIX_YM より前の月は従来の計算（四捨五入・上下限なし）を再現する。
+  const fix = legalFixOn(year, month);
+  const rd  = fix ? roundDeduction : Math.round;
+  const kenpo  = rd(hyojun * (kaigo ? KENPO_KAIGO_RATE : KENPO_RATE));
+  const kosei  = rd((fix ? clampKoseiHyojun(hyojun) : hyojun) * KOSEI_RATE);
   // 子ども・子育て支援金（2026年4月分〜・社保加入者のみ・標準報酬月額ベース）
-  const shienkin = Math.round(hyojun * SHIENKIN_RATE);
+  const shienkin = rd(hyojun * SHIENKIN_RATE);
   return { kenpo, kosei, kaigo, shienkin, hyojun };
 }
 
@@ -356,21 +393,25 @@ const COMMUTE_YEN_PER_KM = 10;
 const COMPANY_ADDRESS = '茨城県東茨城郡大洗町港中央9-4';
 
 // -------- 所得税計算 --------
-function calcIncomeTax(taxableGross, dependents = 0, taxType = '甲') {
+function calcIncomeTax(taxableGross, dependents = 0, taxType = '甲', year, month) {
   if (taxableGross <= 0) return 0;
-  const dep = Math.min(Math.max(parseInt(dependents) || 0, 0), 7);
+  const _fix = legalFixOn(year, month);
+  const depRaw = Math.max(parseInt(dependents) || 0, 0);
+  const dep = Math.min(depRaw, 7);
 
   // 乙欄
   if (taxType === '乙') {
-    if (taxableGross < 105000) return Math.round(taxableGross * 0.03063);
+    // 【修正 R8.10.9】3.063%相当額は1円未満切捨て（従来は四捨五入）
+    if (taxableGross < 105000) return _fix ? Math.floor(taxableGross * 0.03063) : Math.round(taxableGross * 0.03063);
     for (const row of TAX_TABLE_R8) {
       if (taxableGross >= row[0] && taxableGross < row[1]) {
         const otuBase = row[10];
-        if (otuBase === null) return Math.round(taxableGross * 0.03063);
+        if (otuBase === null) return _fix ? Math.floor(taxableGross * 0.03063) : Math.round(taxableGross * 0.03063);
         return otuBase;
       }
     }
-    return Math.round(taxableGross * TAX_OTU_RATE_HIGH);
+    // 【修正 R8.10.9】乙欄 740,000円以上：259,200円＋超過額×40.84%（従来は3.063%で過少）
+    return Math.floor(259200 + (taxableGross - 740000) * 0.4084);
   }
 
   // 甲欄（令和8年度）
@@ -380,12 +421,21 @@ function calcIncomeTax(taxableGross, dependents = 0, taxType = '甲') {
       // row[2]〜row[9] = 扶養0〜7人
       const base = row[2 + dep];
       // 扶養7人超: 7人の金額から1人ごとに1,610円控除
-      const extra = dep > 7 ? (dep - 7) * 1610 : 0;
+      // 【修正 R8.10.9】dep は7で頭打ちのため従来この控除が効いていなかった
+      const extra = depRaw > 7 ? (depRaw - 7) * 1610 : 0;
       return Math.max(0, base - extra);
     }
   }
-  // 740,000円以上は速算式（簡易）
-  return Math.round(taxableGross * 0.3321 - 352500);
+  // 【修正 R8.10.9】740,000円以上（令和8年分 月額表）。
+  //   740,000〜790,000円未満：740,000円の税額＋超過額×20.42%（従来の速算式は誤り）。
+  //   790,000円以上は扶養0人のみ式が判明（790,000円の税額81,890円＋超過額×23.483%）。
+  //   それ以外は表の確認が必要なため、740,000円の税額＋20.42%で近似する。
+  const T740 = [71680, 65210, 58750, 52290, 45810, 39350, 32890, 26410];
+  const extra7 = depRaw > 7 ? (depRaw - 7) * 1610 : 0;
+  if (taxableGross >= 790000 && dep === 0) {
+    return Math.floor(81890 + (taxableGross - 790000) * 0.23483);
+  }
+  return Math.max(0, Math.floor(T740[dep] + (taxableGross - 740000) * 0.2042) - extra7);
 }
 
 // -------- 給与締め・支払・休日設定 --------
@@ -499,6 +549,13 @@ function calcSalaryWithAdj(emp, year, month) {
     + sal.otPay + sal.midnightPay + sal.holidayLegalPay + sal.commute
     + (sal.chouseikin || 0);
 
+  // 【追加 R8.10.9】雇用保険料は実際の支給総額に課すため、支給項目を調整した場合も
+  //   総支給から計算し直す（従来は調整前の総支給のままで、調整金などに雇保がかかっていなかった）。
+  //   雇用保険料そのものを手入力で調整している場合はその値を優先。
+  if (adj.koyoHoken === undefined && emp.koyo === '加入' && legalFixOn(year, month)) {
+    sal.koyoHoken = calcKoyoHoken(sal.grossTotal);
+  }
+
   // 【追加 R8.7.26】調整金は課税手当のため、所得税の課税対象額に含めて再計算する。
   //   calcSalary 本体の grossTotal には調整金が入らない（調整金は salaryAdj で
   //   後付け）ため、調整金込みの課税対象額で所得税を計算し直さないと、調整金分の
@@ -510,7 +567,7 @@ function calcSalaryWithAdj(emp, year, month) {
   if (adj.incomeTax === undefined && emp.type !== '業務委託') {
     const taxable = sal.grossTotal - sal.commute
       - sal.kenpo - sal.kosei - sal.shienkin - sal.koyoHoken;
-    sal.incomeTax = calcIncomeTax(Math.max(0, taxable), emp.dependents, emp.tax);
+    sal.incomeTax = calcIncomeTax(Math.max(0, taxable), emp.dependents, emp.tax, year, month);
   }
 
   sal.totalDeduction = sal.kenpo + sal.kosei + sal.shienkin + sal.koyoHoken
@@ -969,15 +1026,37 @@ function calcWeeklyOT(dailyList, year, month) {
 // 給与計算期間（前月21日〜当月20日）＋週マタギのため前後1週間を含む打刻を取得
 // punchOut から midnight/dailyOT をリアルタイム再計算（Firebase保存値の精度誤差を上書き）
 // 両店マージ済みレコード（_merged:true）はactualが既に合算済みなのでスキップ
-function recomputeRec(rec) {
+// 【追加 R8.10.9】この日付以降の勤怠は、深夜時間を「出退勤の全区間×22時〜5時の重なり−休憩」で、
+//   法定休日を「チェック＝その日の実働全体」で計算する（2026年10月支給分の初日）。
+//   それより前の日は支払時の計算を再現するため従来ロジックのまま。
+const ATT_FIX_FROM_DATE = '2026-09-21';
+
+// 法定休日・法定外休日のチェック（1/true）を時間に置き換える。
+//   従来は 1（チェック値）をそのまま「1時間」として集計しており、法定休日に8時間働いても
+//   1時間分の35%しか付かなかった。法定休日労働は時間外（日8h超）とは別枠で35%のため、
+//   その日の日8h超・深夜残業は0にする（深夜の+25%は深夜手当で別途加算）。
+function applyHolidayHours(rec) {
+  const out = { ...rec };
+  const act = out.actual || 0;
+  if (out.holidayLegal) {
+    out.holidayLegal = act;
+    out.dailyOT = 0;
+    out.midnightOT = 0;
+  }
+  if (out.holidayNonLegal) out.holidayNonLegal = act;
+  return out;
+}
+
+function recomputeRec(rec, dateStr) {
   if (rec._merged) return rec; // マージ済みは再計算しない
+  const fix = !!dateStr && dateStr >= ATT_FIX_FROM_DATE;
   // 打刻キー正規化（timecard は 'in'/'out'、手動入力は 'punchIn'/'punchOut'）
   if (!rec.punchIn  && rec.in)  rec = { ...rec, punchIn:  rec.in  };
   if (!rec.punchOut && rec.out) rec = { ...rec, punchOut: rec.out };
   // ゼロパディング：'7:48' → '07:48'（input[type=time]はHH:mm形式が必要）
   const _padT = t => t && /^\d:\d\d$/.test(t) ? '0'+t : t;
   rec = { ...rec, punchIn: _padT(rec.punchIn), punchOut: _padT(rec.punchOut) };
-  if (!rec.punchIn || !rec.punchOut) return rec;
+  if (!rec.punchIn || !rec.punchOut) return fix ? applyHolidayHours(rec) : rec;
   // punchIn === punchOut（00:00/00:00など）は無効データとして返す
   if (rec.punchIn === rec.punchOut) return { ...rec, actual: 0, midnight: 0, dailyOT: 0, midnightOT: 0 };
   const toMins = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
@@ -991,15 +1070,32 @@ function recomputeRec(rec) {
   const actual    = Math.round(netMins) / 60;
 
   // 深夜・残業を再計算
-  const rawOut = toMins(rec.punchOut);
   let midnightMins = 0;
-  if (rawOut >= 22*60) midnightMins = rawOut - 22*60;
-  else if (rawOut < 5*60) midnightMins = rawOut + 2*60;
+  if (fix) {
+    // 【修正 R8.10.9】従来は退勤時刻だけで判定しており、①5時前の早朝出勤 ②22時以降の出勤
+    //   ③深夜帯の休憩 が正しく扱えなかった。出退勤区間と深夜帯の重なりから深夜帯の休憩を引く。
+    const NIGHT = [[0, 300], [1320, 1740], [2760, 3180]]; // 0-5時, 22-翌5時, 翌22-翌々5時
+    const ov = (a1, a2) => NIGHT.reduce((t, [n1, n2]) => t + Math.max(0, Math.min(a2, n2) - Math.max(a1, n1)), 0);
+    midnightMins = ov(inMins, outMins);
+    for (const b of (rec.breaks || [])) {
+      if (!b || !b.start || !b.end) continue;
+      let bs = toMins(_padT(b.start)), be = toMins(_padT(b.end));
+      if (bs < inMins) bs += 1440;
+      if (be <= bs) be += 1440;
+      midnightMins -= ov(Math.max(bs, inMins), Math.min(be, outMins));
+    }
+    midnightMins = Math.max(0, midnightMins);
+  } else {
+    const rawOut = toMins(rec.punchOut);
+    if (rawOut >= 22*60) midnightMins = rawOut - 22*60;
+    else if (rawOut < 5*60) midnightMins = rawOut + 2*60;
+  }
   const midnight    = Math.round(midnightMins) / 60;
   const dailyOTMins = Math.max(0, netMins - 480);
   const dailyOT     = dailyOTMins / 60;
   const midnightOT  = Math.min(midnight, dailyOT);
-  return { ...rec, actual, midnight, dailyOT, midnightOT };
+  const out = { ...rec, actual, midnight, dailyOT, midnightOT };
+  return fix ? applyHolidayHours(out) : out;
 }
 
 function getExtendedDailyList(empId, year, month, noMerge) {
@@ -1039,9 +1135,9 @@ function getExtendedDailyList(empId, year, month, noMerge) {
         if (d < rangeStart || d > rangeEnd) continue;
         const existing = list.findIndex(r=>r.date===date);
         if (existing === -1) {
-          list.push({ date, ...recomputeRec(rec), _legacy: true });
+          list.push({ date, ...recomputeRec(rec, date), _legacy: true });
         } else if (rec.source === 'manual') {
-          list[existing] = { date, ...recomputeRec(rec), _legacy: true };
+          list[existing] = { date, ...recomputeRec(rec, date), _legacy: true };
         }
       }
     }
@@ -1053,11 +1149,11 @@ function getExtendedDailyList(empId, year, month, noMerge) {
 
       const existing = list.findIndex(r=>r.date===date);
       if (existing === -1) {
-        list.push({ date, ...recomputeRec(rec) });
+        list.push({ date, ...recomputeRec(rec, date) });
       } else if (rec.source === 'manual') {
-        list[existing] = { date, ...recomputeRec(rec) };
+        list[existing] = { date, ...recomputeRec(rec, date) };
       } else if ((rec.source === 'csv' || rec.source === 'timecard') && list[existing].source !== 'manual') {
-        list[existing] = { date, ...recomputeRec(rec) };
+        list[existing] = { date, ...recomputeRec(rec, date) };
       }
     }
 
@@ -1069,7 +1165,7 @@ function getExtendedDailyList(empId, year, month, noMerge) {
         if (d < rangeStart || d > rangeEnd) continue;
 
         const existing = list.findIndex(r=>r.date===date);
-        const pRec = recomputeRec(partnerRec);
+        const pRec = recomputeRec(partnerRec, date);
 
         if (existing === -1) {
           list.push({ date, ...pRec });
@@ -1081,7 +1177,11 @@ function getExtendedDailyList(empId, year, month, noMerge) {
           const myRec = list[existing];
           const mergedActualMins = Math.round((myRec.actual||0)*60) + Math.round((pRec.actual||0)*60);
           const mergedMidnightMins = Math.round((myRec.midnight||0)*60) + Math.round((pRec.midnight||0)*60);
-          const mergedDailyOTMins = Math.max(0, mergedActualMins - 480);
+          // 【追加 R8.10.9】どちらかの店で法定休日チェックがあれば、合算実働の全体を法定休日労働とする
+          const _holFix  = date >= ATT_FIX_FROM_DATE;
+          const _holL    = _holFix && (myRec.holidayLegal || pRec.holidayLegal);
+          const _holNL   = _holFix && (myRec.holidayNonLegal || pRec.holidayNonLegal);
+          const mergedDailyOTMins = _holL ? 0 : Math.max(0, mergedActualMins - 480);
           const mergedMidnightOT = Math.min(mergedMidnightMins/60, mergedDailyOTMins/60);
           list[existing] = {
             date,
@@ -1094,6 +1194,8 @@ function getExtendedDailyList(empId, year, month, noMerge) {
             punchIn:  myRec.punchIn  || pRec.punchIn,
             punchOut: myRec.punchOut || pRec.punchOut,
             source: myRec.source === 'manual' || pRec.source === 'manual' ? 'manual' : 'timecard',
+            ...(_holL  ? { holidayLegal: mergedActualMins / 60 } : {}),
+            ...(_holNL ? { holidayNonLegal: mergedActualMins / 60 } : {}),
             _merged: true,
           };
         }
@@ -1113,7 +1215,7 @@ function getExtendedDailyList(empId, year, month, noMerge) {
         if (!rec || !rec.in) continue;
         if (rec.in === rec.out) continue; // 無効データ
         if (list.findIndex(r => r.date === date) !== -1) continue;
-        list.push({ date, ...recomputeRec({ ...rec, source: 'timecard', _live: true }) });
+        list.push({ date, ...recomputeRec({ ...rec, source: 'timecard', _live: true }, date) });
       }
     }
   }
@@ -1462,10 +1564,10 @@ function calcSalary(emp, year, month, opts) {
     const grossTotal = emp.targetGross || 0;
     let kenpo = 0, kosei = 0, shienkin = 0;
     if (emp.shakai === '加入') {
-      const s = calcShakai(grossTotal, emp.birthDate, emp.hyojunHoshu || 0);
+      const s = calcShakai(grossTotal, emp.birthDate, emp.hyojunHoshu || 0, year, month);
       kenpo = s.kenpo; kosei = s.kosei; shienkin = s.shienkin;
     }
-    const incomeTax      = calcIncomeTax(grossTotal - kenpo - kosei - shienkin, emp.dependents, emp.tax);
+    const incomeTax      = calcIncomeTax(grossTotal - kenpo - kosei - shienkin, emp.dependents, emp.tax, year, month);
     const juminzei       = emp.juminzei || 0;
     const totalDeduction = kenpo + kosei + shienkin + incomeTax + juminzei;
     const netPay         = Math.round(grossTotal - totalDeduction);
@@ -1476,7 +1578,7 @@ function calcSalary(emp, year, month, opts) {
       holidayLegalPay: 0, holidayNonLegalPay: 0, holidayPay: 0,
       commute: 0, commuteNote: '', grossTotal, kenpo, kosei, shienkin, koyoHoken: 0,
       incomeTax, juminzei, totalDeduction, netPay,
-      kaigo: isKaigoTarget(emp.birthDate),
+      kaigo: isKaigoTarget(emp.birthDate, year, month),
       monthOT:0, monthDailyOT:0, monthWeekOT:0,
       monthMidnight:0, monthMidnightOT:0,
       monthHolidayLegal:0, monthHolidayNonLegal:0, monthHoliday:0,
@@ -1515,7 +1617,7 @@ function calcSalary(emp, year, month, opts) {
       const marcoData = (attendance[ym] && attendance[ym][emp.id]) || {};
       for (const [date, rec] of Object.entries(marcoData)) {
         if (date < startDate || date > endDate) continue;
-        const r = recomputeRec(rec);
+        const r = recomputeRec(rec, date);
         marcoOnlyActual += r.actual || 0;
         if (r.actual > 0) marcoOnlyWorkDays++;
       }
@@ -1613,7 +1715,10 @@ function calcSalary(emp, year, month, opts) {
   const midnightOTPay   = midnightOT60u * h * 0.25 + midnightOT60o * h * 0.25;
   const midnightPay     = midnightOnlyPay + midnightOTPay;
 
-  const holidayLegalPay = effectiveHolidayLegal * h * 0.35;
+  // 【修正 R8.10.9】月給者は基本給に法定休日の労働分（100%）が含まれないため135%を支給する。
+  //   時給者は基本給（実働−残業）に100%分が入っているので+35%のみ。
+  const _holRate = (emp.payType === '月給' && legalFixOn(year, month)) ? 1.35 : 0.35;
+  const holidayLegalPay = effectiveHolidayLegal * h * _holRate;
 
   // ── 交通費（調整給）の計算 ─────────────────────────────
   // 役職手当廃止。月給スタッフかつ targetGross 設定あり:
@@ -1689,7 +1794,7 @@ function calcSalary(emp, year, month, opts) {
       : (emp.payType === '月給' && emp.targetGross > 0 ? emp.targetGross
         : (emp.payType === '月給' ? emp.baseSalary
           : (emp.hourlyWage > 0 ? emp.hourlyWage * 173 : grossTotal)));
-    const s = calcShakai(shakaiBase, emp.birthDate, emp.hyojunHoshu || 0);
+    const s = calcShakai(shakaiBase, emp.birthDate, emp.hyojunHoshu || 0, year, month);
     kenpo = s.kenpo; kosei = s.kosei; shienkin = s.shienkin;
   }
 
@@ -1717,7 +1822,7 @@ function calcSalary(emp, year, month, opts) {
       incomeTax = 0;
     }
   } else {
-    incomeTax = calcIncomeTax(taxable, emp.dependents, emp.tax);
+    incomeTax = calcIncomeTax(taxable, emp.dependents, emp.tax, year, month);
   }
 
   const juminzei        = emp.juminzei || 0;
@@ -1746,7 +1851,7 @@ function calcSalary(emp, year, month, opts) {
     targetShortfallNote,
     settlementPay,            // 精算月に上乗せ支払した差額合計（9月/3月のみ>0）
     settlementBreakdown,      // 精算の内訳 [{y,m,amount}]
-    kaigo: isKaigoTarget(emp.birthDate),
+    kaigo: isKaigoTarget(emp.birthDate, year, month),
     grossTotal, kenpo, kosei, shienkin, koyoHoken, incomeTax, juminzei, chutaikyoAmount,
     totalDeduction:      Math.round(totalDeduction),
     netPay,
@@ -2010,9 +2115,43 @@ function check36(empId, year, month) {
 // 賞与（インセンティブ）計算
 // ============================================================
 
-// 賞与に対する源泉徴収税額の算出率の表（令和8年度）
+// 賞与に対する源泉徴収税額の算出率の表（令和8年分・国税庁）
+// 【修正 R8.10.9】従来の表は区分・税率とも誤り（例：扶養0人・前月社保控除後給与25万円で
+//   正しくは4.084%のところ10.21%を適用し、源泉税が約2.5倍になっていた）。
+//   また乙欄の列番号ずれ（扶養6人の値を%のまま乗じていた）も修正。
+//   各行＝税率(%)、各列＝扶養0〜7人以上の「前月の社会保険料等控除後の給与等の金額」の下限（千円・以上）
+const BONUS_RATES_R8 = [0, 2.042, 4.084, 6.126, 8.168, 10.210, 12.252, 14.294, 16.336, 18.378,
+  20.420, 22.462, 24.504, 26.546, 28.588, 30.630, 32.672, 35.735, 38.798, 41.861, 45.945];
+const BONUS_LOWER_R8 = [ // [扶養人数][税率行] 下限（千円）
+  [0, 82, 94,260,309,342,372,402,433,520,605,684,715,752,795, 854, 922,1318,1521,2621,3495],
+  [0,107,250,289,346,373,401,430,463,520,621,705,739,778,821, 882, 952,1342,1526,2645,3527],
+  [0,143,276,321,377,400,426,457,492,525,636,728,764,804,848, 910, 983,1367,1526,2669,3559],
+  [0,181,300,354,405,424,452,484,517,550,651,751,788,830,876, 938,1013,1391,1538,2693,3590],
+  [0,218,300,387,431,452,477,509,540,577,666,774,813,856,903, 966,1044,1416,1555,2716,3622],
+  [0,251,304,412,457,479,503,531,564,604,681,798,838,881,930, 994,1074,1440,1555,2740,3654],
+  [0,284,343,438,483,505,527,553,589,630,697,821,862,907,957,1022,1104,1464,1555,2764,3685],
+  [0,317,383,463,508,529,552,578,614,657,708,845,887,933,985,1051,1135,1489,1583,2788,3717],
+];
+// 乙欄：[下限(千円), 税率%]
+const BONUS_OTU_R8 = [[0,10.210],[224,20.420],[295,30.630],[527,38.798],[1118,45.945]];
+
+function bonusTaxRate(prevNet, dependents, taxType) {
+  const k = prevNet / 1000;
+  if (taxType === '乙') {
+    let r = BONUS_OTU_R8[0][1];
+    for (const [lo, rate] of BONUS_OTU_R8) if (k >= lo) r = rate;
+    return r / 100;
+  }
+  const dep = Math.min(Math.max(parseInt(dependents) || 0, 0), 7);
+  const lows = BONUS_LOWER_R8[dep];
+  let idx = 0;
+  for (let i = 0; i < lows.length; i++) if (k >= lows[i]) idx = i;
+  return BONUS_RATES_R8[idx] / 100;
+}
+
+// 【旧】R8.10.9以前に使っていた賞与算出率表（誤りあり）。2026年9月支給以前の再表示用にのみ残す。
 // [前月社保控除後給与の下限, 上限, 扶養0人率, 1人率, 2人率, 3人率, 4人率, 5人率, 6人率, 乙欄率]
-const BONUS_TAX_TABLE = [
+const BONUS_TAX_TABLE_LEGACY = [
   [0,      68000,  0,      0,      0,      0,      0,      0,      0,      0.03063],
   [68000,  79000,  2.042,  0,      0,      0,      0,      0,      0,      0.04084],
   [79000,  252000, 10.21,  2.042,  0,      0,      0,      0,      0,      0.07635],
@@ -2031,41 +2170,41 @@ const BONUS_TAX_TABLE = [
   [1334000,1500000,50.420, 40.84,  40.84,  40.84,  40.84,  30.63,  30.63,  0.30630],
   [1500000,Infinity,50.420,50.420, 40.84,  40.84,  40.84,  40.84,  30.63,  0.30630],
 ];
-
-/**
- * 賞与源泉徴収税額を計算する
- * @param {number} bonusAmount - 賞与額（社保控除前）
- * @param {number} prevMonthNetShakai - 前月の社保控除後給与（=課税支給額-通勤費）
- * @param {number} dependents - 扶養親族等の数
- * @param {string} taxType - '甲' or '乙'
- * @returns {number} 源泉徴収税額
- */
-function calcBonusTax(bonusAmount, prevMonthNetShakai, dependents = 0, taxType = '甲') {
+function calcBonusTaxLegacy(bonusAmount, prevMonthNetShakai, dependents = 0, taxType = '甲') {
   if (bonusAmount <= 0) return 0;
   const dep = Math.min(Math.max(parseInt(dependents) || 0, 0), 6);
-
   let rate = 0;
-  for (const row of BONUS_TAX_TABLE) {
+  for (const row of BONUS_TAX_TABLE_LEGACY) {
     if (prevMonthNetShakai >= row[0] && prevMonthNetShakai < row[1]) {
-      if (taxType === '乙') {
-        rate = row[8];
-      } else {
-        rate = row[2 + dep] / 100;
-      }
+      rate = (taxType === '乙') ? row[8] : row[2 + dep] / 100;
       break;
     }
   }
-
-  // 前月給与が0（新入社員等）の場合は月換算法
   if (prevMonthNetShakai === 0) {
     const monthly = bonusAmount / 6;
-    const annualIncome = monthly * 12;
-    if (annualIncome <= 0) return 0;
-    const monthlyTax = calcIncomeTax(monthly, dependents, taxType);
-    return Math.round(monthlyTax * 6);
+    if (monthly <= 0) return 0;
+    return Math.round(calcIncomeTax(monthly, dependents, taxType, 2026, 9) * 6);
   }
-
   return Math.round(bonusAmount * rate);
+}
+
+/**
+ * 賞与源泉徴収税額を計算する
+ * @param {number} bonusAmount - 社会保険料等控除後の賞与額
+ * @param {number} prevMonthNetShakai - 前月の社会保険料等控除後の給与等の金額
+ * 【修正 R8.10.9】前月給与が無い場合、または賞与が前月給与の10倍を超える場合は
+ *   月額表を使う特例：（前月給与＋賞与÷6）の月額表税額 − 前月給与の月額表税額 を6倍。
+ *   税額は1円未満切捨て。
+ */
+function calcBonusTax(bonusAmount, prevMonthNetShakai, dependents = 0, taxType = '甲') {
+  if (bonusAmount <= 0) return 0;
+  const prev = Math.max(0, prevMonthNetShakai || 0);
+  if (prev === 0 || bonusAmount > prev * 10) {
+    const t1 = calcIncomeTax(prev + Math.floor(bonusAmount / 6), dependents, taxType);
+    const t0 = prev > 0 ? calcIncomeTax(prev, dependents, taxType) : 0;
+    return Math.max(0, (t1 - t0) * 6);
+  }
+  return Math.floor(bonusAmount * bonusTaxRate(prev, dependents, taxType));
 }
 
 /**
@@ -2076,7 +2215,7 @@ function calcBonusTax(bonusAmount, prevMonthNetShakai, dependents = 0, taxType =
  * @param {number} prevMonthNetShakai - 前月社保控除後給与（税率参照用）
  * @returns {object} 計算結果
  */
-function calcBonusDeductions(emp, bonusAmount, prevMonthGross = 0, prevMonthNetShakai = 0) {
+function calcBonusDeductions(emp, bonusAmount, prevMonthGross = 0, prevMonthNetShakai = 0, year, month) {
   if (bonusAmount <= 0) return { kenpo:0, kosei:0, shienkin:0, koyoHoken:0, incomeTax:0, totalDeduction:0, netPay:0 };
 
   // 社会保険（賞与は「標準賞与額＝賞与額の千円未満切捨て」に料率を直接乗じる）
@@ -2089,10 +2228,13 @@ function calcBonusDeductions(emp, bonusAmount, prevMonthGross = 0, prevMonthNetS
   let kenpo = 0, kosei = 0, shienkin = 0;
   if (emp.shakai === '加入') {
     const hyojun = Math.floor(bonusAmount / 1000) * 1000; // 標準賞与額（千円未満切捨て）
-    const kaigo  = isKaigoTarget(emp.birthDate);          // 40〜64歳のみ介護保険上乗せ
-    kenpo    = Math.round(hyojun * (kaigo ? KENPO_KAIGO_RATE : KENPO_RATE));
-    kosei    = Math.round(hyojun * KOSEI_RATE);
-    shienkin = Math.round(hyojun * SHIENKIN_RATE);
+    // 【修正 R8.10.9】賞与は支給月の保険料（徴収ずれなし）で介護判定。端数は50銭以下切捨て。
+    //   厚年の標準賞与額は1回150万円が上限。
+    const kaigo  = isKaigoTarget(emp.birthDate, year, month, 0); // 40〜64歳のみ介護保険上乗せ
+    const rd = legalFixOn(year, month) ? roundDeduction : Math.round;
+    kenpo    = rd(hyojun * (kaigo ? KENPO_KAIGO_RATE : KENPO_RATE));
+    kosei    = rd((legalFixOn(year, month) ? Math.min(hyojun, 1500000) : hyojun) * KOSEI_RATE);
+    shienkin = rd(hyojun * SHIENKIN_RATE);
   }
 
   // 雇用保険（賞与額そのものに料率。標準賞与額ではない）
@@ -2101,7 +2243,10 @@ function calcBonusDeductions(emp, bonusAmount, prevMonthGross = 0, prevMonthNetS
 
   // 賞与所得税（社保控除後の賞与額に税率を乗じる）
   const bonusAfterShakai = bonusAmount - kenpo - kosei - shienkin - koyoHoken;
-  const incomeTax = calcBonusTax(bonusAfterShakai, prevMonthNetShakai, emp.dependents, emp.tax);
+  // 【修正 R8.10.9】LEGAL_FIX_YM（2026年10月）以降は令和8年分の正しい算出率表。それより前は支払時の計算を再現。
+  const incomeTax = legalFixOn(year, month)
+    ? calcBonusTax(bonusAfterShakai, prevMonthNetShakai, emp.dependents, emp.tax)
+    : calcBonusTaxLegacy(bonusAfterShakai, prevMonthNetShakai, emp.dependents, emp.tax);
 
   const totalDeduction = kenpo + kosei + shienkin + koyoHoken + incomeTax;
   const netPay = bonusAmount - totalDeduction;
@@ -2126,8 +2271,10 @@ function getPrevMonthNetShakai(empId, year, month) {
       ? calcSalaryWithAdjBoth(emp, prevYear, prevMonth)
       : calcSalaryWithAdj(emp, prevYear, prevMonth);
     if (!sal) return 0;
-    // 社保控除後 = 課税総支給 - 社保（通勤費除いた支給額から）
-    return Math.max(0, sal.grossTotal - (sal.commute||0) - (sal.kenpo||0) - (sal.kosei||0) - (sal.shienkin||0));
+    // 社保控除後 = 課税総支給 - 社会保険料等（通勤費除いた支給額から）
+    // 【修正 R8.10.9】「社会保険料等」には雇用保険料も含む（従来は引いておらず、税率区分が上振れしうる）
+    return Math.max(0, sal.grossTotal - (sal.commute||0) - (sal.kenpo||0) - (sal.kosei||0)
+      - (sal.shienkin||0) - (legalFixOn(year, month) ? (sal.koyoHoken||0) : 0));
   } catch(e) {
     return 0;
   }
