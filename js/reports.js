@@ -260,7 +260,7 @@ function buildWageLedgerHTML(year, month, emps) {
 
   const tableRows = allData.map(({ emp, s, sal, ot }) => `
     <tr>
-      <td class="tl">${emp.name}</td><td>—</td><td>${emp.type}</td>
+      <td class="tl">${emp.name}</td><td>${emp.gender||'<span style="color:#c0392b">未設定</span>'}</td><td>${emp.type}</td>
       <td>${s.workDays}</td>
       <td>${hm(Math.round(s.totalActual*60)/60)}</td>
       <td>${s.monthOT>0?hm(Math.round(s.monthOT*60)/60):'—'}</td>
@@ -470,7 +470,7 @@ function printWageLedgerFiltered(year, month) {
 function exportWageLedgerCSV(year, month) {
   const store = document.getElementById('wageLedgerStore')?.value || '';
   const emps = getWageLedgerEmps(year, month, store);
-  const header = ['氏名','雇用形態','店舗','出勤日数','実労働時間','時間外労働時間','深夜時間','休日時間',
+  const header = ['氏名','性別','雇用形態','店舗','出勤日数','実労働時間','時間外労働時間','深夜時間','休日時間',
     '基本給',
     '固定残業時間','固定残業手当','週残業時間','週残業手当','残業時間','残業手当','60h超残業時間','60h超残業手当',
     '深夜手当','休日手当','交通費','調整金','総支給額','健保','厚年','子育て支援金','雇保','所得税','住民税','差引支給額'];
@@ -479,7 +479,7 @@ function exportWageLedgerCSV(year, month) {
     const sal = calcSalaryWithAdjBoth(emp, year, month);
     const ot  = otBreakdown(emp, sal);
     return [
-      emp.name, emp.type, emp.store,
+      emp.name, emp.gender||'', emp.type, emp.store,
       s.workDays,
       hm(Math.round(s.totalActual*60)/60),
       s.monthOT>0?hm(Math.round(s.monthOT*60)/60):'0h',
