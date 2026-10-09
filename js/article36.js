@@ -29,6 +29,25 @@ function renderArticle36(year, month) {
     if (monthlyOTs[month-1] > a36.specialLimit) alerts.push({ level:'danger', msg:`当月${hm_a36(monthlyOTs[month-1])} 特別条項超過` });
     else if (monthlyOTs[month-1] > a36.limit36) alerts.push({ level:'warn', msg:`当月${hm_a36(monthlyOTs[month-1])} 一般条項超（特別条項適用）` });
     if (yearlyOT > a36.yearLimit) alerts.push({ level:'danger', msg:`年間${hm_a36(yearlyOT)} 年間上限超過` });
+    // 【追加 R8.10.9】労基法36条6項の絶対上限（特別条項があっても超えられない）：
+    //   ① 時間外＋法定休日労働 が月100時間未満
+    //   ② 時間外＋法定休日労働 の2〜6か月平均がいずれも80時間以内
+    //   従来は時間外のみ・単月のみの判定で、休日労働と複数月平均を見ていなかった。
+    {
+      const _eid = emp.store === '両店' ? `${emp.id}_enya` : emp.id;
+      const comb = []; // 当月から遡って6か月分（時間外＋法定休日）
+      let y = year, m = month;
+      for (let i = 0; i < 6; i++) {
+        const s = getMonthSummary(_eid, y, m);
+        comb.push((s.monthOT || 0) + (s.monthHolidayLegal || 0));
+        m--; if (m < 1) { m = 12; y--; }
+      }
+      if (comb[0] >= 100) alerts.push({ level:'danger', msg:`当月 時間外＋休日 ${hm_a36(comb[0])}（100h未満の法定上限違反）` });
+      for (let k = 2; k <= 6; k++) {
+        const avg = comb.slice(0, k).reduce((a, b) => a + b, 0) / k;
+        if (avg > 80) { alerts.push({ level:'danger', msg:`直近${k}か月平均 ${hm_a36(avg)}（80h以内の法定上限違反）` }); break; }
+      }
+    }
     return { emp, monthlyOTs, yearlyOT: Math.round(yearlyOT*60)/60, maxMonth: Math.round(maxMonth*60)/60, alerts };
   });
 
