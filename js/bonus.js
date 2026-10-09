@@ -80,7 +80,7 @@ function renderBonusRow(emp, year, month) {
   let calc = { kenpo:0, kosei:0, shienkin:0, koyoHoken:0, incomeTax:0, totalDeduction:0, netPay:0 };
   if (amount > 0) {
     const prevNet = getPrevMonthNetShakai(emp.id, year, month);
-    calc = calcBonusDeductions(emp, amount, 0, prevNet);
+    calc = calcBonusDeductions(emp, amount, 0, prevNet, year, month);
   }
 
   const shakaiTotal = calc.kenpo + calc.kosei + calc.shienkin;
@@ -124,7 +124,7 @@ function bonusCalcRow(empId, year, month) {
   let calc = { kenpo:0, kosei:0, shienkin:0, koyoHoken:0, incomeTax:0, totalDeduction:0, netPay:0 };
   if (amount > 0) {
     const prevNet = getPrevMonthNetShakai(empId, year, month);
-    calc = calcBonusDeductions(emp, amount, 0, prevNet);
+    calc = calcBonusDeductions(emp, amount, 0, prevNet, year, month);
   }
 
   const shakaiTotal = calc.kenpo + calc.kosei + calc.shienkin;
@@ -176,7 +176,7 @@ function bonusSaveAll() {
     const amount = parseInt(amtEl?.value) || 0;
     if (amount > 0) {
       const prevNet = getPrevMonthNetShakai(emp.id, year, month);
-      const calc = calcBonusDeductions(emp, amount, 0, prevNet);
+      const calc = calcBonusDeductions(emp, amount, 0, prevNet, year, month);
       // 目標差額精算の内訳（9月・3月のみ）を記録として付与
       const settle = (typeof calcSettlementBonus === 'function')
         ? calcSettlementBonus(emp, year, month) : { amount:0, breakdown:[] };
@@ -211,7 +211,7 @@ function bonusShowSlip(empId, year, month) {
   let prevNet = 0;
   if (amount > 0) {
     prevNet = getPrevMonthNetShakai(empId, year, month);
-    calc = calcBonusDeductions(emp, amount, 0, prevNet);
+    calc = calcBonusDeductions(emp, amount, 0, prevNet, year, month);
   }
 
   const shakaiTotal = calc.kenpo + calc.kosei + calc.shienkin;
@@ -323,7 +323,7 @@ function bonusSaveOne(empId, year, month) {
   const amount = parseInt(amtEl?.value) || 0;
   if (amount <= 0) { alert('賞与額を入力してください'); return; }
   const prevNet = getPrevMonthNetShakai(empId, year, month);
-  const calc = calcBonusDeductions(emp, amount, 0, prevNet);
+  const calc = calcBonusDeductions(emp, amount, 0, prevNet, year, month);
   saveBonusData(empId, year, month, { bonusAmount: amount, prevMonthNetShakai: prevNet, ...calc, savedAt: new Date().toISOString() });
   alert('保存しました。');
 }
@@ -357,7 +357,7 @@ function bonusPrintSelected() {
     let prevNet = 0;
     if (amount > 0) {
       prevNet = getPrevMonthNetShakai(emp.id, year, month);
-      calc = calcBonusDeductions(emp, amount, 0, prevNet);
+      calc = calcBonusDeductions(emp, amount, 0, prevNet, year, month);
     }
     return `
     <div style="page-break-after:always;max-width:460px;margin:0 auto 40px;padding:20px;border:1px solid #ccc;border-radius:8px">
