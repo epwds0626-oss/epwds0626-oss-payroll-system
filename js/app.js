@@ -460,9 +460,29 @@ function editEmployee(id) {
   openModal(employeeForm(emp, false));
 }
 
+// 【追加 R8.10.9】マスタ編集の適用開始月（当月〜6か月先）。過去月の計算は変えない。
+function effMonthSelectHtml() {
+  const cur = currentPayrollYm();
+  let [y, m] = cur.split('-').map(Number);
+  const opts = [];
+  for (let i = 0; i < 7; i++) {
+    const ym = `${y}-${String(m).padStart(2,'0')}`;
+    opts.push(`<option value="${ym}">${y}年${m}月分から${i===0?'（当月）':''}</option>`);
+    m++; if (m > 12) { m = 1; y++; }
+  }
+  return `
+  <div class="form-row" style="background:#fff7e6;border:1px solid #f5c26b;border-radius:8px;padding:8px 12px;margin-bottom:8px">
+    <div class="form-group"><label>給与項目の適用開始月</label>
+      <select id="ef_effYm">${opts.join('')}</select>
+      <div style="font-size:12px;color:#8a6d3b;margin-top:4px">基本給・時給・交通費・社保・扶養・住民税などの変更は、この月の給与から反映されます。それより前の月の明細・賃金台帳は変わりません。</div>
+    </div>
+  </div>`;
+}
+
 function employeeForm(emp, isNew) {
   return `
   <div class="modal-title">${isNew?'従業員追加':'従業員編集'}</div>
+  ${isNew ? '' : effMonthSelectHtml()}
   <div class="form-row">
     <div class="form-group"><label>氏名</label><input type="text" id="ef_name" value="${emp.name}"></div>
     <div class="form-group"><label>フリガナ</label><input type="text" id="ef_kana" value="${emp.kana||''}"></div>
@@ -660,8 +680,16 @@ function saveEmployee(id, isNew) {
   };
   if (!emp.name) { showToast('氏名を入力してください','error'); return; }
 
+  // 【追加 R8.10.9】給与項目の変更は適用開始月以降にだけ効かせる（月別履歴に保存）
+  const updates = { [`payroll/employees/${id}`]: emp };
+  if (!isNew) {
+    const effYm = get('ef_effYm')?.value || currentPayrollYm();
+    const { upd } = buildEmpHistoryUpdate(id, existing, emp, effYm);
+    for (const k of Object.keys(upd)) updates[`payroll/employeeHistory/${id}/${k}`] = upd[k];
+  }
+
   // Firebaseに直接書き込む（on('value')コールバックで画面自動更新）
-  db.ref(`payroll/employees/${id}`).set(emp, err => {
+  db.ref().update(updates, err => {
     if (err) { showToast('保存エラー','error'); return; }
     if (isNew && emp.hireDate) {
       db.ref(`payroll/paidLeave/${id}`).set({ grants: [], used: [] });
@@ -714,6 +742,9 @@ function importEmployeeCSV() {
 
   const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
   let imported = 0, added = 0, skipped = 0;
+  // 取込前のマスタ（履歴の「変更前」として使う）
+  const _csvBefore = {};
+  employees.forEach(e => { _csvBefore[e.id] = { ...e }; });
 
   // ヘッダ行を取得して列の並びを判定
   const headerLine = lines[0];
@@ -784,6 +815,17 @@ function importEmployeeCSV() {
   }
 
   // Firebaseに一括書き込み
+  // 【追加 R8.10.9】CSV取込の変更も当月の給与から適用（過去月は変えない）
+  const effYm = currentPayrollYm();
+  const histUpd = {};
+  for (const e of employees) {
+    const before = _csvBefore[e.id];
+    if (!before) continue; // 新規追加は履歴不要
+    const { upd, changed } = buildEmpHistoryUpdate(e.id, before, e, effYm);
+    if (Object.keys(changed).length === 0) continue;
+    for (const k of Object.keys(upd)) histUpd[`${e.id}/${k}`] = upd[k];
+  }
+  if (Object.keys(histUpd).length) FB.employeeHistory().update(histUpd);
   const empObj = {};
   employees.forEach(e => { empObj[e.id] = e; });
   FB.employees().set(empObj, err => {
