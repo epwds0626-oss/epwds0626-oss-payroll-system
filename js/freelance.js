@@ -55,7 +55,7 @@ function getFreelanceDailyData(empId, startDate, endDate) {
     for (const [dateStr, rawRec] of Object.entries(oldData)) {
       const d = new Date(dateStr);
       if (d < start || d > end) continue;
-      result[dateStr] = { ...recomputeRec(rawRec), _legacy: true };
+      result[dateStr] = { ...recomputeRec(rawRec, dateStr), _legacy: true };
     }
 
     // 2. 新キー（_enya）：旧データがあれば上書き、新キー同士なら合算
@@ -63,7 +63,7 @@ function getFreelanceDailyData(empId, startDate, endDate) {
     for (const [dateStr, rawRec] of Object.entries(enyaData)) {
       const d = new Date(dateStr);
       if (d < start || d > end) continue;
-      const rec = recomputeRec(rawRec);
+      const rec = recomputeRec(rawRec, dateStr);
       if (!result[dateStr] || result[dateStr]._legacy) {
         result[dateStr] = { ...rec };
       } else {
@@ -80,7 +80,7 @@ function getFreelanceDailyData(empId, startDate, endDate) {
     for (const [dateStr, rawRec] of Object.entries(marcoData)) {
       const d = new Date(dateStr);
       if (d < start || d > end) continue;
-      const rec = recomputeRec(rawRec);
+      const rec = recomputeRec(rawRec, dateStr);
       if (!result[dateStr] || result[dateStr]._legacy) {
         result[dateStr] = { ...rec };
       } else {
