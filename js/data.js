@@ -449,6 +449,7 @@ const FB = {
   article36:  () => db.ref('payroll/article36'),
   salaryAdj:  (ym) => db.ref(`payroll/salaryAdj/${ym}`),
   targetGrossHistory: () => db.ref('payroll/targetGrossHistory'),
+  employeeHistory: () => db.ref('payroll/employeeHistory'),
 };
 
 // -------- State --------
@@ -459,6 +460,7 @@ let paidLeave  = {};
 let article36  = {};
 let salaryAdj  = {}; // 給与調整値 { ym: { empId: { field: value } } }
 let targetGrossHistory = {}; // 月別目標総支給 { empId: { '2026-07': 400000, ... } }
+let employeeHistory = {};    // 従業員マスタの月別履歴 { empId: { '2000-01': {...}, '2026-10': {...} } }
 let _fbLoaded  = false; // 初回ロード完了フラグ
 
 // -------- 給与調整値 API --------
@@ -477,6 +479,7 @@ function setAdj(year, month, empId, field, value) {
 
 // 調整値を適用して給与を再計算
 function calcSalaryWithAdj(emp, year, month) {
+  emp = resolveEmpForMonth(emp, year, month); // 【追加 R8.10.9】扶養・税区分なども当月のマスタ内容
   const sal = calcSalary(emp, year, month);
   const adj = getAdj(year, month, emp.id);
   if (!adj || Object.keys(adj).length === 0) return sal;
@@ -759,6 +762,11 @@ function initFirebaseData() {
   FB.targetGrossHistory().on('value', snap => {
     targetGrossHistory = snap.val() || {};
     invalidateShortfallCache();
+  });
+  FB.employeeHistory().on('value', snap => {
+    employeeHistory = snap.val() || {};
+    invalidateShortfallCache();
+    if (_fbLoaded) refreshCurrentPageData();
   });
 }
 
@@ -1194,6 +1202,66 @@ const SHORTFALL_START_YM = 202608; // 差額積立の開始（支給月）
 //   圷さんの正しいIDは25。人違いにより圷が対象から漏れ旧方式（交通費張付き）に落ちていた。
 const SHORTFALL_TARGET_IDS = [1, 2, 3, 25];
 
+// 【追加 R8.10.9】従業員マスタの月別履歴（マスタ編集は「適用開始月」以降にだけ効く）
+//   payroll/employeeHistory/{社員ID}/{'YYYY-MM'} に、その月から有効な給与関連項目を保存する。
+//   各月の計算は「その月以前で最も新しい適用開始月」の内容を使う。'2000-01' は初回編集前の状態
+//   （＝それより前のすべての月）。履歴の無いスタッフは従来どおりマスタの値を使う。
+//   月キーは給与計算月（'2026-10' = 2026/9/21〜10/20）。
+const EMP_HIST_FIELDS = [
+  'type','dept','payType','baseSalary','hourlyWage',
+  'commute','commuteType','commutePerDay','commuteKm',
+  'positionAllowance','fixedOTHours','targetGross','dependents',
+  'shakai','koyo','chutaikyo','chutaikyoAmount','tax','juminzei','hyojunHoshu',
+  'birthDate','monthlyHours',
+];
+function pickEmpHistFields(e) {
+  const o = {};
+  for (const f of EMP_HIST_FIELDS) if (e && e[f] !== undefined) o[f] = e[f];
+  return o;
+}
+// 今日が属する給与計算月（21日以降は翌月分）
+function currentPayrollYm(d) {
+  d = d || new Date();
+  let y = d.getFullYear(), m = d.getMonth() + 1;
+  if (d.getDate() > 20) { m++; if (m > 12) { m = 1; y++; } }
+  return `${y}-${String(m).padStart(2,'0')}`;
+}
+// その月に有効なマスタ内容を emp に重ねて返す（id・氏名・店舗などはそのまま）
+function resolveEmpForMonth(emp, year, month) {
+  if (!emp) return emp;
+  const ym = `${year}-${String(month).padStart(2,'0')}`;
+  if (emp._histFor === ym) return emp;
+  const hist = employeeHistory[String(getBaseId(emp.id))];
+  if (!hist) return emp;
+  let best = null;
+  for (const k of Object.keys(hist)) {
+    if (k <= ym && (best === null || k > best)) best = k;
+  }
+  if (best === null) return emp;
+  return Object.assign({}, emp, hist[best], { _histFor: ym });
+}
+// マスタ保存時に履歴を書く。初回は編集前の状態を '2000-01' として残す。
+//   適用開始月より後の履歴がある場合は、今回変更した項目だけそちらにも反映する。
+function buildEmpHistoryUpdate(id, before, after, effYm) {
+  const hist = employeeHistory[String(id)] || {};
+  const upd = {};
+  const beforeF = pickEmpHistFields(before), afterF = pickEmpHistFields(after);
+  if (Object.keys(hist).length === 0) upd['2000-01'] = beforeF;
+  const changed = {};
+  for (const f of EMP_HIST_FIELDS) {
+    if (JSON.stringify(beforeF[f]) !== JSON.stringify(afterF[f]) && afterF[f] !== undefined) changed[f] = afterF[f];
+  }
+  // 適用開始月のスナップショット = 直前の有効内容 + 今回の変更
+  let prev = null;
+  for (const k of Object.keys(hist)) if (k <= effYm && (prev === null || k > prev)) prev = k;
+  const baseSnap = prev !== null ? hist[prev] : beforeF;
+  upd[effYm] = Object.assign({}, baseSnap, changed);
+  for (const k of Object.keys(hist)) {
+    if (k > effYm) upd[k] = Object.assign({}, hist[k], changed);
+  }
+  return { upd, changed };
+}
+
 // 【追加 R8.10】基本給の月別履歴（最低賃金改定 R8.10.18 = 1,136円 対応）
 //   マスタの baseSalary は1つしか持てず、書き換えると過去月の再計算（明細再印刷・
 //   賃金台帳・差額精算）まで新額で計算し直されてしまう。そこで「適用開始月 → 基本給」
@@ -1203,11 +1271,13 @@ const SHORTFALL_TARGET_IDS = [1, 2, 3, 25];
 //   履歴の無いスタッフ・履歴より前の月はマスタの baseSalary を使う。
 //   次回改定時はここに新しい適用開始月を追記する（マスタも同額に更新してよい）。
 const BASE_SALARY_HISTORY = {
-  1:  { '2000-01': 190000, '2026-10': 200000 }, // 青木
-  2:  { '2000-01': 190000, '2026-10': 200000 }, // 原
-  3:  { '2000-01': 190000, '2026-10': 200000 }, // 小沼
-  25: { '2000-01': 190000, '2026-10': 200000 }, // 圷
+  1:  { '2000-01': 190000, '2026-10': null }, // 青木
+  2:  { '2000-01': 190000, '2026-10': null }, // 原
+  3:  { '2000-01': 190000, '2026-10': null }, // 小沼
+  25: { '2000-01': 190000, '2026-10': null }, // 圷
 };
+// 【修正 R8.10.9】値が null の月は「従業員マスタ（月別履歴）の基本給を使う」の意味。
+//   10月以降は従業員マスタの編集（適用開始月つき）で基本給を管理する。
 // 返り値: その月に有効な { base, key }（履歴なし・該当なしは key=null でマスタ値）
 function getEffectiveBaseSalaryEntry(emp, year, month) {
   const hist = BASE_SALARY_HISTORY[getBaseId(emp && emp.id)];
@@ -1217,17 +1287,19 @@ function getEffectiveBaseSalaryEntry(emp, year, month) {
   for (const k of Object.keys(hist)) {
     if (k <= ym && (best === null || k > best)) best = k;
   }
-  return best === null ? { base: emp.baseSalary, key: null } : { base: hist[best], key: best };
+  if (best === null) return { base: emp.baseSalary, key: null };
+  return { base: hist[best] === null ? emp.baseSalary : hist[best], key: best };
 }
 // 【追加 R8.10.7】月給者の残業単価の月別履歴（基本給履歴と同じキー・同じ探し方）。
 //   ～2026年9月支給分：¥1,097（実際の支払単価）／
 //   2026年10月～：¥1,151（200,000÷173.8）。ここに無いスタッフ・月は 基本給÷173.8 で算出。
 const OT_RATE_HISTORY = {
-  1:  { '2000-01': 1097, '2026-10': 1151 }, // 青木
-  2:  { '2000-01': 1097, '2026-10': 1151 }, // 原
-  3:  { '2000-01': 1097, '2026-10': 1151 }, // 小沼
-  25: { '2000-01': 1097, '2026-10': 1151 }, // 圷
+  1:  { '2000-01': 1097, '2026-10': null }, // 青木
+  2:  { '2000-01': 1097, '2026-10': null }, // 原
+  3:  { '2000-01': 1097, '2026-10': null }, // 小沼
+  25: { '2000-01': 1097, '2026-10': null }, // 圷
 };
+// 【修正 R8.10.9】null の月は 基本給÷173.8（円未満四捨五入）。200,000 → ¥1,151。
 function getEffectiveOTRate(emp, year, month) {
   const hist = OT_RATE_HISTORY[getBaseId(emp && emp.id)];
   if (!hist) return null;
@@ -1285,6 +1357,7 @@ function settlementPeriod(year, month) {
 let _shortfallCache = {};
 function invalidateShortfallCache() { _shortfallCache = {}; }
 function calcMonthShortfall(emp, year, month) {
+  emp = resolveEmpForMonth(emp, year, month); // 【追加 R8.10.9】
   const key = `${emp.id}|${year}-${month}`;
   if (_shortfallCache[key] !== undefined) return _shortfallCache[key];
 
@@ -1347,6 +1420,7 @@ function calcSettlementBonus(emp, year, month) {
 //   （精算額を求めるために各月を再計算する際の無限再帰防止）
 function calcSalary(emp, year, month, opts) {
   opts = opts || {};
+  emp = resolveEmpForMonth(emp, year, month); // 【追加 R8.10.9】その月のマスタ内容で計算
 
   // 月別targetGrossHistory を参照（マスタのtargetGrossより優先）
   const _ym = `${year}-${String(month).padStart(2,'0')}`;
