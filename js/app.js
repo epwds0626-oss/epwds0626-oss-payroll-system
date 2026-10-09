@@ -488,6 +488,13 @@ function employeeForm(emp, isNew) {
     <div class="form-group"><label>フリガナ</label><input type="text" id="ef_kana" value="${emp.kana||''}"></div>
   </div>
   <div class="form-row">
+    <div class="form-group"><label>性別（賃金台帳の法定記載事項）</label>
+      <select id="ef_gender">
+        ${['','男','女'].map(g=>`<option value="${g}" ${(emp.gender||'')===g?'selected':''}>${g||'未設定'}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+  <div class="form-row">
     <div class="form-group"><label>雇用区分</label>
       <select id="ef_type">
         ${['正社員','パート','アルバイト','契約社員','業務委託'].map(t=>`<option ${emp.type===t?'selected':''}>${t}</option>`).join('')}
@@ -649,6 +656,7 @@ function saveEmployee(id, isNew) {
   const existing = employees.find(e=>e.id===id) || {};
   const emp = {
     id, name: get('ef_name')?.value, kana: get('ef_kana')?.value,
+    gender: get('ef_gender')?.value || '',
     type: get('ef_type')?.value, store: get('ef_store')?.value, dept: get('ef_dept')?.value,
     payType: get('ef_payType')?.value,
     baseSalary: parseInt(get('ef_baseSalary')?.value)||0,
@@ -717,14 +725,14 @@ function hideEmpCSVImport() {
 
 function exportEmployeeCSV() {
   const header = [
-    'No','氏名','フリガナ','雇用区分','店舗','部門',
+    'No','氏名','フリガナ','性別','雇用区分','店舗','部門',
     '給与形態','基本給','時給','交通費種別','交通費月額','交通費日額',
     '役職手当','目標総支給額',
     '社保','雇保','税区分','扶養人数','住民税','標準報酬月額',
     '入社日','生年月日','状態'
   ];
   const rows = employees.map(e => [
-    e.id, e.name, e.kana||'', e.type, e.store||'', e.dept||'',
+    e.id, e.name, e.kana||'', e.gender||'', e.type, e.store||'', e.dept||'',
     e.payType, e.baseSalary, e.hourlyWage,
     e.commuteType||'fixed', e.commute||0, e.commutePerDay||0,
     e.positionAllowance||0, e.targetGross||0,
@@ -775,6 +783,7 @@ function importEmployeeCSV() {
       id,
       name,
       kana:              get('フリガナ', existing.kana||''),
+      gender:            get('性別', existing.gender||''),
       type:              get('雇用区分', existing.type||'パート'),
       store:             get('店舗', existing.store||'本店'),
       dept:              get('部門', existing.dept||'ホール'),
