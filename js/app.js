@@ -264,6 +264,7 @@ function renderEmployees() {
       <button class="btn-accent" onclick="openAddEmployee()">＋ 新規登録</button>
       <button class="btn-outline" onclick="exportEmployeeCSV()">📤 CSV出力</button>
       <button class="btn-primary" onclick="showEmpCSVImport()">📥 CSV取込</button>
+      <button class="btn-outline" onclick="openWageRepair()">🕒 時給改定の履歴修正</button>
     </div>
   </div>
 
@@ -704,6 +705,84 @@ function saveEmployee(id, isNew) {
     }
     closeModal();
     showToast(isNew ? '追加しました ✓' : '更新しました ✓');
+  });
+}
+
+// 【追加 R8.10.13】時給改定の履歴修正（過去月を改定前の時給に戻す）
+function _ymPrev(ym) {
+  let [y, m] = ym.split('-').map(Number);
+  m--; if (m < 1) { m = 12; y--; }
+  return `${y}-${String(m).padStart(2,'0')}`;
+}
+function _wageRepairTargets() {
+  return employees.filter(e => e.status !== 'inactive' && e.payType === '時給' && e.type !== '業務委託');
+}
+function openWageRepair() {
+  const effYm = window._wageRepairEff || '2026-10';
+  const prevYm = _ymPrev(effYm);
+  const [ey, em] = effYm.split('-').map(Number);
+  const [py, pm] = prevYm.split('-').map(Number);
+  const opts = [];
+  { let y = 2026, m = 4; for (let i = 0; i < 12; i++) {
+      const ym = `${y}-${String(m).padStart(2,'0')}`;
+      opts.push(`<option value="${ym}" ${ym===effYm?'selected':''}>${y}年${m}月分から</option>`);
+      m++; if (m > 12) { m = 1; y++; } } }
+  const rows = _wageRepairTargets().map(e => {
+    const wPrev = getWageForMonth(e, prevYm);
+    const wEff  = getWageForMonth(e, effYm);
+    const same  = wPrev === wEff;
+    return `<tr>
+      <td style="white-space:nowrap">${e.name}<div style="font-size:11px;color:#888">${e.type}・${e.store||''}</div></td>
+      <td style="text-align:right;${same?'color:#c0392b;font-weight:bold':''}">¥${wPrev.toLocaleString()}</td>
+      <td style="text-align:right">¥${wEff.toLocaleString()}</td>
+      <td><input type="number" id="wr_old_${e.id}" placeholder="${same?'例 1100':'設定済み'}" style="width:110px" value=""></td>
+      <td><input type="number" id="wr_new_${e.id}" style="width:90px" value="${e.hourlyWage||0}"></td>
+    </tr>`;
+  }).join('');
+  openModal(`
+  <div class="modal-title">🕒 時給改定の履歴修正</div>
+  <div style="font-size:12px;color:#555;line-height:1.7;margin-bottom:8px">
+    時給を変更したのに過去月まで新しい時給で計算されている場合に使います。<br>
+    「改定前の時給」を入れたスタッフだけ、適用開始月より前の月を改定前の時給に戻します（適用開始月以降は改定後の時給）。<br>
+    <b style="color:#c0392b">赤字</b>＝${pm}月分と${em}月分の時給が同じ（＝過去月にも新時給が入っている可能性あり）。
+  </div>
+  <div class="form-group" style="max-width:240px"><label>適用開始月（この月の給与から改定後）</label>
+    <select id="wr_effYm" onchange="window._wageRepairEff=this.value;openWageRepair()">${opts.join('')}</select>
+  </div>
+  <div style="max-height:55vh;overflow:auto">
+  <table class="data-table" style="width:100%;font-size:13px">
+    <thead><tr><th>氏名</th><th>${pm}月分の時給<br>（現在の計算）</th><th>${em}月分の時給<br>（現在の計算）</th><th>改定前の時給</th><th>改定後の時給</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="5">対象スタッフがいません</td></tr>'}</tbody>
+  </table>
+  </div>
+  <div class="modal-footer" style="margin-top:12px">
+    <button class="btn-outline" onclick="closeModal()">キャンセル</button>
+    <button class="btn-primary" onclick="saveWageRepair()">履歴を修正して保存</button>
+  </div>`);
+}
+function saveWageRepair() {
+  const effYm = document.getElementById('wr_effYm')?.value || '2026-10';
+  const updates = {};
+  const names = [];
+  for (const e of _wageRepairTargets()) {
+    const oldV = parseInt(document.getElementById(`wr_old_${e.id}`)?.value);
+    const newV = parseInt(document.getElementById(`wr_new_${e.id}`)?.value);
+    if (!oldV || !newV) continue;
+    const upd = buildWageRepairUpdate(e, oldV, newV, effYm);
+    const id = getBaseId(e.id);
+    for (const k of Object.keys(upd)) updates[`payroll/employeeHistory/${id}/${k}`] = upd[k];
+    // マスタは最新（改定後）の時給にそろえる
+    if ((e.hourlyWage || 0) !== newV) updates[`payroll/employees/${id}/hourlyWage`] = newV;
+    names.push(`${e.name}：¥${oldV.toLocaleString()}→¥${newV.toLocaleString()}`);
+  }
+  if (!names.length) { showToast('改定前の時給が入力されていません','error'); return; }
+  const [y, m] = effYm.split('-').map(Number);
+  if (!confirm(`${y}年${m}月分より前を改定前の時給に戻します。\n\n${names.join('\n')}\n\nよろしいですか？`)) return;
+  db.ref().update(updates, err => {
+    if (err) { showToast('保存エラー','error'); return; }
+    if (typeof invalidateShortfallCache === 'function') invalidateShortfallCache();
+    closeModal();
+    showToast(`${names.length}名の時給履歴を修正しました ✓`);
   });
 }
 
