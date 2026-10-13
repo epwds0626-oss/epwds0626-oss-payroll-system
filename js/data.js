@@ -1364,6 +1364,36 @@ function buildEmpHistoryUpdate(id, before, after, effYm) {
   return { upd, changed };
 }
 
+// 【追加 R8.10.13】時給改定の履歴修正
+//   月別履歴の仕組み（R8.10.9）より前に時給を書き換えた場合や、古いJSがブラウザに
+//   キャッシュされたまま編集した場合は履歴が作られず、過去月まで新時給で計算される。
+//   「改定前の時給・改定後の時給・適用開始月」から履歴を作り直し、過去月を旧時給に戻す。
+//   ・適用開始月より前の履歴（'2000-01' 含む）はすべて 時給=改定前 にする
+//   ・適用開始月の履歴は 時給=改定後 にする（無ければ直前の内容をもとに作る）
+//   ・適用開始月より後の履歴は触らない
+function buildWageRepairUpdate(emp, oldWage, newWage, effYm) {
+  const id = String(getBaseId(emp.id));
+  const hist = employeeHistory[id] || {};
+  const cur = pickEmpHistFields(emp);
+  const upd = {};
+  if (!hist['2000-01']) upd['2000-01'] = Object.assign({}, cur, { hourlyWage: oldWage });
+  let prev = null;
+  for (const k of Object.keys(hist)) {
+    if (k < effYm) {
+      upd[k] = Object.assign({}, hist[k], { hourlyWage: oldWage });
+      if (prev === null || k > prev) prev = k;
+    }
+  }
+  const baseSnap = hist[effYm] || (prev !== null ? hist[prev] : cur);
+  upd[effYm] = Object.assign({}, baseSnap, { hourlyWage: newWage });
+  return upd;
+}
+// その月に有効な時給（履歴反映後）
+function getWageForMonth(emp, ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return resolveEmpForMonth(emp, y, m).hourlyWage || 0;
+}
+
 // 【追加 R8.10】基本給の月別履歴（最低賃金改定 R8.10.18 = 1,136円 対応）
 //   マスタの baseSalary は1つしか持てず、書き換えると過去月の再計算（明細再印刷・
 //   賃金台帳・差額精算）まで新額で計算し直されてしまう。そこで「適用開始月 → 基本給」
