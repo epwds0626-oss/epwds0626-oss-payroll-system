@@ -552,7 +552,8 @@ function calcSalaryWithAdj(emp, year, month) {
   // 【追加 R8.10.9】雇用保険料は実際の支給総額に課すため、支給項目を調整した場合も
   //   総支給から計算し直す（従来は調整前の総支給のままで、調整金などに雇保がかかっていなかった）。
   //   雇用保険料そのものを手入力で調整している場合はその値を優先。
-  if (adj.koyoHoken === undefined && emp.koyo === '加入' && legalFixOn(year, month)) {
+  if (adj.koyoHoken === undefined && emp.koyo === '加入' && legalFixOn(year, month)
+      && !hasFixedDeduction(emp.koyoFixed)) { // 【R8.10.16】マスタ固定額があれば再計算しない
     sal.koyoHoken = calcKoyoHoken(sal.grossTotal);
   }
 
@@ -564,7 +565,8 @@ function calcSalaryWithAdj(emp, year, month) {
   //   に合わせ、そこへ調整金を上乗せする。
   //   ・所得税が手動調整されている場合（adj.incomeTax）は本人の指定を尊重し上書きしない
   //   ・業務委託（乙欄 or 対象外）は本体の別ロジックで確定済みのため再計算しない
-  if (adj.incomeTax === undefined && emp.type !== '業務委託') {
+  if (adj.incomeTax === undefined && emp.type !== '業務委託'
+      && !hasFixedDeduction(emp.incomeTaxFixed)) { // 【R8.10.16】マスタ固定額があれば再計算しない
     const taxable = sal.grossTotal - sal.commute
       - sal.kenpo - sal.kosei - sal.shienkin - sal.koyoHoken;
     sal.incomeTax = calcIncomeTax(Math.max(0, taxable), emp.dependents, emp.tax, year, month);
@@ -1315,10 +1317,22 @@ const EMP_HIST_FIELDS = [
   'positionAllowance','fixedOTHours','targetGross','dependents',
   'shakai','koyo','chutaikyo','chutaikyoAmount','tax','juminzei','hyojunHoshu',
   'birthDate','monthlyHours',
+  // 【追加 R8.10.16】控除額の固定値（空欄＝自動計算）
+  'kenpoFixed','koseiFixed','shienkinFixed','koyoFixed','incomeTaxFixed',
 ];
+// 【追加 R8.10.16】従業員マスタで直接入力する控除額（月額）。
+//   値が数値なら計算値の代わりにその額を控除する（0も「0円で固定」として有効）。
+//   null/未設定なら従来どおり自動計算。住民税(juminzei)は従来から固定額入力。
+//   月別履歴（employeeHistory）に載るため、適用開始月より前の月は変わらない。
+const DEDUCTION_FIXED_FIELDS = ['kenpoFixed','koseiFixed','shienkinFixed','koyoFixed','incomeTaxFixed'];
+function hasFixedDeduction(v) {
+  return v !== null && v !== undefined && v !== '' && !isNaN(Number(v));
+}
 function pickEmpHistFields(e) {
   const o = {};
   for (const f of EMP_HIST_FIELDS) if (e && e[f] !== undefined) o[f] = e[f];
+  // 控除額の固定値は「未設定」も状態として持つ（null。Firebaseでは項目なしとして保存される）
+  for (const f of DEDUCTION_FIXED_FIELDS) if (!hasFixedDeduction(o[f])) o[f] = null;
   return o;
 }
 // 今日が属する給与計算月（21日以降は翌月分）
@@ -1340,7 +1354,37 @@ function resolveEmpForMonth(emp, year, month) {
     if (k <= ym && (best === null || k > best)) best = k;
   }
   if (best === null) return emp;
-  return Object.assign({}, emp, hist[best], { _histFor: ym });
+  // 【追加 R8.10.16】控除額の固定値は履歴に無ければ「自動計算」。マスタの最新値が
+  //   過去月（固定値を入れる前の履歴）に漏れないよう、いったん null で上書きしてから履歴を重ねる。
+  const nulls = {};
+  for (const f of DEDUCTION_FIXED_FIELDS) nulls[f] = null;
+  return Object.assign({}, emp, nulls, hist[best], { _histFor: ym });
+}
+
+// 【追加 R8.10.16】控除額の固定値を計算結果に適用する（calcSalary 内で使用）
+//   社保・雇保は「加入」のときだけ適用。所得税は業務委託以外に適用。
+function applyFixedDeductions(emp, d) {
+  if (emp.shakai === '加入') {
+    if (hasFixedDeduction(emp.kenpoFixed))    d.kenpo    = Number(emp.kenpoFixed);
+    if (hasFixedDeduction(emp.koseiFixed))    d.kosei    = Number(emp.koseiFixed);
+    if (hasFixedDeduction(emp.shienkinFixed)) d.shienkin = Number(emp.shienkinFixed);
+  }
+  if (emp.koyo === '加入' && hasFixedDeduction(emp.koyoFixed)) d.koyoHoken = Number(emp.koyoFixed);
+  return d;
+}
+// 明細の表示用：どの控除がマスタ固定額か（料率の表記を出し分ける）
+function fixedDeductionFlags(emp) {
+  const sh = emp.shakai === '加入', ky = emp.koyo === '加入';
+  return {
+    kenpo:     sh && hasFixedDeduction(emp.kenpoFixed),
+    kosei:     sh && hasFixedDeduction(emp.koseiFixed),
+    shienkin:  sh && hasFixedDeduction(emp.shienkinFixed),
+    koyoHoken: ky && hasFixedDeduction(emp.koyoFixed),
+    incomeTax: fixedIncomeTax(emp) !== null,
+  };
+}
+function fixedIncomeTax(emp) {
+  return (emp.type !== '業務委託' && hasFixedDeduction(emp.incomeTaxFixed)) ? Number(emp.incomeTaxFixed) : null;
 }
 // マスタ保存時に履歴を書く。初回は編集前の状態を '2000-01' として残す。
 //   適用開始月より後の履歴がある場合は、今回変更した項目だけそちらにも反映する。
@@ -1597,7 +1641,10 @@ function calcSalary(emp, year, month, opts) {
       const s = calcShakai(grossTotal, emp.birthDate, emp.hyojunHoshu || 0, year, month);
       kenpo = s.kenpo; kosei = s.kosei; shienkin = s.shienkin;
     }
-    const incomeTax      = calcIncomeTax(grossTotal - kenpo - kosei - shienkin, emp.dependents, emp.tax, year, month);
+    ({ kenpo, kosei, shienkin } = applyFixedDeductions(emp, { kenpo, kosei, shienkin, koyoHoken: 0 }));
+    const _fixTax = fixedIncomeTax(emp);
+    const incomeTax      = _fixTax !== null ? _fixTax
+      : calcIncomeTax(grossTotal - kenpo - kosei - shienkin, emp.dependents, emp.tax, year, month);
     const juminzei       = emp.juminzei || 0;
     const totalDeduction = kenpo + kosei + shienkin + incomeTax + juminzei;
     const netPay         = Math.round(grossTotal - totalDeduction);
@@ -1609,6 +1656,7 @@ function calcSalary(emp, year, month, opts) {
       commute: 0, commuteNote: '', grossTotal, kenpo, kosei, shienkin, koyoHoken: 0,
       incomeTax, juminzei, totalDeduction, netPay,
       kaigo: isKaigoTarget(emp.birthDate, year, month),
+      _fixed: fixedDeductionFlags(emp),
       monthOT:0, monthDailyOT:0, monthWeekOT:0,
       monthMidnight:0, monthMidnightOT:0,
       monthHolidayLegal:0, monthHolidayNonLegal:0, monthHoliday:0,
@@ -1831,6 +1879,8 @@ function calcSalary(emp, year, month, opts) {
   // 雇用保険（実際の賃金＝残業込み総支給に課す。社保と異なり毎月変動して正しい）
   let koyoHoken = 0;
   if (emp.koyo === '加入') koyoHoken = calcKoyoHoken(grossTotal);
+  // 【追加 R8.10.16】マスタで控除額を固定している項目は固定値を使う
+  ({ kenpo, kosei, shienkin, koyoHoken } = applyFixedDeductions(emp, { kenpo, kosei, shienkin, koyoHoken }));
 
   // 所得税
   // ※業務委託は原則、給与の源泉徴収税額表の対象外（所得税0）
@@ -1852,7 +1902,8 @@ function calcSalary(emp, year, month, opts) {
       incomeTax = 0;
     }
   } else {
-    incomeTax = calcIncomeTax(taxable, emp.dependents, emp.tax, year, month);
+    const _fixTax = fixedIncomeTax(emp);
+    incomeTax = _fixTax !== null ? _fixTax : calcIncomeTax(taxable, emp.dependents, emp.tax, year, month);
   }
 
   const juminzei        = emp.juminzei || 0;
@@ -1882,6 +1933,7 @@ function calcSalary(emp, year, month, opts) {
     settlementPay,            // 精算月に上乗せ支払した差額合計（9月/3月のみ>0）
     settlementBreakdown,      // 精算の内訳 [{y,m,amount}]
     kaigo: isKaigoTarget(emp.birthDate, year, month),
+    _fixed: fixedDeductionFlags(emp),
     grossTotal, kenpo, kosei, shienkin, koyoHoken, incomeTax, juminzei, chutaikyoAmount,
     totalDeduction:      Math.round(totalDeduction),
     netPay,
