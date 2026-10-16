@@ -221,11 +221,11 @@ function payslipHTML(emp, sal, year, month) {
       </div>
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">控除項目</div>
-        ${adjRow(emp.id,year,month,'kenpo',`健康保険料（${sal.kaigo?'介護込11.14%':'9.52%'}・茨城支部R8）`,sal.kenpo)}
-        ${adjRow(emp.id,year,month,'kosei','厚生年金保険料（18.30%）',sal.kosei)}
-        ${sal.shienkin>0?adjRow(emp.id,year,month,'shienkin','子ども・子育て支援金（0.23%）',sal.shienkin):''}
-        ${adjRow(emp.id,year,month,'koyoHoken','雇用保険料（0.5%）',sal.koyoHoken)}
-        ${adjRow(emp.id,year,month,'incomeTax','所得税',sal.incomeTax)}
+        ${adjRow(emp.id,year,month,'kenpo',dedLabel(sal,'kenpo',`健康保険料（${sal.kaigo?'介護込11.14%':'9.52%'}・茨城支部R8）`),sal.kenpo)}
+        ${adjRow(emp.id,year,month,'kosei',dedLabel(sal,'kosei','厚生年金保険料（18.30%）'),sal.kosei)}
+        ${sal.shienkin>0?adjRow(emp.id,year,month,'shienkin',dedLabel(sal,'shienkin','子ども・子育て支援金（0.23%）'),sal.shienkin):''}
+        ${adjRow(emp.id,year,month,'koyoHoken',dedLabel(sal,'koyoHoken','雇用保険料（0.5%）'),sal.koyoHoken)}
+        ${adjRow(emp.id,year,month,'incomeTax',dedLabel(sal,'incomeTax','所得税'),sal.incomeTax)}
         ${adjRow(emp.id,year,month,'juminzei','住民税',sal.juminzei)}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>控除合計</span><span>¥${sal.totalDeduction.toLocaleString()}</span>
@@ -423,6 +423,12 @@ function shortfallNotice(sal) {
 }
 
 // 両店スタッフ用：1枚の明細に合算して表示
+// 【追加 R8.10.16】控除がマスタ固定額の場合は料率表記の代わりに「固定額」と表示
+function dedLabel(sal, key, autoLabel) {
+  if (!(sal && sal._fixed && sal._fixed[key])) return autoLabel;
+  return autoLabel.replace(/（.*）$/, '') + '（固定額）';
+}
+
 function payslipHTMLBoth(emp, salE, salM, year, month) {
   const empEnya = { ...emp, id: `${emp.id}_enya` }; // fixedOTRows用
   // 【修正 R8.7.12】_enya側は両店マージ済み勤怠で全額計算済み。
@@ -481,11 +487,11 @@ function payslipHTMLBoth(emp, salE, salM, year, month) {
       </div>
       <div>
         <div style="font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px">控除項目</div>
-        ${adjRow(`${emp.id}_enya`,year,month,'kenpo',`健康保険料（${salE.kaigo?'介護込11.14%':'9.52%'}・茨城支部R8）`,kenpo)}
-        ${adjRow(`${emp.id}_enya`,year,month,'kosei','厚生年金保険料（18.30%）',kosei)}
-        ${shienkin>0?adjRow(`${emp.id}_enya`,year,month,'shienkin','子ども・子育て支援金（0.23%）',shienkin):''}
-        ${adjRow(`${emp.id}_enya`,year,month,'koyoHoken','雇用保険料（0.5%）',koyoHoken)}
-        ${adjRow(`${emp.id}_enya`,year,month,'incomeTax','所得税',incomeTax)}
+        ${adjRow(`${emp.id}_enya`,year,month,'kenpo',dedLabel(salE,'kenpo',`健康保険料（${salE.kaigo?'介護込11.14%':'9.52%'}・茨城支部R8）`),kenpo)}
+        ${adjRow(`${emp.id}_enya`,year,month,'kosei',dedLabel(salE,'kosei','厚生年金保険料（18.30%）'),kosei)}
+        ${shienkin>0?adjRow(`${emp.id}_enya`,year,month,'shienkin',dedLabel(salE,'shienkin','子ども・子育て支援金（0.23%）'),shienkin):''}
+        ${adjRow(`${emp.id}_enya`,year,month,'koyoHoken',dedLabel(salE,'koyoHoken','雇用保険料（0.5%）'),koyoHoken)}
+        ${adjRow(`${emp.id}_enya`,year,month,'incomeTax',dedLabel(salE,'incomeTax','所得税'),incomeTax)}
         ${adjRow(`${emp.id}_enya`,year,month,'juminzei','住民税',juminzei)}
         <div style="background:#eef2f8;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
           <span>控除合計</span><span>¥${totalDeduction.toLocaleString()}</span>
