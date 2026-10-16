@@ -309,28 +309,33 @@ function renderEmployees() {
         </thead>
         <tbody id="empTbody">
           ${showList.length===0 ? `<tr><td colspan="13" style="text-align:center;color:#999;padding:20px">データなし</td></tr>` : ''}
-          ${showList.map((emp, idx)=>{
+          ${showList.map((empRaw, idx)=>{
+            // 【追加 R8.10.16】一覧は当月に有効なマスタ内容（月別履歴）で表示する
+            const _cym = currentPayrollYm().split('-').map(Number);
+            const emp = resolveEmpForMonth(empRaw, _cym[0], _cym[1]);
+            const fx = (f, auto) => hasFixedDeduction(emp[f]) ? Number(emp[f]) : auto;
+            const fxMark = f => hasFixedDeduction(emp[f]) ? '<span title="マスタで固定" style="color:#b45309">*</span>' : '';
             // 月額の概算控除を計算（基本給ベース）
             // 標準報酬月額固定値 > 目標総支給 > 基本給 の優先順位で概算計算
             const baseForCalc = emp.hyojunHoshu > 0 ? emp.hyojunHoshu
               : (emp.payType==='月給' && emp.targetGross > 0 ? emp.targetGross : (emp.payType==='月給' ? emp.baseSalary : (emp.hourlyWage * 173)));
             const sh = calcShakai(baseForCalc, emp.birthDate||'', emp.hyojunHoshu||0);
-            const kenpo  = emp.shakai==='加入' ? sh.kenpo : 0;
-            const kosei  = emp.shakai==='加入' ? sh.kosei : 0;
-            const shienkin = emp.shakai==='加入' ? sh.shienkin : 0;
-            const koyo   = emp.koyo==='加入'   ? Math.round(baseForCalc * KOYO_RATE) : 0;
+            const kenpo  = emp.shakai==='加入' ? fx('kenpoFixed', sh.kenpo) : 0;
+            const kosei  = emp.shakai==='加入' ? fx('koseiFixed', sh.kosei) : 0;
+            const shienkin = emp.shakai==='加入' ? fx('shienkinFixed', sh.shienkin) : 0;
+            const koyo   = emp.koyo==='加入'   ? fx('koyoFixed', calcKoyoHoken(baseForCalc)) : 0;
             const chutai = (emp.chutaikyo==='加入') ? (emp.chutaikyoAmount||0) : 0;
             const jumin  = emp.juminzei||0;
-            const income = calcIncomeTax(baseForCalc - (emp.commute||0) - kenpo - kosei - shienkin - koyo, emp.dependents||0, emp.tax||'甲');
+            const income = emp.type==='業務委託' ? 0 : fx('incomeTaxFixed', calcIncomeTax(baseForCalc - (emp.commute||0) - kenpo - kosei - shienkin - koyo, emp.dependents||0, emp.tax||'甲'));
             const total  = kenpo + kosei + shienkin + koyo + chutai + jumin + income;
             const hyojunLabel = emp.hyojunHoshu > 0 ? `（標準報酬 ¥${emp.hyojunHoshu.toLocaleString()}）` : '';
 
             const insuranceHtml = `
               <div style="font-size:11px;line-height:1.8">
-                ${emp.shakai==='加入'?`<span style="color:#1e40af">健保 ¥${kenpo.toLocaleString()}</span> / <span style="color:#1e40af">厚年 ¥${kosei.toLocaleString()}</span> / <span style="color:#0369a1">支援金 ¥${shienkin.toLocaleString()}</span>${hyojunLabel}<br>`:'<span style="color:#999">社保 未加入</span><br>'}
-                ${emp.koyo==='加入'?`<span style="color:#166534">雇保 ¥${koyo.toLocaleString()}</span>`:'<span style="color:#999">雇保 未加入</span>'}
+                ${emp.shakai==='加入'?`<span style="color:#1e40af">健保 ¥${kenpo.toLocaleString()}${fxMark('kenpoFixed')}</span> / <span style="color:#1e40af">厚年 ¥${kosei.toLocaleString()}${fxMark('koseiFixed')}</span> / <span style="color:#0369a1">支援金 ¥${shienkin.toLocaleString()}${fxMark('shienkinFixed')}</span>${hyojunLabel}<br>`:'<span style="color:#999">社保 未加入</span><br>'}
+                ${emp.koyo==='加入'?`<span style="color:#166534">雇保 ¥${koyo.toLocaleString()}${fxMark('koyoFixed')}</span>`:'<span style="color:#999">雇保 未加入</span>'}
                 ${chutai?` / <span style="color:#166534">中退共 ¥${chutai.toLocaleString()}</span>`:''}
-                <br><span style="color:#7c3aed">所得税 ¥${income.toLocaleString()}</span>
+                <br><span style="color:#7c3aed">所得税 ¥${income.toLocaleString()}${fxMark('incomeTaxFixed')}</span>
                 ${jumin?` / <span style="color:#7c3aed">住民税 ¥${jumin.toLocaleString()}</span>`:''}
                 <br><strong>控除計 ¥${total.toLocaleString()}</strong>
                 ${sh.kaigo?'<span class="badge badge-yellow" style="margin-left:4px;font-size:10px">介護保険</span>':''}
@@ -607,11 +612,11 @@ function employeeForm(emp, isNew) {
         ${['甲','乙'].map(t=>`<option ${emp.tax===t?'selected':''}>${t}</option>`).join('')}
       </select>
     </div>
-    <div class="form-group"><label>住民税（月額）</label><input type="number" id="ef_juminzei" value="${emp.juminzei||0}"></div>
   </div>
   <div class="form-row">
     <div class="form-group"><label>標準報酬月額（固定）</label><input type="number" id="ef_hyojunHoshu" value="${emp.hyojunHoshu||0}" placeholder="0=自動計算（等級表で自動判定）"></div>
   </div>
+  ${deductionFixedFormHtml(emp)}
   <div class="form-row">
     <div class="form-group"><label>入社日</label><input type="date" id="ef_hireDate" value="${emp.hireDate||''}"></div>
     <div class="form-group"><label>生年月日</label><input type="date" id="ef_birthDate" value="${emp.birthDate||''}"></div>
@@ -638,6 +643,45 @@ function employeeForm(emp, isNew) {
     <button class="btn-outline" onclick="closeModal()">キャンセル</button>
     <button class="btn-primary" onclick="saveEmployee(${emp.id},${isNew})">保存</button>
   </div>`;
+}
+
+// 【追加 R8.10.16】控除額（月額）の入力欄。空欄＝自動計算、数値＝その額で固定。
+//   適用開始月より前の月は変わらず、それ以降の月（給与計算・明細・賃金台帳・CSV）に反映される。
+const DEDUCTION_FORM_ITEMS = [
+  { f:'kenpoFixed',     label:'健康保険料',           note:'社保加入者のみ' },
+  { f:'koseiFixed',     label:'厚生年金保険料',       note:'社保加入者のみ' },
+  { f:'shienkinFixed',  label:'子ども・子育て支援金', note:'社保加入者のみ' },
+  { f:'koyoFixed',      label:'雇用保険料',           note:'雇保加入者のみ' },
+  { f:'incomeTaxFixed', label:'所得税',               note:'業務委託は対象外' },
+];
+function deductionFixedFormHtml(emp) {
+  const cell = it => {
+    const v = hasFixedDeduction(emp[it.f]) ? Number(emp[it.f]) : '';
+    return `<div class="form-group"><label>${it.label}（月額）<span style="font-size:11px;color:#6b7280"> ${it.note}</span></label>
+      <input type="number" id="ef_${it.f}" value="${v}" min="0" placeholder="空欄＝自動計算"></div>`;
+  };
+  const items = DEDUCTION_FORM_ITEMS;
+  return `
+  <div style="border:1px solid #c7d2fe;background:#f5f7ff;border-radius:8px;padding:8px 12px;margin:6px 0 10px">
+    <div style="font-weight:600;font-size:13px;color:#3730a3;margin-bottom:4px">控除額（月額）</div>
+    <div style="font-size:11px;color:#555;margin-bottom:6px;line-height:1.6">
+      金額を入れた項目は、自動計算の代わりにその額を毎月控除します（0を入れると0円で固定）。空欄に戻すと自動計算に戻ります。<br>
+      ${'' /* 編集時のみ適用開始月がある */}上の「適用開始月」から先の月すべてに引き継がれ、それより前の月は変わりません。月ごとの手動調整（給与計算画面）はこれより優先されます。
+    </div>
+    <div class="form-row">${cell(items[0])}${cell(items[1])}</div>
+    <div class="form-row">${cell(items[2])}${cell(items[3])}</div>
+    <div class="form-row">${cell(items[4])}
+      <div class="form-group"><label>住民税（月額）</label><input type="number" id="ef_juminzei" value="${emp.juminzei||0}" min="0"></div>
+    </div>
+  </div>`;
+}
+function readDeductionFixedForm() {
+  const o = {};
+  for (const it of DEDUCTION_FORM_ITEMS) {
+    const raw = (document.getElementById(`ef_${it.f}`)?.value ?? '').trim();
+    o[it.f] = raw === '' || isNaN(Number(raw)) ? null : Math.round(Number(raw));
+  }
+  return o;
 }
 
 function calcTargetGross() {
@@ -675,6 +719,7 @@ function saveEmployee(id, isNew) {
     chutaikyoAmount: parseInt(get('ef_chutaikyoAmount')?.value)||0,
     tax: get('ef_tax')?.value, juminzei: parseInt(get('ef_juminzei')?.value)||0,
     hyojunHoshu: parseInt(get('ef_hyojunHoshu')?.value)||0,
+    ...readDeductionFixedForm(), // 【追加 R8.10.16】控除額の固定値（null＝自動計算）
     hireDate: get('ef_hireDate')?.value, birthDate: get('ef_birthDate')?.value,
     address: get('ef_address')?.value||'',
     phone: get('ef_phone')?.value||'',
@@ -808,14 +853,17 @@ function exportEmployeeCSV() {
     '給与形態','基本給','時給','交通費種別','交通費月額','交通費日額',
     '役職手当','目標総支給額',
     '社保','雇保','税区分','扶養人数','住民税','標準報酬月額',
+    '健保固定','厚年固定','支援金固定','雇保固定','所得税固定',
     '入社日','生年月日','状態'
   ];
+  const fxv = v => hasFixedDeduction(v) ? Number(v) : '';
   const rows = employees.map(e => [
     e.id, e.name, e.kana||'', e.gender||'', e.type, e.store||'', e.dept||'',
     e.payType, e.baseSalary, e.hourlyWage,
     e.commuteType||'fixed', e.commute||0, e.commutePerDay||0,
     e.positionAllowance||0, e.targetGross||0,
     e.shakai, e.koyo, e.tax, e.dependents||0, e.juminzei||0, e.hyojunHoshu||0,
+    fxv(e.kenpoFixed), fxv(e.koseiFixed), fxv(e.shienkinFixed), fxv(e.koyoFixed), fxv(e.incomeTaxFixed),
     e.hireDate||'', e.birthDate||'', e.status||'active'
   ]);
   const csv = [header, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
@@ -880,6 +928,13 @@ function importEmployeeCSV() {
       dependents:        parseInt(get('扶養人数', existing.dependents||0))||0,
       juminzei:          parseInt(get('住民税', existing.juminzei||0))||0,
       hyojunHoshu:       parseInt(get('標準報酬月額', existing.hyojunHoshu||0))||0,
+      // 【追加 R8.10.16】控除額の固定値（列が無いCSVでは現在の値を維持・空欄＝自動計算）
+      ...Object.fromEntries([['kenpoFixed','健保固定'],['koseiFixed','厚年固定'],['shienkinFixed','支援金固定'],
+        ['koyoFixed','雇保固定'],['incomeTaxFixed','所得税固定']].map(([f, h]) => {
+        if (col(h) < 0) return [f, hasFixedDeduction(existing[f]) ? Number(existing[f]) : null];
+        const v = get(h, '').replace(/[,¥]/g, '');
+        return [f, v === '' || isNaN(Number(v)) ? null : Math.round(Number(v))];
+      })),
       hireDate:          get('入社日', existing.hireDate||''),
       birthDate:         get('生年月日', existing.birthDate||''),
       status:            get('状態', existing.status||'active'),
