@@ -1415,22 +1415,29 @@ function buildEmpHistoryUpdate(id, before, after, effYm) {
 //   ・適用開始月より前の履歴（'2000-01' 含む）はすべて 時給=改定前 にする
 //   ・適用開始月の履歴は 時給=改定後 にする（無ければ直前の内容をもとに作る）
 //   ・適用開始月より後の履歴は触らない
+//   【修正 R8.10.24】マスタの給与形態を「月給」に変えたスタッフ（例：時給→月給へ切替）も
+//   扱えるよう、適用開始月より前は 給与形態=時給 にそろえる。適用開始月は、その月に
+//   有効な内容（月給ならそのまま）を固定して残し、newWage が null なら時給は変えない。
 function buildWageRepairUpdate(emp, oldWage, newWage, effYm) {
   const id = String(getBaseId(emp.id));
   const hist = employeeHistory[id] || {};
-  const cur = pickEmpHistFields(emp);
+  const [ey, em] = effYm.split('-').map(Number);
+  // 修正前の時点で適用開始月に有効だった内容（これを適用開始月以降の基準として残す）
+  const effSnap = hist[effYm] || pickEmpHistFields(resolveEmpForMonth(emp, ey, em));
+  const past = { hourlyWage: oldWage, payType: '時給' };
   const upd = {};
-  if (!hist['2000-01']) upd['2000-01'] = Object.assign({}, cur, { hourlyWage: oldWage });
-  let prev = null;
+  if (!hist['2000-01']) upd['2000-01'] = Object.assign({}, pickEmpHistFields(emp), past);
   for (const k of Object.keys(hist)) {
-    if (k < effYm) {
-      upd[k] = Object.assign({}, hist[k], { hourlyWage: oldWage });
-      if (prev === null || k > prev) prev = k;
-    }
+    if (k < effYm) upd[k] = Object.assign({}, hist[k], past);
   }
-  const baseSnap = hist[effYm] || (prev !== null ? hist[prev] : cur);
-  upd[effYm] = Object.assign({}, baseSnap, { hourlyWage: newWage });
+  upd[effYm] = Object.assign({}, effSnap, newWage ? { hourlyWage: newWage } : {});
   return upd;
+}
+// その月に有効な給与形態・時給・基本給
+function getPayForMonth(emp, ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const r = resolveEmpForMonth(emp, y, m);
+  return { payType: r.payType, hourlyWage: r.hourlyWage || 0, baseSalary: r.baseSalary || 0 };
 }
 // その月に有効な時給（履歴反映後）
 function getWageForMonth(emp, ym) {
