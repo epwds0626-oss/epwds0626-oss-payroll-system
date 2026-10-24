@@ -759,8 +759,19 @@ function _ymPrev(ym) {
   m--; if (m < 1) { m = 12; y--; }
   return `${y}-${String(m).padStart(2,'0')}`;
 }
+// 【修正 R8.10.24】マスタが「月給」でも、パート・アルバイト、または過去のどこかの月で
+//   時給だったスタッフは対象に含める（時給→月給へ切り替えた人の過去月を直せるように）
 function _wageRepairTargets() {
-  return employees.filter(e => e.status !== 'inactive' && e.payType === '時給' && e.type !== '業務委託');
+  return employees.filter(e => {
+    if (e.status === 'inactive' || e.type === '業務委託') return false;
+    if (e.payType === '時給' || e.type === 'パート' || e.type === 'アルバイト') return true;
+    const hist = employeeHistory[String(e.id)] || {};
+    return Object.values(hist).some(h => h && h.payType === '時給');
+  });
+}
+function _payLabel(p) {
+  return p.payType === '時給' ? `¥${p.hourlyWage.toLocaleString()}`
+    : `<span style="font-size:11px;color:#1e40af">${p.payType||''}</span> ¥${(p.payType==='月給'?p.baseSalary:p.hourlyWage).toLocaleString()}`;
 }
 function openWageRepair() {
   const effYm = window._wageRepairEff || '2026-10';
@@ -773,15 +784,18 @@ function openWageRepair() {
       opts.push(`<option value="${ym}" ${ym===effYm?'selected':''}>${y}年${m}月分から</option>`);
       m++; if (m > 12) { m = 1; y++; } } }
   const rows = _wageRepairTargets().map(e => {
-    const wPrev = getWageForMonth(e, prevYm);
-    const wEff  = getWageForMonth(e, effYm);
-    const same  = wPrev === wEff;
+    const pPrev = getPayForMonth(e, prevYm);
+    const pEff  = getPayForMonth(e, effYm);
+    const same  = pPrev.payType === pEff.payType && pPrev.hourlyWage === pEff.hourlyWage;
+    const effHourly = pEff.payType === '時給';
     return `<tr>
       <td style="white-space:nowrap">${e.name}<div style="font-size:11px;color:#888">${e.type}・${e.store||''}</div></td>
-      <td style="text-align:right;${same?'color:#c0392b;font-weight:bold':''}">¥${wPrev.toLocaleString()}</td>
-      <td style="text-align:right">¥${wEff.toLocaleString()}</td>
-      <td><input type="number" id="wr_old_${e.id}" placeholder="${same?'例 1100':'設定済み'}" style="width:110px" value=""></td>
-      <td><input type="number" id="wr_new_${e.id}" style="width:90px" value="${e.hourlyWage||0}"></td>
+      <td style="text-align:right;${same||pPrev.payType!=='時給'?'color:#c0392b;font-weight:bold':''}">${_payLabel(pPrev)}</td>
+      <td style="text-align:right">${_payLabel(pEff)}</td>
+      <td><input type="number" id="wr_old_${e.id}" placeholder="例 1100" style="width:100px" value=""></td>
+      <td>${effHourly
+        ? `<input type="number" id="wr_new_${e.id}" style="width:90px" value="${pEff.hourlyWage||''}">`
+        : `<span style="font-size:11px;color:#555">${pEff.payType}のまま<br>（変更なし）</span>`}</td>
     </tr>`;
   }).join('');
   openModal(`
@@ -789,7 +803,8 @@ function openWageRepair() {
   <div style="font-size:12px;color:#555;line-height:1.7;margin-bottom:8px">
     時給を変更したのに過去月まで新しい時給で計算されている場合に使います。<br>
     「改定前の時給」を入れたスタッフだけ、適用開始月より前の月を改定前の時給に戻します（適用開始月以降は改定後の時給）。<br>
-    <b style="color:#c0392b">赤字</b>＝${pm}月分と${em}月分の時給が同じ（＝過去月にも新時給が入っている可能性あり）。
+    <b style="color:#c0392b">赤字</b>＝${pm}月分と${em}月分の時給が同じ、または${pm}月分が時給になっていない（＝過去月にも新しい内容が入っている可能性あり）。<br>
+    時給から月給に切り替えたスタッフは、改定前の時給だけ入れれば、適用開始月より前が「時給・改定前の時給」になり、適用開始月以降は月給のまま変わりません。
   </div>
   <div class="form-group" style="max-width:240px"><label>適用開始月（この月の給与から改定後）</label>
     <select id="wr_effYm" onchange="window._wageRepairEff=this.value;openWageRepair()">${opts.join('')}</select>
@@ -811,14 +826,16 @@ function saveWageRepair() {
   const names = [];
   for (const e of _wageRepairTargets()) {
     const oldV = parseInt(document.getElementById(`wr_old_${e.id}`)?.value);
-    const newV = parseInt(document.getElementById(`wr_new_${e.id}`)?.value);
-    if (!oldV || !newV) continue;
+    const newEl = document.getElementById(`wr_new_${e.id}`);
+    const newV = newEl ? parseInt(newEl.value) : null; // 月給の人は時給を変えない
+    if (!oldV || (newEl && !newV)) continue;
     const upd = buildWageRepairUpdate(e, oldV, newV, effYm);
     const id = getBaseId(e.id);
     for (const k of Object.keys(upd)) updates[`payroll/employeeHistory/${id}/${k}`] = upd[k];
-    // マスタは最新（改定後）の時給にそろえる
-    if ((e.hourlyWage || 0) !== newV) updates[`payroll/employees/${id}/hourlyWage`] = newV;
-    names.push(`${e.name}：¥${oldV.toLocaleString()}→¥${newV.toLocaleString()}`);
+    // マスタは最新（改定後）の時給にそろえる（マスタが時給の人のみ）
+    if (newV && e.payType === '時給' && (e.hourlyWage || 0) !== newV) updates[`payroll/employees/${id}/hourlyWage`] = newV;
+    names.push(newV ? `${e.name}：¥${oldV.toLocaleString()}→¥${newV.toLocaleString()}`
+                    : `${e.name}：過去月を時給¥${oldV.toLocaleString()}に（適用開始月以降は${getPayForMonth(e, effYm).payType}のまま）`);
   }
   if (!names.length) { showToast('改定前の時給が入力されていません','error'); return; }
   const [y, m] = effYm.split('-').map(Number);
