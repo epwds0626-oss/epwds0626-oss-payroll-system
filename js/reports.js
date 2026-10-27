@@ -50,6 +50,7 @@ function renderLaborReport(year, month) {
         <button class="btn-outline" onclick="printWageLedgerFiltered(${year},${month})">🖨 絞込印刷</button>
         <button class="btn-outline" onclick="exportWageLedgerCSV(${year},${month})">CSV出力</button>
       </div>
+      ${wageLedgerRangeFormHtml(year, month)}
     </div>
 
     <div class="card">
@@ -722,4 +723,215 @@ function printOTReport(year) {
   w.document.write(html);
   w.document.close();
   w.print();
+}
+
+
+// ============================================================
+// 【追加 R8.10.27】賃金台帳 期間指定（個人別・月ごとの一覧）
+//   例：青木 2026年2月分〜10月分 を1枚の表（行＝月）で出力。
+//   「全員」を選ぶと従業員ごとに改ページして出力。退職者も選択可能。
+//   過去月の手動調整（salaryAdj）はFirebaseから先読みしてから計算する。
+// ============================================================
+function _ymList(fromYm, toYm) {
+  const out = [];
+  let [y, m] = fromYm.split('-').map(Number);
+  const [ty, tm] = toYm.split('-').map(Number);
+  while (y * 100 + m <= ty * 100 + tm && out.length < 60) {
+    out.push({ y, m });
+    m++; if (m > 12) { m = 1; y++; }
+  }
+  return out;
+}
+function wageLedgerRangeFormHtml(year, month) {
+  const toYm = `${year}-${String(month).padStart(2,'0')}`;
+  let fy = year, fm = month - 8; while (fm < 1) { fm += 12; fy--; }
+  const fromYm = window._wlrFrom || `${fy}-${String(fm).padStart(2,'0')}`;
+  const toSel  = window._wlrTo   || toYm;
+  const opts = sel => {
+    const o = [];
+    let y = year - 3, m = 1;
+    while (y * 100 + m <= (year + 1) * 100 + 12) {
+      const ym = `${y}-${String(m).padStart(2,'0')}`;
+      o.push(`<option value="${ym}" ${ym===sel?'selected':''}>${y}年${m}月分</option>`);
+      m++; if (m > 12) { m = 1; y++; }
+    }
+    return o.join('');
+  };
+  const sorted = [...employees].sort((a,b) => (a.status==='inactive') - (b.status==='inactive') || (a.order??a.id*10) - (b.order??b.id*10));
+  const empOpts = sorted.map(e => `<option value="${e.id}" ${String(window._wlrEmp)===String(e.id)?'selected':''}>${e.name}${e.status==='inactive'?'（退職）':''}</option>`).join('');
+  const sel = 'font-size:12px;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb';
+  return `
+      <div style="margin-top:12px;padding-top:10px;border-top:1px dashed #d1d5db">
+        <div style="font-size:12.5px;font-weight:700;margin-bottom:6px">📅 期間指定（個人別・月ごと一覧）</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <select id="wlrEmp" style="${sel}" onchange="window._wlrEmp=this.value">
+            <option value="all" ${window._wlrEmp==='all'?'selected':''}>全員（1人ずつ改ページ）</option>${empOpts}
+          </select>
+          <select id="wlrFrom" style="${sel}" onchange="window._wlrFrom=this.value">${opts(fromYm)}</select>
+          <span style="font-size:12px">〜</span>
+          <select id="wlrTo" style="${sel}" onchange="window._wlrTo=this.value">${opts(toSel)}</select>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-primary" onclick="printWageLedgerRange()">🖨 期間で印刷</button>
+          <button class="btn-outline" onclick="exportWageLedgerRangeCSV()">期間でCSV出力</button>
+        </div>
+      </div>`;
+}
+function _wlrInputs() {
+  const empSel = document.getElementById('wlrEmp')?.value || 'all';
+  let from = document.getElementById('wlrFrom')?.value;
+  let to   = document.getElementById('wlrTo')?.value;
+  if (!from || !to) return null;
+  if (from > to) [from, to] = [to, from];
+  const months = _ymList(from, to);
+  const emps = empSel === 'all'
+    ? activeEmployees()
+    : employees.filter(e => String(e.id) === String(empSel));
+  return { months, emps, from, to };
+}
+// 指定月の給与調整をFirebaseから読み込む（未読込の月のみ）
+function _loadAdjForMonths(months) {
+  const jobs = [];
+  for (const { y, m } of months) {
+    const ym = `${y}-${String(m).padStart(2,'0')}`;
+    if (salaryAdj[ym] !== undefined) continue;
+    jobs.push(FB.salaryAdj(ym).once('value').then(snap => { salaryAdj[ym] = snap.val() || {}; }));
+  }
+  return Promise.all(jobs).then(() => { if (jobs.length && typeof invalidateShortfallCache === 'function') invalidateShortfallCache(); });
+}
+// 1人×1か月分の台帳データ
+function _wageLedgerRow(emp, y, m) {
+  const s   = getMonthSummary(emp.store === '両店' ? `${emp.id}_enya` : emp.id, y, m);
+  const sal = calcSalaryWithAdjBoth(emp, y, m);
+  const ot  = otBreakdown(emp, sal);
+  return { y, m, s, sal, ot, empM: resolveEmpForMonth(emp, y, m) };
+}
+function _hmv(h) { return hm(Math.round((h||0)*60)/60); }
+
+function buildWageLedgerRangeHTML(emps, months) {
+  const f = v => v ? v.toLocaleString() : '—';
+  const otCell = (h, pay) => (pay > 0 || h > 0)
+    ? `<span style="color:#666;font-size:8.5px">${_hmv(h)}</span><br>${pay.toLocaleString()}` : '—';
+  const first = months[0], last = months[months.length-1];
+  const rangeLabel = `${first.y}年${first.m}月分 〜 ${last.y}年${last.m}月分`;
+
+  const sections = emps.map((emp, i) => {
+    const rows = months.map(({ y, m }) => _wageLedgerRow(emp, y, m));
+    const t = { wd:0, act:0, ot:0, mid:0, hol:0, base:0, fixP:0, weekP:0, dailyP:0, over60P:0, midP:0, holP:0, comm:0, cho:0, gross:0, kenpo:0, kosei:0, shien:0, koyo:0, income:0, jumin:0, net:0 };
+    const body = rows.map(({ y, m, s, sal, ot, empM }) => {
+      const { startDate, endDate, payDateStr } = getPayPeriod(y, m);
+      t.wd+=s.workDays; t.act+=s.totalActual; t.ot+=s.monthOT; t.mid+=s.monthMidnight; t.hol+=s.monthHoliday;
+      t.base+=sal.basePay; t.fixP+=ot.fixedPay; t.weekP+=ot.weekPay; t.dailyP+=ot.dailyPay; t.over60P+=ot.over60Pay;
+      t.midP+=sal.midnightPay; t.holP+=sal.holidayPay; t.comm+=sal.commute; t.cho+=(sal.chouseikin||0); t.gross+=sal.grossTotal;
+      t.kenpo+=sal.kenpo; t.kosei+=sal.kosei; t.shien+=(sal.shienkin||0); t.koyo+=sal.koyoHoken;
+      t.income+=sal.incomeTax; t.jumin+=sal.juminzei; t.net+=sal.netPay;
+      return `<tr>
+        <td class="tl" style="white-space:nowrap">${y}年${m}月分<div style="font-size:8px;color:#666">${startDate.slice(5).replace('-','/')}〜${endDate.slice(5).replace('-','/')}／支払${payDateStr.slice(5).replace('-','/')}</div></td>
+        <td>${empM.type||''}<div style="font-size:8px;color:#666">${empM.payType||''}</div></td>
+        <td>${s.workDays}</td><td>${_hmv(s.totalActual)}</td>
+        <td>${s.monthOT>0?_hmv(s.monthOT):'—'}</td><td>${s.monthMidnight>0?_hmv(s.monthMidnight):'—'}</td><td>${s.monthHoliday>0?_hmv(s.monthHoliday):'—'}</td>
+        <td>${sal.basePay.toLocaleString()}</td>
+        <td>${otCell(ot.fixedH, ot.fixedPay)}</td><td>${otCell(ot.weekH, ot.weekPay)}</td><td>${otCell(ot.dailyH, ot.dailyPay)}</td><td>${otCell(ot.over60H, ot.over60Pay)}</td>
+        <td>${f(sal.midnightPay)}</td><td>${f(sal.holidayPay)}</td><td>${sal.commute.toLocaleString()}</td>
+        <td>${(sal.chouseikin||0)!==0?(sal.chouseikin||0).toLocaleString():'—'}</td>
+        <td><strong>${sal.grossTotal.toLocaleString()}</strong></td>
+        <td>${f(sal.kenpo)}</td><td>${f(sal.kosei)}</td><td>${f(sal.shienkin)}</td><td>${f(sal.koyoHoken)}</td><td>${f(sal.incomeTax)}</td><td>${f(sal.juminzei)}</td>
+        <td><strong>${sal.netPay.toLocaleString()}</strong></td>
+      </tr>`;
+    }).join('');
+    return `
+    <div class="sheet" style="${i>0?'page-break-before:always;':''}">
+      <h2>賃　金　台　帳</h2>
+      <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:6px;flex-wrap:wrap;gap:6px">
+        <div>氏名：<strong style="font-size:12px">${emp.name}</strong>　性別：${emp.gender||'<span style="color:#c0392b">未設定</span>'}　店舗：${emp.store||'—'}${emp.hireDate?'　入社日：'+emp.hireDate.replace(/-/g,'/'):''}</div>
+        <div>期間：${rangeLabel}（${months.length}か月）</div>
+      </div>
+      <table><thead>
+        <tr>
+          <th rowspan="2">賃金計算期間</th><th rowspan="2">雇用<br>形態</th><th rowspan="2">出勤<br>日数</th>
+          <th rowspan="2">実労働<br>時間</th><th rowspan="2">時間外<br>労働時間</th><th rowspan="2">深夜<br>時間</th><th rowspan="2">休日<br>時間</th>
+          <th colspan="10">支給額</th><th colspan="6">控除額</th><th rowspan="2">差引<br>支給額</th>
+        </tr>
+        <tr>
+          <th>基本給</th><th>固定<br>残業</th><th>週残業</th><th>残業</th><th>60h超<br>残業</th><th>深夜</th><th>休日</th><th>交通費</th><th>調整金</th><th>総支給額</th>
+          <th>健保</th><th>厚年</th><th>子育<br>支援金</th><th>雇保</th><th>所得税</th><th>住民税</th>
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+      <tfoot><tr>
+        <td class="tl" colspan="2">合　計</td>
+        <td>${t.wd}</td><td>${_hmv(t.act)}</td><td>${_hmv(t.ot)}</td><td>${_hmv(t.mid)}</td><td>${_hmv(t.hol)}</td>
+        <td>${t.base.toLocaleString()}</td><td>${f(t.fixP)}</td><td>${f(t.weekP)}</td><td>${f(t.dailyP)}</td><td>${f(t.over60P)}</td>
+        <td>${f(t.midP)}</td><td>${f(t.holP)}</td><td>${t.comm.toLocaleString()}</td><td>${t.cho?t.cho.toLocaleString():'—'}</td>
+        <td><strong>${t.gross.toLocaleString()}</strong></td>
+        <td>${f(t.kenpo)}</td><td>${f(t.kosei)}</td><td>${f(t.shien)}</td><td>${f(t.koyo)}</td><td>${f(t.income)}</td><td>${f(t.jumin)}</td>
+        <td><strong>${t.net.toLocaleString()}</strong></td>
+      </tr></tfoot></table>
+      <div style="margin-top:10px;display:flex;justify-content:space-between;font-size:10px">
+        <div>${OTD.company} ／ ${OTD.address}</div>
+        <div>使用者署名：＿＿＿＿＿＿＿＿＿＿＿＿＿　印</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const title = emps.length === 1 ? `賃金台帳_${emps[0].name}_${first.y}年${first.m}月-${last.y}年${last.m}月` : `賃金台帳_${first.y}年${first.m}月-${last.y}年${last.m}月`;
+  return `<html><head><meta charset="UTF-8"><title>${title}</title>
+  <style>
+    body{font-family:'Noto Sans JP',sans-serif;font-size:10px;margin:0}
+    h2{font-size:14px;text-align:center;margin:0 0 6px}
+    table{width:100%;border-collapse:collapse;font-size:9.5px}
+    th,td{border:1px solid #333;padding:2px 3px;text-align:right}
+    th{background:#f0f0f0;text-align:center}
+    .tl{text-align:left}
+    tfoot tr{font-weight:bold;background:#f0f0f0}
+    #toolbar{background:#f8f9fa;border-bottom:1px solid #ddd;padding:10px 16px;display:flex;gap:10px}
+    .btn{padding:6px 14px;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit;background:#1a3a5c;color:#fff}
+    .sheet{padding:12px}
+    @page{size:A4 landscape;margin:8mm}
+    @media print{#toolbar{display:none!important} table{font-size:8.5px} th,td{padding:2px} .sheet{padding:0}}
+  </style></head><body>
+  <div id="toolbar"><button class="btn" onclick="window.print()">🖨 印刷 / PDF保存</button>
+    <span style="font-size:12px;color:#555;align-self:center">${emps.length}名 ／ ${rangeLabel}</span></div>
+  ${sections || '<p style="padding:16px">対象スタッフがいません</p>'}
+  </body></html>`;
+}
+
+function printWageLedgerRange() {
+  const inp = _wlrInputs(); if (!inp) return;
+  if (!inp.emps.length) { showToast('対象スタッフがいません','error'); return; }
+  const w = window.open('', '_blank'); // ポップアップブロック回避のため先に開く
+  if (w) w.document.write('<p style="font-family:sans-serif;padding:16px">読み込み中…</p>');
+  _loadAdjForMonths(inp.months).then(() => {
+    const html = buildWageLedgerRangeHTML(inp.emps, inp.months);
+    if (!w) { showToast('ポップアップがブロックされました','error'); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+  }).catch(() => showToast('給与調整の読み込みに失敗しました','error'));
+}
+
+function exportWageLedgerRangeCSV() {
+  const inp = _wlrInputs(); if (!inp) return;
+  if (!inp.emps.length) { showToast('対象スタッフがいません','error'); return; }
+  _loadAdjForMonths(inp.months).then(() => {
+    const header = ['氏名','性別','店舗','年月','賃金計算期間','支払日','雇用形態','給与形態','出勤日数','実労働時間','時間外労働時間','深夜時間','休日時間',
+      '基本給','固定残業時間','固定残業手当','週残業時間','週残業手当','残業時間','残業手当','60h超残業時間','60h超残業手当',
+      '深夜手当','休日手当','交通費','調整金','総支給額','健保','厚年','子育て支援金','雇保','所得税','住民税','差引支給額'];
+    const rows = [];
+    for (const emp of inp.emps) {
+      for (const { y, m } of inp.months) {
+        const { s, sal, ot, empM } = _wageLedgerRow(emp, y, m);
+        const { startDate, endDate, payDateStr } = getPayPeriod(y, m);
+        rows.push([emp.name, emp.gender||'', emp.store||'', `${y}/${String(m).padStart(2,'0')}`,
+          `${startDate.replace(/-/g,'/')}〜${endDate.replace(/-/g,'/')}`, payDateStr.replace(/-/g,'/'),
+          empM.type||'', empM.payType||'',
+          s.workDays, _hmv(s.totalActual), _hmv(s.monthOT), _hmv(s.monthMidnight), _hmv(s.monthHoliday),
+          sal.basePay, _hmv(ot.fixedH), ot.fixedPay, _hmv(ot.weekH), ot.weekPay, _hmv(ot.dailyH), ot.dailyPay, _hmv(ot.over60H), ot.over60Pay,
+          sal.midnightPay, sal.holidayPay, sal.commute, sal.chouseikin||0, sal.grossTotal,
+          sal.kenpo, sal.kosei, sal.shienkin||0, sal.koyoHoken, sal.incomeTax, sal.juminzei, sal.netPay]);
+      }
+    }
+    const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const f = inp.months[0], l = inp.months[inp.months.length-1];
+    const who = inp.emps.length === 1 ? `_${inp.emps[0].name.replace(/\s/g,'')}` : '_全員';
+    dlFile(`賃金台帳${who}_${f.y}年${f.m}月-${l.y}年${l.m}月.csv`, csv, 'text/csv');
+  }).catch(() => showToast('給与調整の読み込みに失敗しました','error'));
 }
